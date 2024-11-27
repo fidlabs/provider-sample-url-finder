@@ -1,0 +1,28 @@
+# syntax=docker/dockerfile:1.5
+FROM lukemathwalker/cargo-chef:latest-rust-1.82.0-slim-bullseye as chef
+
+WORKDIR /app
+
+# install dependencies
+RUN apt-get update && \
+    apt-get install -y build-essential libssl-dev pkg-config curl apt-transport-https ca-certificates gnupg2 software-properties-common && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN rustup toolchain install stable
+RUN rustup component add clippy --toolchain stable
+ENV RUSTUP_NO_UPDATE_CHECK=1
+
+# install cargo-watch for automatic recompilation
+RUN cargo install cargo-watch
+
+# copy cargo files for caching
+COPY Cargo.toml Cargo.lock ./
+COPY url_finder/Cargo.toml ./url_finder/
+
+# dummy main.rs
+RUN mkdir src && echo "fn main() {}" > src/main.rs
+RUN cargo build --release || true
+
+EXPOSE 3010
+
+CMD ["sleep", "infinity"]
