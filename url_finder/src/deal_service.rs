@@ -4,7 +4,7 @@ use crate::deal_repo::DealRepository;
 
 /// get deals and extract piece_ids
 pub async fn get_piece_ids(deal_repo: &DealRepository, provider: &str) -> Result<Vec<String>> {
-    let limit = 20;
+    let limit = 100;
     let offset = 0;
 
     let deals = deal_repo
