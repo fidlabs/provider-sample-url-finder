@@ -1,28 +1,53 @@
-use std::sync::Arc;
+use std::{fmt, sync::Arc};
 
 use axum::{debug_handler, extract::State, Json};
 use axum_extra::extract::WithRejection;
-use color_eyre::{
-    eyre::{bail, Error},
-    Result,
-};
-use common::api_response::{bad_request, ok_response, ApiResponse, ErrorResponse};
-use futures::{stream, StreamExt};
-use reqwest::Client;
-use tracing::debug;
+use color_eyre::Result;
+use common::api_response::{internal_server_error, ok_response, ApiResponse, ErrorResponse};
+use serde::{Deserialize, Serialize};
+use tracing::{debug, error};
 use utoipa::ToSchema;
 
-use crate::{cid_contact, lotus_rpc, AppState};
+use crate::{
+    cid_contact::{self, CidContactError},
+    deal_service, lotus_rpc, multiaddr_parser, url_tester, AppState,
+};
 
-#[derive(serde::Deserialize, ToSchema)]
+#[derive(Deserialize, ToSchema)]
 pub struct FindUrlInput {
     pub address: String,
-    pub extended_search: Option<bool>,
 }
 
-#[derive(serde::Serialize, ToSchema)]
+#[derive(Serialize, ToSchema)]
 pub struct FindUrlResponse {
-    pub url: String,
+    pub result: ResultCode,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+}
+
+#[derive(Serialize, ToSchema)]
+pub enum ResultCode {
+    NoCidContactData,
+    MissingAddrFromCidContact,
+    MissingHttpAddrFromCidContact,
+    FailedToGetWorkingUrl,
+    NoDealsFound,
+    Success,
+}
+
+#[derive(Serialize, ToSchema)]
+pub enum ErrorCode {
+    FailedToRetrieveCidContactData,
+    FailedToGetPeerId,
+}
+impl fmt::Display for ErrorCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            ErrorCode::FailedToRetrieveCidContactData => "FailedToRetrieveCidContactData",
+            ErrorCode::FailedToGetPeerId => "FailedToGetPeerId",
+        };
+        write!(f, "{}", s)
+    }
 }
 
 /// Find a working url for a given SP address
@@ -34,7 +59,7 @@ pub struct FindUrlResponse {
 **Find a working url for a given SP address**
     "#,
     responses(
-        (status = 200, description = "Url Found", body = FindUrlResponse),
+        (status = 200, description = "Successful check", body = FindUrlResponse),
         (status = 400, description = "Bad Request", body = ErrorResponse),
         (status = 500, description = "Internal Server Error", body = ErrorResponse),
     ),
@@ -45,36 +70,52 @@ pub async fn handle_find_url(
     State(state): State<Arc<AppState>>,
     WithRejection(Json(payload), _): WithRejection<Json<FindUrlInput>, ApiResponse<ErrorResponse>>,
 ) -> Result<ApiResponse<FindUrlResponse>, ApiResponse<()>> {
-    // Get miner info from lotus rpc
+    debug!("find url input address: {:?}", &payload.address);
+    // get peer_id from miner info from lotus rpc
     let peer_id = lotus_rpc::get_peer_id(&payload.address)
         .await
         .map_err(|e| {
-            debug!("Failed to get peer id: {:?}", e);
-            bad_request("Failed to get peer id")
+            error!("Failed to get peer id: {:?}", e);
+
+            internal_server_error(ErrorCode::FailedToGetPeerId.to_string())
         })?;
 
-    // Get cid contact response
-    let cid_contact_res = cid_contact::get_contact(&peer_id).await.map_err(|e| {
-        debug!("Missing data from cid contact: {:?}", e);
-        bad_request("Missing data from cid contact")
-    })?;
-    debug!("cid contact response: {:?}", cid_contact_res);
+    // get cid contact response
+    let cid_contact_res = match cid_contact::get_contact(&peer_id).await {
+        Ok(res) => res,
+        Err(CidContactError::NoData) => {
+            return Ok(ok_response(FindUrlResponse {
+                result: ResultCode::NoCidContactData,
+                url: None,
+            }));
+        }
+        Err(e) => {
+            error!("Failed to get cid contact: {:?}", e.to_string());
+
+            return Err(internal_server_error(
+                ErrorCode::FailedToRetrieveCidContactData.to_string(),
+            ));
+        }
+    };
 
     // Get all addresses (containing IP and Port) from cid contact response
-    let addrs = cid_contact::get_all_addresses_from_response(cid_contact_res).map_err(|e| {
-        debug!("Failed to get addresses: {:?}", e);
-        bad_request("Failed to get addresses")
-    })?;
+    let addrs = cid_contact::get_all_addresses_from_response(cid_contact_res);
+    if addrs.is_empty() {
+        debug!("Missing addr from cid contact, No addresses found");
+        return Ok(ok_response(FindUrlResponse {
+            result: ResultCode::MissingAddrFromCidContact,
+            url: None,
+        }));
+    }
 
     // parse addresses to http endpoints
-    let endpoints = parse_addrs_to_endpoints(addrs).map_err(|e| {
-        debug!("Failed to parse addrs: {:?}", e);
-        bad_request("Failed to parse addrs")
-    })?;
-
+    let endpoints = multiaddr_parser::parse(addrs);
     if endpoints.is_empty() {
-        debug!("No endpoints found");
-        return Err(bad_request("No endpoints found"));
+        debug!("Missing http addr from cid contact, No endpoints found");
+        return Ok(ok_response(FindUrlResponse {
+            result: ResultCode::MissingHttpAddrFromCidContact,
+            url: None,
+        }));
     }
 
     let provider = payload
@@ -83,125 +124,33 @@ pub async fn handle_find_url(
         .unwrap_or(&payload.address)
         .to_string();
 
-    // Find piece_cid from deals and test if the url is working, returning the first working url
-    let working_url = get_working_url(state, endpoints, &provider, payload.extended_search)
+    let piece_ids = deal_service::get_piece_ids(&state.deal_repo, &provider)
         .await
         .map_err(|e| {
-            debug!("Failed to get working url: {:?}", e);
-            bad_request("Failed to get working url")
+            debug!("Failed to get piece ids: {:?}", e);
+            internal_server_error("Failed to get piece ids")
         })?;
-
-    Ok(ok_response(FindUrlResponse { url: working_url }))
-}
-
-fn parse_addrs_to_endpoints(addrs: Vec<String>) -> Result<Vec<String>, Error> {
-    let mut endpoints = vec![];
-
-    for addr in addrs {
-        let parts: Vec<&str> = addr.split("/").collect();
-        let prot = if addr.contains("https") {
-            "https"
-        } else {
-            "http"
-        };
-        let host = parts[2];
-        let port = parts[4];
-
-        let endpoint = format!("{}://{}:{}", prot, host, port);
-
-        if !addr.contains("http") {
-            debug!("skipping non-http endpoint: {:?}", endpoint);
-            continue;
-        }
-
-        endpoints.push(endpoint);
+    if piece_ids.is_empty() {
+        debug!("No deals found");
+        return Ok(ok_response(FindUrlResponse {
+            result: ResultCode::NoDealsFound,
+            url: None,
+        }));
     }
 
-    Ok(endpoints)
-}
+    let urls = deal_service::get_piece_url(endpoints, piece_ids).await;
 
-/// return first working url
-async fn filter_working_url(urls: Vec<String>) -> Option<String> {
-    let client = Client::new();
-
-    // Create a stream of requests testing the urls through head requests
-    // Run the requests concurrently with a limit
-    let mut stream = stream::iter(urls)
-        .map(|url| {
-            let client = client.clone();
-            async move {
-                match client.head(&url).send().await {
-                    Ok(resp) if resp.status().is_success() => Some(url),
-                    _ => {
-                        debug!("url not working: {:?}", url);
-                        None
-                    }
-                }
-            }
-        })
-        .buffer_unordered(20); // concurency limit
-
-    while let Some(result) = stream.next().await {
-        if let Some(url) = result {
-            return Some(url);
-        }
+    let working_url = url_tester::filter_working_with_head(urls).await;
+    if working_url.is_none() {
+        debug!("Failed to get working url");
+        return Ok(ok_response(FindUrlResponse {
+            result: ResultCode::FailedToGetWorkingUrl,
+            url: None,
+        }));
     }
 
-    None
-}
-
-async fn get_working_url(
-    state: Arc<AppState>,
-    endpoints: Vec<String>,
-    provider: &str,
-    extended_search: Option<bool>,
-) -> Result<String, Error> {
-    let limit = 1000;
-    let mut offset = 0;
-    let max_offset = if extended_search.unwrap_or(false) {
-        50 * limit
-    } else {
-        limit
-    };
-
-    loop {
-        let deals = state
-            .deal_repo
-            .get_unified_verified_deals_by_provider(provider, limit, offset)
-            .await?;
-
-        if deals.is_empty() {
-            break;
-        }
-
-        debug!("number of deals: {:?}", deals.len());
-
-        // construct every piece_cid and endoint combination
-        let urls: Vec<String> = endpoints
-            .iter()
-            .flat_map(|endpoint| {
-                let endpoint = endpoint.clone();
-                deals.iter().filter_map(move |deal| {
-                    deal.piece_cid
-                        .as_ref()
-                        .map(|piece_cid| format!("{}/piece/{}", endpoint, piece_cid))
-                })
-            })
-            .collect();
-
-        let working_url = filter_working_url(urls).await;
-
-        if working_url.is_some() {
-            debug!("working url found: {:?}", working_url);
-            return Ok(working_url.unwrap());
-        }
-
-        offset += limit;
-        if offset >= max_offset {
-            break;
-        }
-        debug!("No working url found, fetching more deals");
-    }
-
-    bail!("No working url found")
+    Ok(ok_response(FindUrlResponse {
+        result: ResultCode::Success,
+        url: working_url,
+    }))
 }

@@ -28,7 +28,11 @@ mod api;
 mod cid_contact;
 mod config;
 mod deal_repo;
+mod deal_service;
 mod lotus_rpc;
+mod multiaddr_parser;
+mod pix_filspark;
+mod url_tester;
 
 pub struct AppState {
     pub deal_repo: DealRepository,
@@ -81,7 +85,7 @@ async fn main() -> Result<()> {
 
     let server_addr = "0.0.0.0:3010".to_string();
     let listener = TcpListener::bind(&server_addr).await?;
-
+    tracing::error!("error: {:?}", CONFIG.db_url);
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal(active_requests.clone()))
         .await?;

@@ -34,3 +34,4 @@ utoipa = { version = "5.2.0", features = [
   "debug",
 ] }
 utoipa-swagger-ui = { version = "8.0.3", features = ["axum", "reqwest", "url"] }
+multiaddr = "0.18.2"

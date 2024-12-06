@@ -1,6 +1,7 @@
-use color_eyre::Result;
+use color_eyre::{eyre::eyre, Result};
 use reqwest::Client;
 use serde_json::json;
+use tracing::debug;
 
 pub async fn get_peer_id(address: &str) -> Result<String> {
     let client = Client::new();
@@ -13,17 +14,19 @@ pub async fn get_peer_id(address: &str) -> Result<String> {
             "params": [address, null]
         }))
         .send()
-        .await?
-        .json::<serde_json::Value>()
         .await?;
 
-    let peer_id = res
+    let json = res.json::<serde_json::Value>().await?;
+
+    debug!("get_peer_id res: {:?}", json);
+
+    let peer_id = json
         .get("result")
-        .unwrap()
+        .ok_or(eyre!("Missing lotus rpc result"))?
         .get("PeerId")
-        .unwrap()
+        .ok_or(eyre!("Missing lotus rpc PeerId"))?
         .as_str()
-        .unwrap();
+        .ok_or(eyre!("Missing lotus rpc PeerId"))?;
 
     Ok(peer_id.to_string())
 }

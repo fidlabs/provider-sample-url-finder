@@ -41,10 +41,9 @@ impl DealRepository {
             FROM unified_verified_deal
             WHERE 
                 type = 'deal'
-                AND "pieceCid" IS NOT NULL
                 AND "providerId" = $1
-                AND "dealId" IS NOT NULL
-                AND "dealId" != 0
+                AND "sectorId" != '0'
+            ORDER BY id DESC
             LIMIT $2
             OFFSET $3
             "#,

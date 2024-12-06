@@ -25,3 +25,6 @@ prepare:
 	@cargo sqlx prepare --workspace
 	@cargo fmt
 	@cargo clippy
+
+stop-app:
+	@docker compose down url_finder

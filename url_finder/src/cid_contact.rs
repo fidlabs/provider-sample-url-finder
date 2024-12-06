@@ -1,8 +1,24 @@
-use color_eyre::{eyre::bail, Result};
+use std::fmt;
+
+use color_eyre::Result;
 use reqwest::Client;
 use tracing::debug;
 
-pub async fn get_contact(peer_id: &str) -> Result<serde_json::Value> {
+pub enum CidContactError {
+    InvalidResponse,
+    NoData,
+}
+impl fmt::Display for CidContactError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            CidContactError::InvalidResponse => "InvalidResponse",
+            CidContactError::NoData => "NoData",
+        };
+        write!(f, "{}", s)
+    }
+}
+
+pub async fn get_contact(peer_id: &str) -> Result<serde_json::Value, CidContactError> {
     let client = Client::new();
     let url = format!("https://cid.contact/providers/{}", peer_id);
 
@@ -11,14 +27,24 @@ pub async fn get_contact(peer_id: &str) -> Result<serde_json::Value> {
     let res = client
         .get(&url)
         .send()
-        .await?
-        .json::<serde_json::Value>()
-        .await?;
+        .await
+        .map_err(|_| CidContactError::InvalidResponse)?;
 
-    Ok(res)
+    if !res.status().is_success() {
+        return Err(CidContactError::NoData);
+    }
+
+    let json = res
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|_| CidContactError::NoData)?;
+
+    debug!("cid contact res: {:?}", json);
+
+    Ok(json)
 }
 
-pub fn get_all_addresses_from_response(json: serde_json::Value) -> Result<Vec<String>> {
+pub fn get_all_addresses_from_response(json: serde_json::Value) -> Vec<String> {
     let mut addresses = vec![];
 
     if let Some(e_providers) = json
@@ -37,9 +63,5 @@ pub fn get_all_addresses_from_response(json: serde_json::Value) -> Result<Vec<St
             });
     }
 
-    if addresses.is_empty() {
-        bail!("No addresses found");
-    }
-
-    Ok(addresses)
+    addresses
 }

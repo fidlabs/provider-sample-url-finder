@@ -1,5 +1,5 @@
 use common::api_response::ErrorResponse;
-use utoipa::{Modify, OpenApi};
+use utoipa::OpenApi;
 
 use crate::api::*;
 

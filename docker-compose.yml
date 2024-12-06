@@ -1,5 +1,7 @@
 name: sp_uf
 volumes:
+  uf_postgres:
+    name: uf_postgres
   cargo-cache:
   target:
 networks:
@@ -7,6 +9,22 @@ networks:
     driver: bridge
 
 services:
+  # postgres and pgadmin
+  postgres:
+    image: postgres:16-alpine
+    user: postgres
+    ports:
+      - 5432:5432
+    volumes:
+      - uf_postgres:/var/lib/postgresql/data
+      - ./dump:/tmp/dump
+    environment:
+      - POSTGRES_PASSWORD=pgpassword
+      - POSTGRES_USER=postgres
+      - POSTGRES_DB=uf
+    networks:
+      - sp_uf_network
+
   url_finder:
     build: 
       context: .
