@@ -25,6 +25,9 @@ The Url Finder service is responsible for finding the URL of a miner given its a
             FindUrlInput,
             FindUrlResponse,
 
+            // misc
+            HealthcheckResponse,
+
             // common
             ErrorResponse,
         ),
