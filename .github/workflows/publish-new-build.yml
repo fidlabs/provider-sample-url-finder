@@ -10,9 +10,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Enter the version number'
+        description: "Enter the version number"
         required: true
-        default: 'latest'
+        default: "latest"
 
 jobs:
   code-check:
@@ -77,4 +77,3 @@ jobs:
           TAG_NAME="v${{ inputs.version }}"
           git tag $TAG_NAME
           git push origin $TAG_NAME
-
