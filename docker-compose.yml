@@ -1,0 +1,48 @@
+name: sp_uf
+volumes:
+  uf_postgres:
+    name: uf_postgres
+  cargo-cache:
+  target:
+networks:
+  sp_uf_network:
+    driver: bridge
+
+services:
+  # postgres and pgadmin
+  postgres:
+    image: postgres:16-alpine
+    user: postgres
+    ports:
+      - 5432:5432
+    volumes:
+      - uf_postgres:/var/lib/postgresql/data
+      - ./dump:/tmp/dump
+    environment:
+      - POSTGRES_PASSWORD=pgpassword
+      - POSTGRES_USER=postgres
+      - POSTGRES_DB=uf
+    networks:
+      - sp_uf_network
+
+  url_finder:
+    build: 
+      context: .
+      dockerfile: Dockerfile.local
+    container_name: url_finder
+    stop_grace_period: 30s
+    working_dir: /app
+    # run with cargo watch to auto-reload without restarting container
+    command: cargo watch --poll -x 'run --bin url_finder'
+    environment:
+      - LOG_LEVEL=debug
+      - DATABASE_URL=${DMOB_DATABASE_URL}
+    volumes:
+      - .:/app                                      # bind current directory to /app
+      - /dev/null:/app/.env                         # do not use .env file
+      - cargo-cache:/usr/local/cargo                # own cargo cache
+      - target:/app/target                          # own target directory
+    ports:
+      - "3010:3010"
+    networks:
+      - sp_uf_network
