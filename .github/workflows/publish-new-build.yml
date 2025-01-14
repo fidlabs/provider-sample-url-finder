@@ -14,6 +14,9 @@ on:
         required: true
         default: "latest"
 
+permissions:
+  contents: write
+
 jobs:
   code-check:
     uses: ./.github/workflows/code-check.yml
