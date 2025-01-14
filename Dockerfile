@@ -28,6 +28,6 @@ COPY --from=build /app/target/release/url_finder /usr/local/bin/
 RUN adduser --system --group --no-create-home finderuser
 USER finderuser
 
-CMD ["/app/url_finder"]
+CMD ["url_finder"]
 
 
