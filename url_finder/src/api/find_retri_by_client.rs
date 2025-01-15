@@ -92,16 +92,16 @@ pub async fn handle_find_retri_by_client_and_sp(
         debug!("No deals found");
         return Ok(ok_response(FindRetriByClientAndSpResponse {
             result: ResultCode::NoDealsFound,
-            retrivability_percent: 0.0,
+            retrievability_percent: 0.0,
         }));
     }
 
     let urls = deal_service::get_piece_url(endpoints, piece_ids).await;
 
-    let retrivability_percent = url_tester::get_retrivability_with_head(urls).await;
+    let retrievability_percent = url_tester::get_retrivability_with_head(urls).await;
 
     Ok(ok_response(FindRetriByClientAndSpResponse {
         result: ResultCode::Success,
-        retrivability_percent,
+        retrievability_percent,
     }))
 }
