@@ -32,6 +32,7 @@ mod deal_service;
 mod lotus_rpc;
 mod multiaddr_parser;
 mod pix_filspark;
+mod provider_endpoints;
 mod url_tester;
 
 pub struct AppState {
@@ -75,9 +76,11 @@ async fn main() -> Result<()> {
     });
 
     let app = Router::new()
+        // Swagger UI as root path for now
+        .merge(SwaggerUi::new("/").url("/api-doc/openapi.json", ApiDoc::openapi()))
         .route("/url/find", post(handle_find_url))
+        .route("/url/retri", post(handle_find_retri_by_client_and_sp))
         .route("/healthcheck", get(handle_healthcheck))
-        .merge(SwaggerUi::new("/swagger-ui").url("/api-doc/openapi.json", ApiDoc::openapi()))
         .layer(middleware::from_fn_with_state(
             app_state.clone(),
             request_counter,

@@ -1,21 +1,18 @@
-use std::{fmt, sync::Arc};
+use std::sync::Arc;
 
 use axum::{debug_handler, extract::State, Json};
 use axum_extra::extract::WithRejection;
 use color_eyre::Result;
 use common::api_response::{internal_server_error, ok_response, ApiResponse, ErrorResponse};
 use serde::{Deserialize, Serialize};
-use tracing::{debug, error};
+use tracing::debug;
 use utoipa::ToSchema;
 
-use crate::{
-    cid_contact::{self, CidContactError},
-    deal_service, lotus_rpc, multiaddr_parser, url_tester, AppState,
-};
+use crate::{deal_service, provider_endpoints, url_tester, AppState, ResultCode};
 
 #[derive(Deserialize, ToSchema)]
 pub struct FindUrlInput {
-    pub address: String,
+    pub provider: String,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -23,31 +20,6 @@ pub struct FindUrlResponse {
     pub result: ResultCode,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
-}
-
-#[derive(Serialize, ToSchema)]
-pub enum ResultCode {
-    NoCidContactData,
-    MissingAddrFromCidContact,
-    MissingHttpAddrFromCidContact,
-    FailedToGetWorkingUrl,
-    NoDealsFound,
-    Success,
-}
-
-#[derive(Serialize, ToSchema)]
-pub enum ErrorCode {
-    FailedToRetrieveCidContactData,
-    FailedToGetPeerId,
-}
-impl fmt::Display for ErrorCode {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let s = match self {
-            ErrorCode::FailedToRetrieveCidContactData => "FailedToRetrieveCidContactData",
-            ErrorCode::FailedToGetPeerId => "FailedToGetPeerId",
-        };
-        write!(f, "{}", s)
-    }
 }
 
 /// Find a working url for a given SP address
@@ -70,61 +42,31 @@ pub async fn handle_find_url(
     State(state): State<Arc<AppState>>,
     WithRejection(Json(payload), _): WithRejection<Json<FindUrlInput>, ApiResponse<ErrorResponse>>,
 ) -> Result<ApiResponse<FindUrlResponse>, ApiResponse<()>> {
-    debug!("find url input address: {:?}", &payload.address);
-    // get peer_id from miner info from lotus rpc
-    let peer_id = lotus_rpc::get_peer_id(&payload.address)
-        .await
-        .map_err(|e| {
-            error!("Failed to get peer id: {:?}", e);
+    debug!("find url input address: {:?}", &payload.provider);
 
-            internal_server_error(ErrorCode::FailedToGetPeerId.to_string())
-        })?;
+    let (result_code, endpoints) =
+        match provider_endpoints::get_provider_endpoints(&payload.provider).await {
+            Ok(endpoints) => endpoints,
+            Err(e) => return Err(internal_server_error(e.to_string())),
+        };
 
-    // get cid contact response
-    let cid_contact_res = match cid_contact::get_contact(&peer_id).await {
-        Ok(res) => res,
-        Err(CidContactError::NoData) => {
-            return Ok(ok_response(FindUrlResponse {
-                result: ResultCode::NoCidContactData,
-                url: None,
-            }));
-        }
-        Err(e) => {
-            error!("Failed to get cid contact: {:?}", e.to_string());
+    if endpoints.is_none() {
+        debug!("No endpoints found");
 
-            return Err(internal_server_error(
-                ErrorCode::FailedToRetrieveCidContactData.to_string(),
-            ));
-        }
-    };
-
-    // Get all addresses (containing IP and Port) from cid contact response
-    let addrs = cid_contact::get_all_addresses_from_response(cid_contact_res);
-    if addrs.is_empty() {
-        debug!("Missing addr from cid contact, No addresses found");
         return Ok(ok_response(FindUrlResponse {
-            result: ResultCode::MissingAddrFromCidContact,
+            result: result_code,
             url: None,
         }));
     }
-
-    // parse addresses to http endpoints
-    let endpoints = multiaddr_parser::parse(addrs);
-    if endpoints.is_empty() {
-        debug!("Missing http addr from cid contact, No endpoints found");
-        return Ok(ok_response(FindUrlResponse {
-            result: ResultCode::MissingHttpAddrFromCidContact,
-            url: None,
-        }));
-    }
+    let endpoints = endpoints.unwrap();
 
     let provider = payload
-        .address
+        .provider
         .strip_prefix("f0")
-        .unwrap_or(&payload.address)
+        .unwrap_or(&payload.provider)
         .to_string();
 
-    let piece_ids = deal_service::get_piece_ids(&state.deal_repo, &provider)
+    let piece_ids = deal_service::get_piece_ids_by_provider(&state.deal_repo, &provider)
         .await
         .map_err(|e| {
             debug!("Failed to get piece ids: {:?}", e);

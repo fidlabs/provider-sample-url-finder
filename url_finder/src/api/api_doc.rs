@@ -18,17 +18,23 @@ The Url Finder service is responsible for finding the URL of a miner given its a
     // API Handler Functions
     paths(
         handle_find_url,
+        handle_find_retri_by_client_and_sp,
     ),
     components(
         schemas(
             // URL
             FindUrlInput,
             FindUrlResponse,
+            // Retri
+            FindRetriByClientAndSpInput,
+            FindRetriByClientAndSpResponse,
 
+            
             // misc
             HealthcheckResponse,
-
+            
             // common
+            ErrorCode,
             ErrorResponse,
         ),
       ),
