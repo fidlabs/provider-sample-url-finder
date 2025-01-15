@@ -1,10 +1,11 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use axum::{debug_handler, extract::State, Json};
 use axum_extra::extract::WithRejection;
 use color_eyre::Result;
 use common::api_response::{internal_server_error, ok_response, ApiResponse, ErrorResponse};
 use serde::{Deserialize, Serialize};
+use tokio::time::timeout;
 use tracing::debug;
 use utoipa::ToSchema;
 
@@ -23,6 +24,8 @@ pub struct FindRetriByClientAndSpResponse {
     pub result: ResultCode,
     pub retrievability_percent: f64,
 }
+
+const RETRIEVABILITY_TIMEOUT_SEC: u64 = 2 * 60; // 2 min
 
 /// Find retrivabiliy of urls for a given SP and Client address
 #[utoipa::path(
@@ -98,7 +101,23 @@ pub async fn handle_find_retri_by_client_and_sp(
 
     let urls = deal_service::get_piece_url(endpoints, piece_ids).await;
 
-    let retrievability_percent = url_tester::get_retrivability_with_head(urls).await;
+    // Get retrievability percent
+    // Make sure that the task is not running for too long
+    let retrievability_percent = match timeout(
+        Duration::from_secs(RETRIEVABILITY_TIMEOUT_SEC),
+        url_tester::get_retrivability_with_head(urls),
+    )
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => {
+            // In case of timeout
+            return Ok(ok_response(FindRetriByClientAndSpResponse {
+                result: ResultCode::TimedOut,
+                retrievability_percent: 0.0,
+            }));
+        }
+    };
 
     Ok(ok_response(FindRetriByClientAndSpResponse {
         result: ResultCode::Success,

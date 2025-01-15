@@ -10,6 +10,7 @@ pub enum ResultCode {
     MissingHttpAddrFromCidContact,
     FailedToGetWorkingUrl,
     NoDealsFound,
+    TimedOut,
     Success,
 }
 

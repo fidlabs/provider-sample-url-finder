@@ -9,6 +9,7 @@ use tracing::debug;
 
 const FILTER_CONCURENCY_LIMIT: usize = 5;
 const RETRI_CONCURENCY_LIMIT: usize = 20;
+const RETRI_TIMEOUT_SEC: u64 = 15;
 
 /// return first working url through head requests
 pub async fn filter_working_with_head(urls: Vec<String>) -> Option<String> {
@@ -89,7 +90,10 @@ async fn filter_working_with_get(urls: Vec<String>) -> Option<String> {
 
 /// return retrivable percent of the urls
 pub async fn get_retrivability_with_head(urls: Vec<String>) -> f64 {
-    let client = Client::new();
+    let client = Client::builder()
+        .timeout(std::time::Duration::from_secs(RETRI_TIMEOUT_SEC))
+        .build()
+        .unwrap();
     let success_counter = Arc::new(AtomicUsize::new(0));
     let total_counter = Arc::new(AtomicUsize::new(0));
 
