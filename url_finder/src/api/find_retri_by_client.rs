@@ -21,7 +21,7 @@ pub struct FindRetriByClientAndSpInput {
 #[derive(Serialize, ToSchema)]
 pub struct FindRetriByClientAndSpResponse {
     pub result: ResultCode,
-    pub retrivability_percent: f64,
+    pub retrievability_percent: f64,
 }
 
 /// Find retrivabiliy of urls for a given SP and Client address
@@ -63,7 +63,7 @@ pub async fn handle_find_retri_by_client_and_sp(
 
         return Ok(ok_response(FindRetriByClientAndSpResponse {
             result: result_code,
-            retrivability_percent: 0.0,
+            retrievability_percent: 0.0,
         }));
     }
     let endpoints = endpoints.unwrap();
