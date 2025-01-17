@@ -30,10 +30,10 @@ const RETRIEVABILITY_TIMEOUT_SEC: u64 = 2 * 60; // 2 min
 /// Find retrivabiliy of urls for a given SP and Client address
 #[utoipa::path(
     post,
-    path = "/url/retri",
+    path = "/url/retrievability",
     request_body(content = FindRetriByClientAndSpInput),
     description = r#"
-**Find retrivabiliy of urls for a given SP and Client address**
+**Find retrievabiliy of urls for a given SP and Client address**
     "#,
     responses(
         (status = 200, description = "Successful check", body = FindRetriByClientAndSpResponse),

@@ -79,7 +79,7 @@ async fn main() -> Result<()> {
         // Swagger UI as root path for now
         .merge(SwaggerUi::new("/").url("/api-doc/openapi.json", ApiDoc::openapi()))
         .route("/url/find", post(handle_find_url))
-        .route("/url/retri", post(handle_find_retri_by_client_and_sp))
+        .route("/url/retrievability", post(handle_find_retri_by_client_and_sp))
         .route("/healthcheck", get(handle_healthcheck))
         .layer(middleware::from_fn_with_state(
             app_state.clone(),
