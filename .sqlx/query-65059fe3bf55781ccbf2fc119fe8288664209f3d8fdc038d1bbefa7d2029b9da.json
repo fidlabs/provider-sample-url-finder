@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                id,\n                \"dealId\" AS deal_id,\n                \"claimId\" AS claim_id,\n                \"clientId\" AS client_id,\n                \"providerId\" AS provider_id,\n                \"pieceCid\" AS piece_cid\n            FROM unified_verified_deal\n            WHERE \n                type = 'deal'\n                AND \"providerId\" = $1\n                AND \"sectorId\" != '0'\n            ORDER BY id DESC\n            LIMIT $2\n            OFFSET $3\n            ",
+  "query": "\n            SELECT\n                id,\n                \"dealId\" AS deal_id,\n                \"claimId\" AS claim_id,\n                \"clientId\" AS client_id,\n                \"providerId\" AS provider_id,\n                \"pieceCid\" AS piece_cid\n            FROM unified_verified_deal\n            WHERE \n                \"providerId\" = $1\n                AND \"clientId\" = $2\n            ORDER BY random()\n            LIMIT $3\n            OFFSET $4\n            ",
   "describe": {
     "columns": [
       {
@@ -37,6 +37,7 @@
     "parameters": {
       "Left": [
         "Text",
+        "Text",
         "Int8",
         "Int8"
       ]
@@ -50,5 +51,5 @@
       true
     ]
   },
-  "hash": "ff85632cffe0ed10e9a0d61799b7fa1a3f28bec8b7ce3f8c1d89b911927f86dd"
+  "hash": "65059fe3bf55781ccbf2fc119fe8288664209f3d8fdc038d1bbefa7d2029b9da"
 }

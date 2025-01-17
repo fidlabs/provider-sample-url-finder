@@ -40,14 +40,48 @@ impl DealRepository {
                 "pieceCid" AS piece_cid
             FROM unified_verified_deal
             WHERE 
-                type = 'deal'
-                AND "providerId" = $1
-                AND "sectorId" != '0'
+                "providerId" = $1
             ORDER BY id DESC
             LIMIT $2
             OFFSET $3
             "#,
             provider,
+            limit,
+            offset,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(data)
+    }
+
+    pub async fn get_unified_verified_deals_by_provider_and_client(
+        &self,
+        provider: &str,
+        client: &str,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<UnifiedVerifiedDeal>, sqlx::Error> {
+        let data = sqlx::query_as!(
+            UnifiedVerifiedDeal,
+            r#"
+            SELECT
+                id,
+                "dealId" AS deal_id,
+                "claimId" AS claim_id,
+                "clientId" AS client_id,
+                "providerId" AS provider_id,
+                "pieceCid" AS piece_cid
+            FROM unified_verified_deal
+            WHERE 
+                "providerId" = $1
+                AND "clientId" = $2
+            ORDER BY random()
+            LIMIT $3
+            OFFSET $4
+            "#,
+            provider,
+            client,
             limit,
             offset,
         )

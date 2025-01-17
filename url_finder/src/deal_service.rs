@@ -3,12 +3,39 @@ use color_eyre::Result;
 use crate::deal_repo::DealRepository;
 
 /// get deals and extract piece_ids
-pub async fn get_piece_ids(deal_repo: &DealRepository, provider: &str) -> Result<Vec<String>> {
+pub async fn get_piece_ids_by_provider(
+    deal_repo: &DealRepository,
+    provider: &str,
+) -> Result<Vec<String>> {
     let limit = 100;
     let offset = 0;
 
     let deals = deal_repo
         .get_unified_verified_deals_by_provider(provider, limit, offset)
+        .await?;
+
+    if deals.is_empty() {
+        return Ok(vec![]);
+    }
+
+    let piece_ids: Vec<String> = deals
+        .iter()
+        .filter_map(|deal| deal.piece_cid.clone())
+        .collect();
+
+    Ok(piece_ids)
+}
+
+pub async fn get_piece_ids_by_provider_and_client(
+    deal_repo: &DealRepository,
+    provider: &str,
+    client: &str,
+) -> Result<Vec<String>> {
+    let limit = 100;
+    let offset = 0;
+
+    let deals = deal_repo
+        .get_unified_verified_deals_by_provider_and_client(provider, client, limit, offset)
         .await?;
 
     if deals.is_empty() {

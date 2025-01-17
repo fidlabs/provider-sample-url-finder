@@ -1,0 +1,54 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                id,\n                \"dealId\" AS deal_id,\n                \"claimId\" AS claim_id,\n                \"clientId\" AS client_id,\n                \"providerId\" AS provider_id,\n                \"pieceCid\" AS piece_cid\n            FROM unified_verified_deal\n            WHERE \n                \"providerId\" = $1\n            ORDER BY id DESC\n            LIMIT $2\n            OFFSET $3\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "deal_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "claim_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "client_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "provider_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "piece_cid",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "072675ef78b55b473101ad5e556529177403872c30a9f1f95829fcfe03a3cc68"
+}
