@@ -7,7 +7,7 @@ use axum::{
     extract::{Request, State},
     middleware::{self, Next},
     response::Response,
-    routing::{get, post},
+    routing::get,
     Router,
 };
 use color_eyre::Result;
@@ -78,10 +78,10 @@ async fn main() -> Result<()> {
     let app = Router::new()
         // Swagger UI as root path for now
         .merge(SwaggerUi::new("/").url("/api-doc/openapi.json", ApiDoc::openapi()))
-        .route("/url/find", post(handle_find_url))
+        .route("/url/find", get(handle_find_url))
         .route(
             "/url/retrievability",
-            post(handle_find_retri_by_client_and_sp),
+            get(handle_find_retri_by_client_and_sp),
         )
         .route("/healthcheck", get(handle_healthcheck))
         .layer(middleware::from_fn_with_state(
