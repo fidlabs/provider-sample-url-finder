@@ -1,18 +1,23 @@
 use std::sync::Arc;
 
-use axum::{debug_handler, extract::State, Json};
+use axum::{
+    debug_handler,
+    extract::{Query, State},
+};
 use axum_extra::extract::WithRejection;
 use color_eyre::Result;
 use common::api_response::{internal_server_error, ok_response, ApiResponse, ErrorResponse};
 use serde::{Deserialize, Serialize};
 use tracing::debug;
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 
 use crate::{deal_service, provider_endpoints, url_tester, AppState, ResultCode};
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Deserialize, ToSchema, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct FindUrlInput {
     pub provider: String,
+    pub client: Option<String>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -24,9 +29,9 @@ pub struct FindUrlResponse {
 
 /// Find a working url for a given SP address
 #[utoipa::path(
-    post,
+    get,
     path = "/url/find",
-    request_body(content = FindUrlInput),
+    params (FindUrlInput),
     description = r#"
 **Find a working url for a given SP address**
     "#,
@@ -40,12 +45,12 @@ pub struct FindUrlResponse {
 #[debug_handler]
 pub async fn handle_find_url(
     State(state): State<Arc<AppState>>,
-    WithRejection(Json(payload), _): WithRejection<Json<FindUrlInput>, ApiResponse<ErrorResponse>>,
+    WithRejection(Query(query), _): WithRejection<Query<FindUrlInput>, ApiResponse<ErrorResponse>>,
 ) -> Result<ApiResponse<FindUrlResponse>, ApiResponse<()>> {
-    debug!("find url input address: {:?}", &payload.provider);
+    debug!("find url input address: {:?}", &query.provider);
 
     let (result_code, endpoints) =
-        match provider_endpoints::get_provider_endpoints(&payload.provider).await {
+        match provider_endpoints::get_provider_endpoints(&query.provider).await {
             Ok(endpoints) => endpoints,
             Err(e) => return Err(internal_server_error(e.to_string())),
         };
@@ -60,13 +65,19 @@ pub async fn handle_find_url(
     }
     let endpoints = endpoints.unwrap();
 
-    let provider = payload
+    let provider = query
         .provider
         .strip_prefix("f0")
-        .unwrap_or(&payload.provider)
+        .unwrap_or(&query.provider)
         .to_string();
 
-    let piece_ids = deal_service::get_piece_ids_by_provider(&state.deal_repo, &provider)
+    let client: Option<&str> = if let Some(client) = &query.client {
+        Some(client.strip_prefix("f0").unwrap_or(client))
+    } else {
+        None
+    };
+
+    let piece_ids = deal_service::get_piece_ids_by_provider(&state.deal_repo, &provider, client)
         .await
         .map_err(|e| {
             debug!("Failed to get piece ids: {:?}", e);
