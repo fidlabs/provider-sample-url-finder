@@ -28,16 +28,22 @@ The service is using [CID Contact](https://cid.contact) as source of HTTP entry 
     ),
     // API Handler Functions
     paths(
-        handle_find_url,
+        handle_find_url_sp,
+        handle_find_url_sp_client,
         handle_find_retri_by_client_and_sp,
+
+        handle_healthcheck,
     ),
     components(
         schemas(
             // URL
-            FindUrlInput,
-            FindUrlResponse,
+            FindUrlSpPath,
+            FindUrlSpResponse,
+            FindUrlSpClientPath,
+            FindUrlSpClientResponse,
+
             // Retri
-            FindRetriByClientAndSpInput,
+            FindRetriByClientAndSpPath,
             FindRetriByClientAndSpResponse,
 
             // misc
@@ -51,6 +57,7 @@ The service is using [CID Contact](https://cid.contact) as source of HTTP entry 
     tags(
         // API Categories
         (name = "URL", description = "Url Finder APIs"),
+        (name = "Healthcheck", description = "Url Finder Misc APIs"),
     )
 )]
 pub struct ApiDoc;

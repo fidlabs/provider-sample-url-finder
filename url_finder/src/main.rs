@@ -78,9 +78,13 @@ async fn main() -> Result<()> {
     let app = Router::new()
         // Swagger UI as root path for now
         .merge(SwaggerUi::new("/").url("/api-doc/openapi.json", ApiDoc::openapi()))
-        .route("/url/find", get(handle_find_url))
+        .route("/url/find/:provider", get(handle_find_url_sp))
         .route(
-            "/url/retrievability",
+            "/url/find/:provider/:client",
+            get(handle_find_url_sp_client),
+        )
+        .route(
+            "/url/retrievability/:provider/:client",
             get(handle_find_retri_by_client_and_sp),
         )
         .route("/healthcheck", get(handle_healthcheck))

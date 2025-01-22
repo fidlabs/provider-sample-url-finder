@@ -2,7 +2,7 @@ use std::{sync::Arc, time::Duration};
 
 use axum::{
     debug_handler,
-    extract::{Query, State},
+    extract::{Path, State},
 };
 use axum_extra::extract::WithRejection;
 use color_eyre::Result;
@@ -17,8 +17,7 @@ use crate::{deal_service, provider_endpoints, url_tester, AppState};
 use super::ResultCode;
 
 #[derive(Deserialize, ToSchema, IntoParams)]
-#[into_params(parameter_in = Query)]
-pub struct FindRetriByClientAndSpInput {
+pub struct FindRetriByClientAndSpPath {
     pub client: String,
     pub provider: String,
 }
@@ -34,8 +33,8 @@ const RETRIEVABILITY_TIMEOUT_SEC: u64 = 2 * 60; // 2 min
 /// Find retrivabiliy of urls for a given SP and Client address
 #[utoipa::path(
     get,
-    path = "/url/retrievability",
-    params (FindRetriByClientAndSpInput),
+    path = "/url/retrievability/{provider}/{client}",
+    params (FindRetriByClientAndSpPath),
     description = r#"
 **Find retrievabiliy of urls for a given SP and Client address**
     "#,
@@ -49,18 +48,18 @@ const RETRIEVABILITY_TIMEOUT_SEC: u64 = 2 * 60; // 2 min
 #[debug_handler]
 pub async fn handle_find_retri_by_client_and_sp(
     State(state): State<Arc<AppState>>,
-    WithRejection(Query(query), _): WithRejection<
-        Query<FindRetriByClientAndSpInput>,
+    WithRejection(Path(path), _): WithRejection<
+        Path<FindRetriByClientAndSpPath>,
         ApiResponse<ErrorResponse>,
     >,
 ) -> Result<ApiResponse<FindRetriByClientAndSpResponse>, ApiResponse<()>> {
     debug!(
         "find retri for input address: {:?} and client: {:?}",
-        &query.provider, &query.client
+        &path.provider, &path.client
     );
 
     let (result_code, endpoints) =
-        match provider_endpoints::get_provider_endpoints(&query.provider).await {
+        match provider_endpoints::get_provider_endpoints(&path.provider).await {
             Ok(endpoints) => endpoints,
             Err(e) => return Err(internal_server_error(e.to_string())),
         };
@@ -75,16 +74,16 @@ pub async fn handle_find_retri_by_client_and_sp(
     }
     let endpoints = endpoints.unwrap();
 
-    let provider = query
+    let provider = path
         .provider
         .strip_prefix("f0")
-        .unwrap_or(&query.provider)
+        .unwrap_or(&path.provider)
         .to_string();
 
-    let client = query
+    let client = path
         .client
         .strip_prefix("f0")
-        .unwrap_or(&query.client)
+        .unwrap_or(&path.client)
         .to_string();
 
     let piece_ids =
