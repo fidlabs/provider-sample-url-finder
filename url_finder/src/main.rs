@@ -1,26 +1,26 @@
-use std::sync::{
-    atomic::{AtomicUsize, Ordering},
-    Arc,
+use std::{
+    net::SocketAddr,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
 };
 
 use axum::{
     extract::{Request, State},
     middleware::{self, Next},
     response::Response,
-    routing::get,
-    Router,
 };
 use color_eyre::Result;
 use config::CONFIG;
 use deal_repo::DealRepository;
+use routes::create_routes;
 use tokio::{
     net::TcpListener,
     signal::unix::{signal, SignalKind},
 };
 use tracing::{debug, info};
 use tracing_subscriber::EnvFilter;
-use utoipa::OpenApi;
-use utoipa_swagger_ui::SwaggerUi;
 
 use crate::api::*;
 
@@ -33,6 +33,7 @@ mod lotus_rpc;
 mod multiaddr_parser;
 mod pix_filspark;
 mod provider_endpoints;
+mod routes;
 mod url_tester;
 
 pub struct AppState {
@@ -75,31 +76,22 @@ async fn main() -> Result<()> {
         active_requests: active_requests.clone(),
     });
 
-    let app = Router::new()
-        // Swagger UI as root path for now
-        .merge(SwaggerUi::new("/").url("/api-doc/openapi.json", ApiDoc::openapi()))
-        .route("/url/find/:provider", get(handle_find_url_sp))
-        .route(
-            "/url/find/:provider/:client",
-            get(handle_find_url_sp_client),
-        )
-        .route(
-            "/url/retrievability/:provider/:client",
-            get(handle_find_retri_by_client_and_sp),
-        )
-        .route("/healthcheck", get(handle_healthcheck))
+    let app = create_routes()
         .layer(middleware::from_fn_with_state(
             app_state.clone(),
             request_counter,
         ))
         .with_state(app_state.clone());
 
-    let server_addr = "0.0.0.0:3010".to_string();
+    let server_addr = SocketAddr::from(([0, 0, 0, 0], 3010));
     let listener = TcpListener::bind(&server_addr).await?;
 
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal(active_requests.clone()))
-        .await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal(active_requests.clone()))
+    .await?;
 
     info!("UrlFinder shut down gracefully");
 
