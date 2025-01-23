@@ -6,13 +6,20 @@ use crate::deal_repo::DealRepository;
 pub async fn get_piece_ids_by_provider(
     deal_repo: &DealRepository,
     provider: &str,
+    client: Option<&str>,
 ) -> Result<Vec<String>> {
     let limit = 100;
     let offset = 0;
 
-    let deals = deal_repo
-        .get_unified_verified_deals_by_provider(provider, limit, offset)
-        .await?;
+    let deals = if let Some(client) = client {
+        deal_repo
+            .get_deals_by_provider_and_client(provider, client, limit, offset)
+            .await?
+    } else {
+        deal_repo
+            .get_deals_by_provider(provider, limit, offset)
+            .await?
+    };
 
     if deals.is_empty() {
         return Ok(vec![]);
@@ -35,7 +42,7 @@ pub async fn get_piece_ids_by_provider_and_client(
     let offset = 0;
 
     let deals = deal_repo
-        .get_unified_verified_deals_by_provider_and_client(provider, client, limit, offset)
+        .get_random_deals_by_provider_and_client(provider, client, limit, offset)
         .await?;
 
     if deals.is_empty() {
