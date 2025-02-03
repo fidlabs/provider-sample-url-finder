@@ -66,8 +66,8 @@ The service is using [CID Contact](https://cid.contact) as source of HTTP entry 
       ),
     tags(
         // API Categories
-        (name = "URL", description = "Url Finder APIs"),
         (name = "JOB", description = "Async Url Finder APIs"),
+        (name = "URL", description = "Url Finder APIs"),
         (name = "Healthcheck", description = "Url Finder Misc APIs"),
     )
 )]

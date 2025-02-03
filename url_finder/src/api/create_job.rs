@@ -36,7 +36,7 @@ pub struct CreateJobResponse {
 /// Create a job to find working urls or retrievability for a given SP and Client address
 #[utoipa::path(
     post,
-    path = "/url/job",
+    path = "/jobs",
     request_body(content = CreateJobPayload),
     description = r#"
 **Create a job to find working urls or retrievability for a given SP and Client address**

@@ -26,7 +26,7 @@ pub struct GetJobResponse {
 /// Get a job with working urls or retrievability
 #[utoipa::path(
   get,
-  path = "/url/job/{job_id}",
+  path = "/jobs/{job_id}",
   params (GetJobPath),
   description = r#"
 **Get a job with working urls or retrievability**

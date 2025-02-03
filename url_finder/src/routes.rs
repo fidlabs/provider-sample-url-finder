@@ -92,8 +92,8 @@ pub fn create_routes() -> Router<Arc<AppState>> {
         });
 
     let async_routes = Router::new()
-        .route("/url/job/:id", get(handle_get_job))
-        .route("/url/job", post(handle_create_job))
+        .route("/jobs/:id", get(handle_get_job))
+        .route("/jobs", post(handle_create_job))
         .layer(GovernorLayer {
             config: governor_async.clone(),
         });
