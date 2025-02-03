@@ -45,7 +45,7 @@ The service is using [CID Contact](https://cid.contact) as source of HTTP entry 
             FindUrlSpResponse,
             FindUrlSpClientPath,
             FindUrlSpClientResponse,
-            
+
             // Retri
             FindRetriByClientAndSpPath,
             FindRetriByClientAndSpResponse,
