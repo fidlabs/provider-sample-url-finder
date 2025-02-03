@@ -6,7 +6,8 @@ use axum::{
 };
 use axum_extra::extract::WithRejection;
 use color_eyre::Result;
-use common::api_response::{internal_server_error, ok_response, ApiResponse, ErrorResponse};
+use common::api_response::*;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 use utoipa::{IntoParams, ToSchema};
@@ -39,7 +40,7 @@ pub struct FindUrlSpClientResponse {
         (status = 400, description = "Bad Request", body = ErrorResponse),
         (status = 500, description = "Internal Server Error", body = ErrorResponse),
     ),
-    tags = ["Url"],
+    tags = ["URL"],
 )]
 #[debug_handler]
 pub async fn handle_find_url_sp_client(
@@ -50,6 +51,14 @@ pub async fn handle_find_url_sp_client(
     >,
 ) -> Result<ApiResponse<FindUrlSpClientResponse>, ApiResponse<()>> {
     debug!("find url input address: {:?}", &path.provider);
+
+    // validate provider and client addresses
+    let address_pattern = Regex::new(r"^f0\d{1,8}$").unwrap();
+    if !address_pattern.is_match(&path.provider) || !address_pattern.is_match(&path.client) {
+        return Err(bad_request(
+            "Invalid provider or client address".to_string(),
+        ));
+    }
 
     let (result_code, endpoints) =
         match provider_endpoints::get_provider_endpoints(&path.provider).await {

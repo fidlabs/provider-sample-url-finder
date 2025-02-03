@@ -89,7 +89,7 @@ async fn filter_working_with_get(urls: Vec<String>) -> Option<String> {
 }
 
 /// return retrivable percent of the urls
-pub async fn get_retrivability_with_head(urls: Vec<String>) -> f64 {
+pub async fn get_retrivability_with_head(urls: Vec<String>) -> (Option<String>, f64) {
     let client = Client::builder()
         .timeout(std::time::Duration::from_secs(RETRI_TIMEOUT_SEC))
         .build()
@@ -121,9 +121,15 @@ pub async fn get_retrivability_with_head(urls: Vec<String>) -> f64 {
         })
         .buffer_unordered(RETRI_CONCURENCY_LIMIT);
 
-    while let Some(_result) = stream.next().await {
+    let mut sample_url: Option<String> = None;
+
+    while let Some(result) = stream.next().await {
         // process the stream
-        // we don't really need the resulting url
+
+        // save a sample url that is working
+        if sample_url.is_none() && result.is_some() {
+            sample_url = result;
+        }
     }
 
     let success = success_counter.load(Ordering::SeqCst);
@@ -140,7 +146,7 @@ pub async fn get_retrivability_with_head(urls: Vec<String>) -> f64 {
         success, total, retri_percentage
     );
 
-    round_to_two_decimals(retri_percentage)
+    (sample_url, round_to_two_decimals(retri_percentage))
 }
 
 fn round_to_two_decimals(number: f64) -> f64 {

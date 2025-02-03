@@ -22,6 +22,7 @@ The service is using [CID Contact](https://cid.contact) as source of HTTP entry 
  - **FailedToGetWorkingUrl** - None of tested URLs is working and can be downloaded
  - **NoDealsFound** - No deals found for given miner (should not happen, unless miner address is invalid)
  - **TimedOut** - Searching for working URL is taking too long - probably there is no working URL
+ - **JobCreated** - Asynchronous job was created
  - **Success** - Found working URL
         "#,
         version = "1.0.0"
@@ -32,6 +33,9 @@ The service is using [CID Contact](https://cid.contact) as source of HTTP entry 
         handle_find_url_sp_client,
         handle_find_retri_by_client_and_sp,
 
+        handle_create_job,
+        handle_get_job,
+
         handle_healthcheck,
     ),
     components(
@@ -41,10 +45,16 @@ The service is using [CID Contact](https://cid.contact) as source of HTTP entry 
             FindUrlSpResponse,
             FindUrlSpClientPath,
             FindUrlSpClientResponse,
-
+            
             // Retri
             FindRetriByClientAndSpPath,
             FindRetriByClientAndSpResponse,
+
+            // Job
+            CreateJobPayload,
+            CreateJobResponse,
+            GetJobPath,
+            GetJobResponse,
 
             // misc
             HealthcheckResponse,
@@ -57,6 +67,7 @@ The service is using [CID Contact](https://cid.contact) as source of HTTP entry 
     tags(
         // API Categories
         (name = "URL", description = "Url Finder APIs"),
+        (name = "JOB", description = "Async Url Finder APIs"),
         (name = "Healthcheck", description = "Url Finder Misc APIs"),
     )
 )]
