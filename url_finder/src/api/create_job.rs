@@ -63,8 +63,7 @@ pub async fn handle_create_job(
     // validate provider and client addresses
     let address_pattern = Regex::new(r"^f0\d{1,8}$").unwrap();
     if !address_pattern.is_match(&payload.provider)
-        || (payload.client.is_some()
-            && !address_pattern.is_match(&payload.client.as_ref().unwrap()))
+        || (payload.client.is_some() && !address_pattern.is_match(payload.client.as_ref().unwrap()))
     {
         return Err(bad_request(
             "Invalid provider or client address".to_string(),

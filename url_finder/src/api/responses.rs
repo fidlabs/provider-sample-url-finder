@@ -15,6 +15,7 @@ pub enum ResultCode {
     JobCreated,
 }
 
+#[allow(clippy::enum_variant_names)]
 #[derive(Serialize, ToSchema, Clone)]
 pub enum ErrorCode {
     FailedToRetrieveCidContactData,

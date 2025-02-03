@@ -46,11 +46,15 @@ impl Job {
 pub struct JobRepository {
     db: Arc<RwLock<HashMap<Uuid, Job>>>,
 }
+impl Default for JobRepository {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, ToSchema)]
 pub enum JobStatus {
     Pending,
-    // Running,
     Completed,
     Failed,
 }

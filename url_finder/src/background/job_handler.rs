@@ -67,7 +67,7 @@ async fn process_pending_job(
         }
     };
 
-    if endpoints.is_none() || endpoints.as_ref().unwrap().len() == 0 {
+    if endpoints.is_none() || endpoints.as_ref().unwrap().is_empty() {
         debug!("No endpoints found");
 
         return Err(JobHandlerError::FailedJob(
