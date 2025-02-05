@@ -1,6 +1,12 @@
 use std::{sync::Arc, time::Duration};
 
-use axum::{body::Body, http::Response, response::IntoResponse, routing::get, Router};
+use axum::{
+    body::Body,
+    http::Response,
+    response::IntoResponse,
+    routing::{get, post},
+    Router,
+};
 use common::api_response::*;
 use tower_governor::{
     governor::GovernorConfigBuilder, key_extractor::SmartIpKeyExtractor, GovernorError,
@@ -85,6 +91,13 @@ pub fn create_routes() -> Router<Arc<AppState>> {
             config: governor_secure.clone(),
         });
 
+    let async_routes = Router::new()
+        .route("/jobs/:id", get(handle_get_job))
+        .route("/jobs", post(handle_create_job))
+        .layer(GovernorLayer {
+            config: governor_async.clone(),
+        });
+
     let healthcheck_route = Router::new()
         .route("/healthcheck", get(handle_healthcheck))
         .layer(GovernorLayer {
@@ -94,5 +107,6 @@ pub fn create_routes() -> Router<Arc<AppState>> {
     Router::new()
         .merge(swagger_routes)
         .merge(sync_routes)
-        .merge(healthcheck_route)
+        .merge(async_routes)
+        .merge(healthcheck_route.clone())
 }

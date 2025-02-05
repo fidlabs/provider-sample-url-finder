@@ -37,3 +37,6 @@ utoipa = { version = "5.2.0", features = [
 utoipa-swagger-ui = { version = "8.0.3", features = ["axum", "reqwest", "url"] }
 multiaddr = "0.18.2"
 tower_governor = { version = "0.5.0", features = ["axum"] }
+uuid = { version = "1.10.0", features = ["v4", "serde"] }
+chrono = { version = "0.4.38", features = ["serde"] }
+regex = "1.11.1"

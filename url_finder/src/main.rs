@@ -24,8 +24,10 @@ use tracing::{debug, info};
 use tracing_subscriber::EnvFilter;
 
 use crate::api::*;
+use crate::repository::*;
 
 mod api;
+mod background;
 mod cid_contact;
 mod config;
 mod deal_repo;
@@ -34,12 +36,14 @@ mod lotus_rpc;
 mod multiaddr_parser;
 mod pix_filspark;
 mod provider_endpoints;
+mod repository;
 mod routes;
 mod url_tester;
 
 pub struct AppState {
-    pub deal_repo: DealRepository,
+    pub deal_repo: Arc<DealRepository>,
     pub active_requests: Arc<AtomicUsize>,
+    pub job_repo: Arc<JobRepository>,
 }
 
 /// Active requests counter middleware.
@@ -72,10 +76,18 @@ async fn main() -> Result<()> {
     let pool = sqlx::PgPool::connect(&CONFIG.db_url).await?;
 
     let active_requests = Arc::new(AtomicUsize::new(0));
+
     let app_state = Arc::new(AppState {
-        deal_repo: DealRepository::new(pool),
+        deal_repo: Arc::new(DealRepository::new(pool)),
         active_requests: active_requests.clone(),
+        job_repo: Arc::new(JobRepository::new()),
     });
+
+    // start the job handler in the background
+    tokio::spawn(background::job_handler(
+        app_state.job_repo.clone(),
+        app_state.deal_repo.clone(),
+    ));
 
     let allowed_origins = ["https://sp-tool.allocator.tech".parse().unwrap()];
     let cors = CorsLayer::new()
