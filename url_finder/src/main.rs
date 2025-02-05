@@ -19,6 +19,7 @@ use tokio::{
     net::TcpListener,
     signal::unix::{signal, SignalKind},
 };
+use tower_http::cors::{Any, CorsLayer};
 use tracing::{debug, info};
 use tracing_subscriber::EnvFilter;
 
@@ -88,11 +89,17 @@ async fn main() -> Result<()> {
         app_state.deal_repo.clone(),
     ));
 
+    let allowed_origins = ["https://sp-tool.allocator.tech".parse().unwrap()];
+    let cors = CorsLayer::new()
+        .allow_origin(allowed_origins)
+        .allow_origin(Any);
+
     let app = create_routes()
         .layer(middleware::from_fn_with_state(
             app_state.clone(),
             request_counter,
         ))
+        .layer(cors)
         .with_state(app_state.clone());
 
     let server_addr = SocketAddr::from(([0, 0, 0, 0], 3010));

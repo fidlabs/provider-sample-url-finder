@@ -25,7 +25,8 @@ sqlx = { version = "0.8.2", features = [
 futures = "0.3.31"
 once_cell = "1.20.2"
 common = { git = "https://github.com/fidlabs/bandwidth-measurement-system.git", rev = "0ca8779" }
-tower = { version = "0.5.1", features = ["timeout", "limit"] }
+tower = { version = "0.5.2", features = ["timeout", "limit"] }
+tower-http = { version = "0.6.2", features = ["cors"]}
 utoipa = { version = "5.2.0", features = [
   "axum_extras",
   "uuid",
