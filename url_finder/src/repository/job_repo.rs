@@ -81,6 +81,7 @@ impl JobRepository {
         job_id: Uuid,
         working_url: Option<String>,
         retrievability: f64,
+        result: ResultCode,
     ) {
         let mut db = self.db.write().unwrap();
 
@@ -88,6 +89,7 @@ impl JobRepository {
             job.working_url = working_url;
             job.retrievability = Some(retrievability as i64);
             job.status = JobStatus::Completed;
+            job.result = Some(result);
             job.updated_at = Utc::now();
         }
     }

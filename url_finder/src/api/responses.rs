@@ -13,6 +13,7 @@ pub enum ResultCode {
     TimedOut,
     Success,
     JobCreated,
+    Error,
 }
 
 #[allow(clippy::enum_variant_names)]

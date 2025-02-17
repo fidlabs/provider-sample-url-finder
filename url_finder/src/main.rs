@@ -92,7 +92,9 @@ async fn main() -> Result<()> {
     let allowed_origins = ["https://sp-tool.allocator.tech".parse().unwrap()];
     let cors = CorsLayer::new()
         .allow_origin(allowed_origins)
-        .allow_origin(Any);
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any);
 
     let app = create_routes()
         .layer(middleware::from_fn_with_state(
