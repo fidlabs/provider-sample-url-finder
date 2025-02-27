@@ -60,7 +60,7 @@ async fn process_pending_job(
         Ok(result) => result,
         Err(error_code) => {
             return Err(JobHandlerError::FailedJob(
-                None,
+                Some(ResultCode::Error),
                 Some(error_code.clone()),
                 error_code.to_string(),
             ))
@@ -108,7 +108,7 @@ async fn process_pending_job(
     let (working_url, retrievability) = url_tester::get_retrivability_with_head(urls).await;
 
     job_repo
-        .update_job_result(job.id, working_url, retrievability)
+        .update_job_result(job.id, working_url, retrievability, ResultCode::Success)
         .await;
 
     Ok(())

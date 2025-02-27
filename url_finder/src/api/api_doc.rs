@@ -24,6 +24,7 @@ The service is using [CID Contact](https://cid.contact) as source of HTTP entry 
  - **TimedOut** - Searching for working URL is taking too long - probably there is no working URL
  - **JobCreated** - Asynchronous job was created
  - **Success** - Found working URL
+ - **Error** - (async only) Error occurred, check error field
         "#,
         version = "1.0.0"
     ),
