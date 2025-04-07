@@ -32,8 +32,8 @@ pub fn create_routes() -> Router<Arc<AppState>> {
     // more strict rate limiting for the sync routes
     let governor_secure = Arc::new(
         GovernorConfigBuilder::default()
-            .per_second(4)
-            .burst_size(2)
+            .per_second(30)
+            .burst_size(30)
             .key_extractor(SmartIpKeyExtractor)
             .error_handler(too_many_requests_error_handler)
             .finish()
@@ -43,7 +43,7 @@ pub fn create_routes() -> Router<Arc<AppState>> {
     // less strict rate limiting for the async routes that will have internal queue anyway
     let governor_async = Arc::new(
         GovernorConfigBuilder::default()
-            .per_second(1)
+            .per_second(30)
             .burst_size(10)
             .key_extractor(SmartIpKeyExtractor)
             .error_handler(too_many_requests_error_handler)
