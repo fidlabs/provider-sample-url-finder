@@ -1,0 +1,33 @@
+name: Manually trigger deploy to staging or production
+run-name: "Manually deploy ${{ github.ref_name }} triggered by ${{ github.actor }}; version: ${{ inputs.version }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Enter the version number"
+        required: true
+        default: "main"
+      environment:
+        required: false
+        description: "Select the environment to deploy to"
+        type: choice
+        options:
+          - staging
+          # TODO: uncomment this when we want to deploy to production
+          # - production
+        default: staging
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  trigger-deploy:
+    uses: ./.github/workflows/put-ssm-version-deploy.yml
+    if: ${{ inputs.version != '' && inputs.environment != '' }}
+    with:
+      version: ${{ inputs.version }}
+      environment: ${{ inputs.environment }}
+      ecr-repository: provider-sample-url-finder
+    secrets: inherit
