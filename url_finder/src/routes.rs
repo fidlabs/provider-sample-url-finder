@@ -3,6 +3,7 @@ use std::{sync::Arc, time::Duration};
 use axum::{
     body::Body,
     http::Response,
+    middleware,
     response::IntoResponse,
     routing::{get, post},
     Router,
@@ -28,7 +29,7 @@ fn too_many_requests_error_handler(error: GovernorError) -> Response<Body> {
     }
 }
 
-pub fn create_routes() -> Router<Arc<AppState>> {
+pub fn create_routes(app_state: Arc<AppState>) -> Router<Arc<AppState>> {
     // more strict rate limiting for the sync routes
     let governor_secure = Arc::new(
         GovernorConfigBuilder::default()
@@ -91,6 +92,11 @@ pub fn create_routes() -> Router<Arc<AppState>> {
             "/url/retrievability/:provider",
             get(handle_find_retri_by_sp),
         )
+        // .layer(middleware::from_fn(cache_middleware))
+        .layer(middleware::from_fn_with_state(
+            app_state.clone(),
+            cache_middleware,
+        ))
         .layer(GovernorLayer {
             config: governor_secure.clone(),
         });
