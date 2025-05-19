@@ -87,6 +87,10 @@ pub fn create_routes() -> Router<Arc<AppState>> {
             "/url/retrievability/:provider/:client",
             get(handle_find_retri_by_client_and_sp),
         )
+        .route(
+            "/url/retrievability/:provider",
+            get(handle_find_retri_by_sp),
+        )
         .layer(GovernorLayer {
             config: governor_secure.clone(),
         });
