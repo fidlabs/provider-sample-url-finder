@@ -92,7 +92,6 @@ pub fn create_routes(app_state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/url/retrievability/:provider",
             get(handle_find_retri_by_sp),
         )
-        // .layer(middleware::from_fn(cache_middleware))
         .layer(middleware::from_fn_with_state(
             app_state.clone(),
             cache_middleware,
