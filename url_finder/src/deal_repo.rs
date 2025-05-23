@@ -126,4 +126,37 @@ impl DealRepository {
 
         Ok(data)
     }
+
+    pub async fn get_random_deals_by_provider(
+        &self,
+        provider: &str,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<UnifiedVerifiedDeal>, sqlx::Error> {
+        let data = sqlx::query_as!(
+            UnifiedVerifiedDeal,
+            r#"
+            SELECT
+                id,
+                "dealId" AS deal_id,
+                "claimId" AS claim_id,
+                "clientId" AS client_id,
+                "providerId" AS provider_id,
+                "pieceCid" AS piece_cid
+            FROM unified_verified_deal
+            WHERE 
+                "providerId" = $1
+            ORDER BY random()
+            LIMIT $2
+            OFFSET $3
+            "#,
+            provider,
+            limit,
+            offset,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(data)
+    }
 }
