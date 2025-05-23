@@ -13,21 +13,24 @@ on:
         description: "Select the environment to deploy to"
         type: choice
         options:
-          - staging
-          # TODO: uncomment this when we want to deploy to production
-          # - production
-        default: staging
+          - production
+        default: production
 
 permissions:
   id-token: write
   contents: read
 
 jobs:
-  trigger-deploy:
-    uses: ./.github/workflows/put-ssm-version-deploy.yml
-    if: ${{ inputs.version != '' && inputs.environment != '' }}
-    with:
-      version: ${{ inputs.version }}
-      environment: ${{ inputs.environment }}
-      ecr-repository: provider-sample-url-finder
-    secrets: inherit
+  trigger-production-deploy:
+    runs-on: ubuntu-latest
+    if: ${{ github.ref_name == 'main' && inputs.version != '' && inputs.environment == 'production' }}
+    steps:
+      - name: Trigger production deploy
+        uses: neti-filplus-infra/filplus-deploy-action@main
+        with:
+          version: ${{ inputs.version }}
+          environment: production
+          ecr-repository: provider-sample-url-finder
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_IMAGE_DEPLOYER }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_IMAGE_DEPLOYER }}
+          aws-region: us-east-1
