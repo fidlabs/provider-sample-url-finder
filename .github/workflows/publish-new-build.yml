@@ -95,7 +95,7 @@ jobs:
     needs:
       - code-check
       - bump-version
-      - git-tag
+      - build-and-publish
     if: ${{ github.ref_name == 'main' && inputs.version != '' && inputs.deploy-to-production == true }}
     environment: production-fidl
     steps:
