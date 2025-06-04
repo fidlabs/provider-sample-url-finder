@@ -10,6 +10,9 @@ pub use healthcheck::*;
 mod api_doc;
 pub use api_doc::*;
 
+mod find_retri_sp;
+pub use find_retri_sp::*;
+
 mod find_retri_sp_client;
 pub use find_retri_sp_client::*;
 
@@ -21,3 +24,6 @@ pub use create_job::*;
 
 mod get_job;
 pub use get_job::*;
+
+mod cache_middleware;
+pub use cache_middleware::*;

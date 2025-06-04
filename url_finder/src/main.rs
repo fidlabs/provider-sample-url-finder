@@ -14,6 +14,7 @@ use axum::{
 use color_eyre::Result;
 use config::CONFIG;
 use deal_repo::DealRepository;
+use moka::future::Cache;
 use routes::create_routes;
 use tokio::{
     net::TcpListener,
@@ -44,6 +45,7 @@ pub struct AppState {
     pub deal_repo: Arc<DealRepository>,
     pub active_requests: Arc<AtomicUsize>,
     pub job_repo: Arc<JobRepository>,
+    pub cache: Cache<String, serde_json::Value>,
 }
 
 /// Active requests counter middleware.
@@ -77,10 +79,16 @@ async fn main() -> Result<()> {
 
     let active_requests = Arc::new(AtomicUsize::new(0));
 
+    let cache: Cache<String, serde_json::Value> = Cache::builder()
+        .max_capacity(100_000) // arbitrary number, 6x current sp and client pair count, adjust as needed
+        .time_to_live(std::time::Duration::from_secs(60 * 60 * 23)) // 23 hours, just shy of 1 day
+        .build();
+
     let app_state = Arc::new(AppState {
         deal_repo: Arc::new(DealRepository::new(pool)),
         active_requests: active_requests.clone(),
         job_repo: Arc::new(JobRepository::new()),
+        cache,
     });
 
     // start the job handler in the background
@@ -96,7 +104,7 @@ async fn main() -> Result<()> {
         .allow_methods(Any)
         .allow_headers(Any);
 
-    let app = create_routes()
+    let app = create_routes(app_state.clone())
         .layer(middleware::from_fn_with_state(
             app_state.clone(),
             request_counter,
