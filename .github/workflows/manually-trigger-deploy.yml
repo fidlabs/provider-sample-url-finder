@@ -23,6 +23,7 @@ permissions:
 jobs:
   trigger-production-deploy:
     runs-on: ubuntu-latest
+    environment: production-fidl
     if: ${{ github.ref_name == 'main' && inputs.version != '' && inputs.environment == 'production' }}
     steps:
       - name: Trigger production deploy
