@@ -20,7 +20,7 @@ impl fmt::Display for CidContactError {
 
 pub async fn get_contact(peer_id: &str) -> Result<serde_json::Value, CidContactError> {
     let client = Client::new();
-    let url = format!("https://cid.contact/providers/{}", peer_id);
+    let url = format!("https://cid.contact/providers/{peer_id}");
 
     debug!("cid contact url: {:?}", url);
 
