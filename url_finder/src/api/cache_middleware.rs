@@ -23,7 +23,7 @@ async fn cache_response(state: Arc<AppState>, cache_key: String, response: Respo
         Ok(bytes) => bytes,
         Err(e) => {
             error!("failed to read response body: {:?}", e);
-            return internal_server_error(format!("Error processing response: {}", e))
+            return internal_server_error(format!("Error processing response: {e}"))
                 .into_response();
         }
     };
@@ -42,7 +42,7 @@ pub async fn cache_middleware(
 ) -> Response {
     let path = req.uri().path().to_string();
     let query = req.uri().query().unwrap_or("").to_string();
-    let cache_key = format!("cache_{}_{}", path, query);
+    let cache_key = format!("cache_{path}_{query}");
 
     if let Some(cached_json) = state.cache.get(&cache_key).await {
         debug!("cache hit for key: {}", cache_key);

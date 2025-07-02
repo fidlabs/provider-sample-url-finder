@@ -30,6 +30,6 @@ impl fmt::Display for ErrorCode {
             ErrorCode::FailedToGetPeerId => "FailedToGetPeerId",
             ErrorCode::FailedToGetDeals => "FailedToGetDeals",
         };
-        write!(f, "{}", s)
+        write!(f, "{s}")
     }
 }

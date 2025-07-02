@@ -6,7 +6,7 @@ use tracing::debug;
 #[allow(dead_code)]
 pub async fn get_cid(peer_id: &str, piece_id: &str) -> Result<String> {
     let client = Client::new();
-    let url = format!("https://pix.filspark.com/sample/{}/{}", peer_id, piece_id);
+    let url = format!("https://pix.filspark.com/sample/{peer_id}/{piece_id}");
 
     debug!("pix filspark url: {:?}", url);
 

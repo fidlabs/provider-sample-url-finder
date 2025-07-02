@@ -88,7 +88,7 @@ pub async fn get_piece_url(endpoints: Vec<String>, piece_ids: Vec<String>) -> Ve
             let endpoint = endpoint.clone();
             piece_ids
                 .iter()
-                .map(move |piece_id| format!("{}/piece/{}", endpoint, piece_id))
+                .map(move |piece_id| format!("{endpoint}/piece/{piece_id}"))
         })
         .collect();
 
