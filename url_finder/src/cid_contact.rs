@@ -14,7 +14,7 @@ impl fmt::Display for CidContactError {
             CidContactError::InvalidResponse => "InvalidResponse",
             CidContactError::NoData => "NoData",
         };
-        write!(f, "{}", s)
+        write!(f, "{s}")
     }
 }
 
