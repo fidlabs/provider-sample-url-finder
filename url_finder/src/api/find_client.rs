@@ -86,8 +86,8 @@ pub async fn handle_find_client(
             );
 
             return Err(internal_server_error(format!(
-                "Failed to get providers for client {}: {:?}",
-                &path.client, e
+                "Failed to get providers for client {0}",
+                path.client
             )));
         }
     };

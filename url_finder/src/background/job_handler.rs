@@ -160,10 +160,7 @@ async fn process_job_with_client(deal_repo: &DealRepository, client: &str) -> Jo
         Ok(providers) => providers,
         Err(e) => {
             debug!("Failed to get providers for client {}: {:?}", client, e);
-            return JobHandlerResult::Skip(format!(
-                "Failed to get providers for client {}: {:?}",
-                client, e
-            ));
+            return JobHandlerResult::Skip(format!("Failed to get providers for client {client}"));
         }
     };
 
@@ -171,7 +168,7 @@ async fn process_job_with_client(deal_repo: &DealRepository, client: &str) -> Jo
         return JobHandlerResult::FailedJob(JobFailed {
             error: Some(ErrorCode::NoProvidersFound),
             result: Some(ResultCode::Error),
-            reason: format!("No providers found for client: {}", client),
+            reason: format!("No providers found for client: {client}"),
         });
     }
 

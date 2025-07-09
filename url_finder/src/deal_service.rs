@@ -51,7 +51,7 @@ pub async fn get_distinct_providers_by_client(
         .filter_map(|deal| deal.provider_id.clone())
         .map(|provider| {
             if !provider.starts_with("f0") {
-                format!("f0{}", provider)
+                format!("f0{provider}")
             } else {
                 provider
             }
