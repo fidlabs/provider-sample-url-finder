@@ -4,6 +4,8 @@ use serde_json::json;
 use tracing::debug;
 
 pub async fn get_peer_id(address: &str) -> Result<String> {
+    debug!("get_peer_id address: {}", address);
+
     let client = Client::new();
     let res = client
         .post("https://api.node.glif.io/rpc/v1")

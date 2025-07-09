@@ -12,11 +12,24 @@ use uuid::Uuid;
 use crate::{ErrorCode, ResultCode};
 
 #[derive(Clone, Serialize, ToSchema)]
+pub struct ProviderResult {
+    pub provider: String,
+    pub client: Option<String>,
+    pub working_url: Option<String>,
+    pub retrievability: f64,
+    pub result: ResultCode,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorCode>,
+}
+
+#[derive(Clone, Serialize, ToSchema)]
 pub struct Job {
     pub id: Uuid,
+    // working_url and retrievability are kept for FE compatibility
     pub working_url: Option<String>,
     pub retrievability: Option<i64>,
-    pub provider: String,
+    pub results: Vec<ProviderResult>,
+    pub provider: Option<String>,
     pub client: Option<String>,
     pub status: JobStatus,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -27,11 +40,12 @@ pub struct Job {
     pub updated_at: DateTime<Utc>,
 }
 impl Job {
-    pub fn new(provider: String, client: Option<String>) -> Self {
+    pub fn new(provider: Option<String>, client: Option<String>) -> Self {
         Self {
             id: Uuid::new_v4(),
             working_url: None,
             retrievability: None,
+            results: Vec::new(),
             provider,
             client,
             status: JobStatus::Pending,
@@ -67,7 +81,11 @@ impl JobRepository {
         }
     }
 
-    pub async fn create_job(&self, provider: String, client: Option<String>) -> Result<Job> {
+    pub async fn create_job(
+        &self,
+        provider: Option<String>,
+        client: Option<String>,
+    ) -> Result<Job> {
         let job = Job::new(provider, client);
 
         let mut db = self.db.write().unwrap();
@@ -76,9 +94,11 @@ impl JobRepository {
         Ok(job)
     }
 
-    pub async fn update_job_result(
+    pub async fn add_success_result(
         &self,
         job_id: Uuid,
+        provider: String,
+        client: Option<String>,
         working_url: Option<String>,
         retrievability: f64,
         result: ResultCode,
@@ -86,10 +106,50 @@ impl JobRepository {
         let mut db = self.db.write().unwrap();
 
         if let Some(job) = db.get_mut(&job_id) {
-            job.working_url = working_url;
-            job.retrievability = Some(retrievability as i64);
-            job.status = JobStatus::Completed;
-            job.result = Some(result);
+            let provider_result = ProviderResult {
+                provider,
+                client,
+                working_url: working_url.clone(),
+                retrievability,
+                result,
+                error: None,
+            };
+
+            job.results.push(provider_result);
+            job.updated_at = Utc::now();
+        }
+    }
+
+    pub async fn add_error_result(
+        &self,
+        job_id: Uuid,
+        provider: String,
+        client: Option<String>,
+        error: Option<ErrorCode>,
+        result: Option<ResultCode>,
+    ) {
+        let mut db = self.db.write().unwrap();
+
+        if let Some(job) = db.get_mut(&job_id) {
+            let provider_result = ProviderResult {
+                provider,
+                client,
+                working_url: None,
+                retrievability: 0.0,
+                result: result.unwrap_or(ResultCode::Error),
+                error,
+            };
+
+            job.results.push(provider_result);
+            job.updated_at = Utc::now();
+        }
+    }
+
+    pub async fn set_status(&self, job_id: Uuid, status: JobStatus) {
+        let mut db = self.db.write().unwrap();
+
+        if let Some(job) = db.get_mut(&job_id) {
+            job.status = status;
             job.updated_at = Utc::now();
         }
     }

@@ -17,6 +17,11 @@ pub struct UnifiedVerifiedDeal {
     pub piece_cid: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Provider {
+    pub provider_id: Option<String>,
+}
+
 impl DealRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
@@ -41,7 +46,7 @@ impl DealRepository {
             FROM unified_verified_deal
             WHERE 
                 "providerId" = $1
-            ORDER BY id DESC
+            ORDER BY random()
             LIMIT $2
             OFFSET $3
             "#,
@@ -76,7 +81,7 @@ impl DealRepository {
             WHERE 
                 "providerId" = $1
                 AND "clientId" = $2
-            ORDER BY id DESC
+            ORDER BY random()
             LIMIT $3
             OFFSET $4
             "#,
@@ -153,6 +158,28 @@ impl DealRepository {
             provider,
             limit,
             offset,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(data)
+    }
+
+    pub async fn get_distinct_providers_by_client(
+        &self,
+        client: &str,
+    ) -> Result<Vec<Provider>, sqlx::Error> {
+        let data = sqlx::query_as!(
+            Provider,
+            r#"
+            SELECT DISTINCT 
+                "providerId" AS provider_id
+            FROM 
+                unified_verified_deal
+            WHERE 
+                "clientId" = $1
+            "#,
+            client,
         )
         .fetch_all(&self.pool)
         .await?;

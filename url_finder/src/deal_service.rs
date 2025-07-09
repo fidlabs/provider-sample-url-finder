@@ -33,6 +33,34 @@ pub async fn get_piece_ids_by_provider(
     Ok(piece_ids)
 }
 
+pub async fn get_distinct_providers_by_client(
+    deal_repo: &DealRepository,
+    client: &str,
+) -> Result<Vec<String>> {
+    let client_db = client.strip_prefix("f0").unwrap_or(client);
+    let deals = deal_repo
+        .get_distinct_providers_by_client(client_db)
+        .await?;
+
+    if deals.is_empty() {
+        return Ok(vec![]);
+    }
+
+    let providers: Vec<String> = deals
+        .iter()
+        .filter_map(|deal| deal.provider_id.clone())
+        .map(|provider| {
+            if !provider.starts_with("f0") {
+                format!("f0{}", provider)
+            } else {
+                provider
+            }
+        })
+        .collect();
+
+    Ok(providers)
+}
+
 pub async fn get_random_piece_ids_by_provider_and_client(
     deal_repo: &DealRepository,
     provider: &str,

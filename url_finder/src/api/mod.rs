@@ -10,6 +10,9 @@ pub use healthcheck::*;
 mod api_doc;
 pub use api_doc::*;
 
+mod find_client;
+pub use find_client::*;
+
 mod find_retri_sp;
 pub use find_retri_sp::*;
 
