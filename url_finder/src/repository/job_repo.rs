@@ -32,7 +32,6 @@ pub struct Job {
     pub provider: Option<String>,
     pub client: Option<String>,
     pub status: JobStatus,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub result: Option<ResultCode>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<ErrorCode>,

@@ -52,6 +52,7 @@ pub async fn handle_get_job(
     // Modify the job to include the first result's working URL and retrievability for FE compatibility
     job.working_url = job.results.first().and_then(|r| r.working_url.clone());
     job.retrievability = job.results.first().map(|r| r.retrievability as i64);
+    job.result = job.results.first().map(|r| r.result.clone());
 
     Ok(ok_response(GetJobResponse { job }))
 }
