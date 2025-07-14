@@ -43,11 +43,16 @@ pub async fn handle_get_job(
     State(state): State<Arc<AppState>>,
     WithRejection(Path(path), _): WithRejection<Path<GetJobPath>, ApiResponse<ErrorResponse>>,
 ) -> Result<ApiResponse<GetJobResponse>, ApiResponse<()>> {
-    let job = state.job_repo.get_job(path.id).await.map_err(|e| {
+    let mut job = state.job_repo.get_job(path.id).await.map_err(|e| {
         error!("Error getting job: {:?}", e);
 
         not_found("Failed to get the job".to_string())
     })?;
+
+    // Modify the job to include the first result's working URL and retrievability for FE compatibility
+    job.working_url = job.results.first().and_then(|r| r.working_url.clone());
+    job.retrievability = job.results.first().map(|r| r.retrievability as i64);
+    job.result = job.results.first().map(|r| r.result.clone());
 
     Ok(ok_response(GetJobResponse { job }))
 }

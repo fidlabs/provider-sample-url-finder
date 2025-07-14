@@ -34,6 +34,7 @@ The service is using [CID Contact](https://cid.contact) as source of HTTP entry 
         handle_find_url_sp_client,
         handle_find_retri_by_client_and_sp,
         handle_find_retri_by_sp,
+        handle_find_client,
 
         handle_create_job,
         handle_get_job,
@@ -51,6 +52,10 @@ The service is using [CID Contact](https://cid.contact) as source of HTTP entry 
             // Retri
             FindRetriByClientAndSpPath,
             FindRetriByClientAndSpResponse,
+
+            // Client
+            FindByClientPath,
+            FindByClientResponse,
 
             // Job
             CreateJobPayload,
