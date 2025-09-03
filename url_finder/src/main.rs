@@ -1,30 +1,34 @@
-use std::sync::{
-    atomic::{AtomicUsize, Ordering},
-    Arc,
+use std::{
+    net::SocketAddr,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
 };
 
 use axum::{
     extract::{Request, State},
     middleware::{self, Next},
     response::Response,
-    routing::{get, post},
-    Router,
 };
 use color_eyre::Result;
 use config::CONFIG;
 use deal_repo::DealRepository;
+use moka::future::Cache;
+use routes::create_routes;
 use tokio::{
     net::TcpListener,
     signal::unix::{signal, SignalKind},
 };
+use tower_http::cors::{Any, CorsLayer};
 use tracing::{debug, info};
 use tracing_subscriber::EnvFilter;
-use utoipa::OpenApi;
-use utoipa_swagger_ui::SwaggerUi;
 
 use crate::api::*;
+use crate::repository::*;
 
 mod api;
+mod background;
 mod cid_contact;
 mod config;
 mod deal_repo;
@@ -32,11 +36,16 @@ mod deal_service;
 mod lotus_rpc;
 mod multiaddr_parser;
 mod pix_filspark;
+mod provider_endpoints;
+mod repository;
+mod routes;
 mod url_tester;
 
 pub struct AppState {
-    pub deal_repo: DealRepository,
+    pub deal_repo: Arc<DealRepository>,
     pub active_requests: Arc<AtomicUsize>,
+    pub job_repo: Arc<JobRepository>,
+    pub cache: Cache<String, serde_json::Value>,
 }
 
 /// Active requests counter middleware.
@@ -69,27 +78,49 @@ async fn main() -> Result<()> {
     let pool = sqlx::PgPool::connect(&CONFIG.db_url).await?;
 
     let active_requests = Arc::new(AtomicUsize::new(0));
+
+    let cache: Cache<String, serde_json::Value> = Cache::builder()
+        .max_capacity(100_000) // arbitrary number, 6x current sp and client pair count, adjust as needed
+        .time_to_live(std::time::Duration::from_secs(60 * 60 * 23)) // 23 hours, just shy of 1 day
+        .build();
+
     let app_state = Arc::new(AppState {
-        deal_repo: DealRepository::new(pool),
+        deal_repo: Arc::new(DealRepository::new(pool)),
         active_requests: active_requests.clone(),
+        job_repo: Arc::new(JobRepository::new()),
+        cache,
     });
 
-    let app = Router::new()
-        .route("/url/find", post(handle_find_url))
-        .route("/healthcheck", get(handle_healthcheck))
-        .merge(SwaggerUi::new("/swagger-ui").url("/api-doc/openapi.json", ApiDoc::openapi()))
+    // start the job handler in the background
+    tokio::spawn(background::job_handler(
+        app_state.job_repo.clone(),
+        app_state.deal_repo.clone(),
+    ));
+
+    let allowed_origins = ["https://sp-tool.allocator.tech".parse().unwrap()];
+    let cors = CorsLayer::new()
+        .allow_origin(allowed_origins)
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any);
+
+    let app = create_routes(app_state.clone())
         .layer(middleware::from_fn_with_state(
             app_state.clone(),
             request_counter,
         ))
+        .layer(cors)
         .with_state(app_state.clone());
 
-    let server_addr = "0.0.0.0:3010".to_string();
+    let server_addr = SocketAddr::from(([0, 0, 0, 0], 3010));
     let listener = TcpListener::bind(&server_addr).await?;
 
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal(active_requests.clone()))
-        .await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal(active_requests.clone()))
+    .await?;
 
     info!("UrlFinder shut down gracefully");
 

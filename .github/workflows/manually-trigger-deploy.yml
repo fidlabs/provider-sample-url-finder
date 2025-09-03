@@ -1,0 +1,37 @@
+name: Manually trigger deploy to staging or production
+run-name: "Manually deploy ${{ github.ref_name }} triggered by ${{ github.actor }}; version: ${{ inputs.version }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Enter the version number"
+        required: true
+        default: "main"
+      environment:
+        required: false
+        description: "Select the environment to deploy to"
+        type: choice
+        options:
+          - production
+        default: production
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  trigger-production-deploy:
+    runs-on: ubuntu-latest
+    environment: production-fidl
+    if: ${{ github.ref_name == 'main' && inputs.version != '' && inputs.environment == 'production' }}
+    steps:
+      - name: Trigger production deploy
+        uses: neti-filplus-infra/filplus-deploy-action@main
+        with:
+          version: ${{ inputs.version }}
+          environment: production
+          ecr-repository: provider-sample-url-finder
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_IMAGE_DEPLOYER }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_IMAGE_DEPLOYER }}
+          aws-region: us-east-1

@@ -14,13 +14,13 @@ impl fmt::Display for CidContactError {
             CidContactError::InvalidResponse => "InvalidResponse",
             CidContactError::NoData => "NoData",
         };
-        write!(f, "{}", s)
+        write!(f, "{s}")
     }
 }
 
 pub async fn get_contact(peer_id: &str) -> Result<serde_json::Value, CidContactError> {
     let client = Client::new();
-    let url = format!("https://cid.contact/providers/{}", peer_id);
+    let url = format!("https://cid.contact/providers/{peer_id}");
 
     debug!("cid contact url: {:?}", url);
 

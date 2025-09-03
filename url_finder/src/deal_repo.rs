@@ -17,12 +17,17 @@ pub struct UnifiedVerifiedDeal {
     pub piece_cid: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Provider {
+    pub provider_id: Option<String>,
+}
+
 impl DealRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 
-    pub async fn get_unified_verified_deals_by_provider(
+    pub async fn get_deals_by_provider(
         &self,
         provider: &str,
         limit: i64,
@@ -40,16 +45,141 @@ impl DealRepository {
                 "pieceCid" AS piece_cid
             FROM unified_verified_deal
             WHERE 
-                type = 'deal'
-                AND "providerId" = $1
-                AND "sectorId" != '0'
-            ORDER BY id DESC
+                "providerId" = $1
+            ORDER BY random()
             LIMIT $2
             OFFSET $3
             "#,
             provider,
             limit,
             offset,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(data)
+    }
+
+    pub async fn get_deals_by_provider_and_client(
+        &self,
+        provider: &str,
+        client: &str,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<UnifiedVerifiedDeal>, sqlx::Error> {
+        let data = sqlx::query_as!(
+            UnifiedVerifiedDeal,
+            r#"
+            SELECT
+                id,
+                "dealId" AS deal_id,
+                "claimId" AS claim_id,
+                "clientId" AS client_id,
+                "providerId" AS provider_id,
+                "pieceCid" AS piece_cid
+            FROM unified_verified_deal
+            WHERE 
+                "providerId" = $1
+                AND "clientId" = $2
+            ORDER BY random()
+            LIMIT $3
+            OFFSET $4
+            "#,
+            provider,
+            client,
+            limit,
+            offset,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(data)
+    }
+
+    pub async fn get_random_deals_by_provider_and_client(
+        &self,
+        provider: &str,
+        client: &str,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<UnifiedVerifiedDeal>, sqlx::Error> {
+        let data = sqlx::query_as!(
+            UnifiedVerifiedDeal,
+            r#"
+            SELECT
+                id,
+                "dealId" AS deal_id,
+                "claimId" AS claim_id,
+                "clientId" AS client_id,
+                "providerId" AS provider_id,
+                "pieceCid" AS piece_cid
+            FROM unified_verified_deal
+            WHERE 
+                "providerId" = $1
+                AND "clientId" = $2
+            ORDER BY random()
+            LIMIT $3
+            OFFSET $4
+            "#,
+            provider,
+            client,
+            limit,
+            offset,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(data)
+    }
+
+    pub async fn get_random_deals_by_provider(
+        &self,
+        provider: &str,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<UnifiedVerifiedDeal>, sqlx::Error> {
+        let data = sqlx::query_as!(
+            UnifiedVerifiedDeal,
+            r#"
+            SELECT
+                id,
+                "dealId" AS deal_id,
+                "claimId" AS claim_id,
+                "clientId" AS client_id,
+                "providerId" AS provider_id,
+                "pieceCid" AS piece_cid
+            FROM unified_verified_deal
+            WHERE 
+                "providerId" = $1
+            ORDER BY random()
+            LIMIT $2
+            OFFSET $3
+            "#,
+            provider,
+            limit,
+            offset,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(data)
+    }
+
+    pub async fn get_distinct_providers_by_client(
+        &self,
+        client: &str,
+    ) -> Result<Vec<Provider>, sqlx::Error> {
+        let data = sqlx::query_as!(
+            Provider,
+            r#"
+            SELECT DISTINCT 
+                "providerId" AS provider_id
+            FROM 
+                unified_verified_deal
+            WHERE 
+                "clientId" = $1
+            "#,
+            client,
         )
         .fetch_all(&self.pool)
         .await?;
