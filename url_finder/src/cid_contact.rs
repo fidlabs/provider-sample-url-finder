@@ -2,7 +2,7 @@ use std::fmt;
 
 use color_eyre::Result;
 use reqwest::Client;
-use tracing::debug;
+use tracing::{debug, info};
 
 pub enum CidContactError {
     InvalidResponse,
@@ -26,18 +26,26 @@ pub async fn get_contact(peer_id: &str) -> Result<serde_json::Value, CidContactE
 
     let res = client
         .get(&url)
+        .header("Accept", "application/json")
+        .header("User-Agent", "url-finder/0.1.0")
         .send()
         .await
         .map_err(|_| CidContactError::InvalidResponse)?;
 
+    debug!("cid contact status: {:?}", res.status());
+
     if !res.status().is_success() {
+        info!(
+            "cid contact returned non-success status: {:?}",
+            res.status()
+        );
         return Err(CidContactError::NoData);
     }
 
-    let json = res
-        .json::<serde_json::Value>()
-        .await
-        .map_err(|_| CidContactError::NoData)?;
+    let json = res.json::<serde_json::Value>().await.map_err(|e| {
+        debug!("Failed to parse cid contact response: {:?}", e);
+        CidContactError::NoData
+    })?;
 
     debug!("cid contact res: {:?}", json);
 
