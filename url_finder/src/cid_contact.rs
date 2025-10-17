@@ -69,6 +69,17 @@ pub fn get_all_addresses_from_response(json: serde_json::Value) -> Vec<String> {
             .for_each(|addr| {
                 addresses.push(addr.to_string());
             });
+    } else if let Some(e_providers) = json
+        .get("Publisher")
+        .and_then(|p| p.get("Addrs"))
+        .and_then(|a| a.as_array())
+    {
+        e_providers
+            .iter()
+            .filter_map(|addr| addr.as_str())
+            .for_each(|addr| {
+                addresses.push(addr.to_string());
+            });
     }
 
     addresses
