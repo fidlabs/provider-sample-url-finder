@@ -3329,7 +3329,7 @@ dependencies = [
 
 [[package]]
 name = "url_finder"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "axum",
  "axum-extra",
