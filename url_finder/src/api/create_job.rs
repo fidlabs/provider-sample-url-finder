@@ -20,12 +20,6 @@ pub struct CreateJobPayload {
     client: Option<String>,
 }
 
-#[derive(Deserialize, Serialize)]
-enum JobType {
-    WorkingUrl,
-    Retrievability,
-}
-
 #[derive(Serialize, ToSchema)]
 pub struct CreateJobResponse {
     result: ResultCode,
