@@ -24,6 +24,7 @@ pub enum ErrorCode {
     FailedToRetrieveCidContactData,
     FailedToGetPeerId,
     FailedToGetDeals,
+    FailedToGetPeerIdFromCurio,
 }
 impl fmt::Display for ErrorCode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -33,6 +34,7 @@ impl fmt::Display for ErrorCode {
             ErrorCode::FailedToRetrieveCidContactData => "FailedToRetrieveCidContactData",
             ErrorCode::FailedToGetPeerId => "FailedToGetPeerId",
             ErrorCode::FailedToGetDeals => "FailedToGetDeals",
+            ErrorCode::FailedToGetPeerIdFromCurio => "FailedToGetPeerIdFromCurio",
         };
         write!(f, "{s}")
     }

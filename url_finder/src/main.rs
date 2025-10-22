@@ -1,8 +1,8 @@
 use std::{
     net::SocketAddr,
     sync::{
-        atomic::{AtomicUsize, Ordering},
         Arc,
+        atomic::{AtomicUsize, Ordering},
     },
 };
 
@@ -18,7 +18,7 @@ use moka::future::Cache;
 use routes::create_routes;
 use tokio::{
     net::TcpListener,
-    signal::unix::{signal, SignalKind},
+    signal::unix::{SignalKind, signal},
 };
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{debug, info};
@@ -112,7 +112,7 @@ async fn main() -> Result<()> {
         .layer(cors)
         .with_state(app_state.clone());
 
-    let server_addr = SocketAddr::from(([0, 0, 0, 0], 3010));
+    let server_addr = SocketAddr::from(([0, 0, 0, 0], 3030));
     let listener = TcpListener::bind(&server_addr).await?;
 
     axum::serve(

@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.5
-FROM lukemathwalker/cargo-chef:latest-rust-1.82.0-slim-bullseye AS base
+FROM lukemathwalker/cargo-chef:latest-rust-1.85.0-slim-bullseye AS base
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends build-essential libssl-dev pkg-config curl && \

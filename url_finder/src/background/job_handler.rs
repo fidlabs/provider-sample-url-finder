@@ -4,8 +4,8 @@ use tokio::time::sleep;
 use tracing::{debug, info};
 
 use crate::{
-    deal_repo::DealRepository, deal_service, provider_endpoints, url_tester, ErrorCode, Job,
-    JobRepository, JobStatus, ResultCode,
+    ErrorCode, Job, JobRepository, JobStatus, ResultCode, deal_repo::DealRepository, deal_service,
+    provider_endpoints, url_tester,
 };
 
 const LOOP_DELAY: Duration = Duration::from_secs(5);
@@ -277,7 +277,7 @@ async fn process_job(
 
     let urls = deal_service::get_piece_url(endpoints, piece_ids).await;
 
-    let (working_url, retrievability) = url_tester::get_retrivability_with_head(urls).await;
+    let (working_url, retrievability) = url_tester::get_retrivability_with_get(urls).await;
 
     let result_code = if working_url.is_some() {
         ResultCode::Success
