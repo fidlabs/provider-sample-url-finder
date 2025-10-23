@@ -11,8 +11,8 @@ const FILTER_CONCURENCY_LIMIT: usize = 5;
 const RETRI_CONCURENCY_LIMIT: usize = 20;
 const RETRI_TIMEOUT_SEC: u64 = 15;
 
-// return first working url through head requests
-// let't keep both head and get versions for now
+/// return first working url through head requests
+/// let't keep both head and get versions for now
 pub async fn filter_working_with_head(urls: Vec<String>) -> Option<String> {
     let client = Client::new();
     let counter = Arc::new(AtomicUsize::new(0));
@@ -72,23 +72,35 @@ pub async fn filter_working_with_get(urls: Vec<String>) -> Option<String> {
                 counter.fetch_add(1, Ordering::SeqCst);
                 match client.get(&url).send().await {
                     Ok(resp) => {
-                        let content_type = resp.headers().get("content-type").and_then(|v| v.to_str().ok());
+                        let content_type = resp
+                            .headers()
+                            .get("content-type")
+                            .and_then(|v| v.to_str().ok());
                         let etag = resp.headers().get("etag");
-                        
-                        // check if the response has a content-type: 
+
+                        // check if the response has a content-type:
                         // * application/octet-stream => curio
                         // * application/piece        => boost
                         // and an etag                => both
                         // in  header to indicating a file
-                        if resp.status().is_success() && matches!(content_type, Some("application/octet-stream") | Some("application/piece")) && etag.is_some() {
+                        if resp.status().is_success()
+                            && matches!(
+                                content_type,
+                                Some("application/octet-stream") | Some("application/piece")
+                            )
+                            && etag.is_some()
+                        {
                             Some(url)
                         } else {
-                            debug!("URL::GET not working or no Content-type: application/octet-stream header: {:?}", url);
+                            debug!("Filter: URL::GET not working: {:?}", url);
                             None
                         }
                     }
                     Err(err) => {
-                        debug!("Get request for working url failed for {:?}: {:?}", url, err);
+                        debug!(
+                            "Filter: Get request for working url failed for {:?}: {:?}",
+                            url, err
+                        );
                         None
                     }
                 }
@@ -108,8 +120,8 @@ pub async fn filter_working_with_get(urls: Vec<String>) -> Option<String> {
     None
 }
 
-// return retrivable percent of the urls
-// let't keep both head and get versions for now
+/// return retrivable percent of the urls
+/// let't keep both head and get versions for now
 pub async fn get_retrivability_with_head(urls: Vec<String>) -> (Option<String>, f64) {
     let client = Client::builder()
         .timeout(std::time::Duration::from_secs(RETRI_TIMEOUT_SEC))
@@ -189,25 +201,37 @@ pub async fn get_retrivability_with_get(urls: Vec<String>) -> (Option<String>, f
                 total_clone.fetch_add(1, Ordering::SeqCst);
                 match client.get(&url).send().await {
                     Ok(resp) => {
-                        let content_type = resp.headers().get("content-type").and_then(|v| v.to_str().ok());
+                        let content_type = resp
+                            .headers()
+                            .get("content-type")
+                            .and_then(|v| v.to_str().ok());
                         let etag = resp.headers().get("etag");
-                        
-                        // check if the response has a content-type: 
+
+                        // check if the response has a content-type:
                         // * application/octet-stream => curio
                         // * application/piece        => boost
                         // and an etag
                         // in  header to indicating a file
-                        if resp.status().is_success() && matches!(content_type, Some("application/octet-stream") | Some("application/piece")) && etag.is_some() {
+                        if resp.status().is_success()
+                            && matches!(
+                                content_type,
+                                Some("application/octet-stream") | Some("application/piece")
+                            )
+                            && etag.is_some()
+                        {
                             tracing::info!("url WORKING: {:?}", url);
                             success_clone.fetch_add(1, Ordering::SeqCst);
                             Some(url)
                         } else {
-                            debug!("URL::GET not working or no Content-type: application/octet-stream header: {:?}", url);
+                            debug!("Retrivability: URL::GET not working url: {:?}", url);
                             None
                         }
                     }
                     Err(err) => {
-                        debug!("Get request for working url failed for {:?}: {:?}", url, err);
+                        debug!(
+                            "Retrivability: Get request for working url failed for {:?}: {:?}",
+                            url, err
+                        );
                         None
                     }
                 }
