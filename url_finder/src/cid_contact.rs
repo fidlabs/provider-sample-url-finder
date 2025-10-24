@@ -1,8 +1,8 @@
-use std::fmt;
-
 use color_eyre::Result;
 use reqwest::Client;
+use std::fmt;
 use tracing::{debug, info};
+use urlencoding::decode;
 
 pub enum CidContactError {
     InvalidResponse,
@@ -78,7 +78,26 @@ pub fn get_all_addresses_from_response(json: serde_json::Value) -> Vec<String> {
             .iter()
             .filter_map(|addr| addr.as_str())
             .for_each(|addr| {
-                addresses.push(addr.to_string());
+                let decoded_addr = decode(addr)
+                    .map(|s| s.into_owned())
+                    .unwrap_or_else(|_| addr.to_string());
+
+                let cleaned: String = decoded_addr.replace("//", "/");
+
+                let trimmed = match cleaned.find("/http-path") {
+                    Some(index) => &cleaned[..index],
+                    None => &cleaned,
+                };
+
+                let final_addr = if trimmed.ends_with("/https") {
+                    trimmed.replace("/https", "/tcp/443/https")
+                } else if trimmed.ends_with("/http") {
+                    trimmed.replace("/http", "/tcp/80/http")
+                } else {
+                    trimmed.to_string()
+                };
+
+                addresses.push(final_addr);
             });
     }
 

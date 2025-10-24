@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use axum::{extract::State, Json};
+use axum::{Json, extract::State};
 use axum_extra::extract::WithRejection;
 use color_eyre::Result;
 use common::api_response::*;
@@ -10,7 +10,7 @@ use tracing::{debug, error};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::{provider_endpoints, AppState};
+use crate::{AppState, provider_endpoints};
 
 use super::ResultCode;
 
