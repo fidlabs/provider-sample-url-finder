@@ -13,6 +13,7 @@ const RETRI_TIMEOUT_SEC: u64 = 15;
 
 /// return first working url through head requests
 /// let't keep both head and get versions for now
+#[allow(dead_code)]
 pub async fn filter_working_with_head(urls: Vec<String>) -> Option<String> {
     let client = Client::new();
     let counter = Arc::new(AtomicUsize::new(0));
@@ -58,7 +59,6 @@ pub async fn filter_working_with_head(urls: Vec<String>) -> Option<String> {
 }
 
 /// return the first working url where a file can be downloaded
-#[allow(dead_code)]
 pub async fn filter_working_with_get(urls: Vec<String>) -> Option<String> {
     let client = Client::new();
     let counter = Arc::new(AtomicUsize::new(0));
@@ -122,6 +122,7 @@ pub async fn filter_working_with_get(urls: Vec<String>) -> Option<String> {
 
 /// return retrivable percent of the urls
 /// let't keep both head and get versions for now
+#[allow(dead_code)]
 pub async fn get_retrivability_with_head(urls: Vec<String>) -> (Option<String>, f64) {
     let client = Client::builder()
         .timeout(std::time::Duration::from_secs(RETRI_TIMEOUT_SEC))
