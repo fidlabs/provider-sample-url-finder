@@ -4,7 +4,7 @@ use std::{
 };
 
 use chrono::{DateTime, Utc};
-use color_eyre::{eyre::eyre, Result};
+use color_eyre::{Result, eyre::eyre};
 use serde::Serialize;
 use utoipa::ToSchema;
 use uuid::Uuid;

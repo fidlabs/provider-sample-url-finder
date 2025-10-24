@@ -1,22 +1,22 @@
 use std::{sync::Arc, time::Duration};
 
 use axum::{
+    Router,
     body::Body,
     http::Response,
     middleware,
     response::IntoResponse,
     routing::{get, post},
-    Router,
 };
 use common::api_response::*;
 use tower_governor::{
-    governor::GovernorConfigBuilder, key_extractor::SmartIpKeyExtractor, GovernorError,
-    GovernorLayer,
+    GovernorError, GovernorLayer, governor::GovernorConfigBuilder,
+    key_extractor::SmartIpKeyExtractor,
 };
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
-use crate::{api::*, AppState};
+use crate::{AppState, api::*};
 
 fn too_many_requests_error_handler(error: GovernorError) -> Response<Body> {
     tracing::error!("Rate limit error: {:?}", error);
