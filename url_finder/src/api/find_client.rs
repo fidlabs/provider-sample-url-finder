@@ -170,7 +170,7 @@ pub async fn handle_find_client(
         // Make sure that the task is not running for too long
         let (_, retrievability_percent) = match timeout(
             Duration::from_secs(RETRIEVABILITY_TIMEOUT_SEC),
-            url_tester::get_retrivability_with_get(urls),
+            url_tester::check_retrievability_with_get(urls, true),
         )
         .await
         {
@@ -195,7 +195,7 @@ pub async fn handle_find_client(
             provider: provider.clone(),
             result: ResultCode::Success,
             working_url: first_url,
-            retrievability_percent,
+            retrievability_percent: retrievability_percent.unwrap(),
         });
     }
 

@@ -1,7 +1,7 @@
 use alloy::sol_types::SolType;
 use alloy::{
     network::TransactionBuilder,
-    primitives::{Address, Bytes},
+    primitives::{Address, Bytes, address},
     providers::{Provider, ProviderBuilder},
     rpc::types::eth::TransactionRequest,
     sol,
@@ -11,6 +11,7 @@ use alloy::{
 use color_eyre::{Result, eyre::eyre};
 use tracing::{debug, error};
 
+use crate::config::CONFIG;
 use crate::{
     ErrorCode, ResultCode,
     cid_contact::{self, CidContactError},
@@ -27,22 +28,20 @@ sol! {
 }
 
 pub async fn valid_curio_provider(address: &str) -> Result<Option<String>> {
-    let rpc_url = "https://api.node.glif.io/rpc/v1";
+    let rpc_url = &CONFIG.glif_url;
 
     let rpc_provider = ProviderBuilder::new()
         .connect(rpc_url)
         .await
         .map_err(|err| eyre!("Building provider failed: {}", err))?;
 
-    let contract_address: &str = "0x14183aD016Ddc83D638425D6328009aa390339Ce";
-
-    let miner_peer_id_contract = Address::parse_checksummed(contract_address, None)
-        .map_err(|e| eyre!("Failed to parse miner id contact: {e}"))?;
+    let miner_peer_id_contract: Address = address!("0x14183aD016Ddc83D638425D6328009aa390339Ce");
 
     let miner_id = address
         .strip_prefix("f")
-        .unwrap_or(address)
-        .parse::<u64>()?;
+        .ok_or_else(|| eyre!("Address does not start with 'f': {}", address))?
+        .parse::<u64>()
+        .map_err(|e| eyre!("Failed to parse miner ID from '{}': {}", address, e))?;
 
     let call: Vec<u8> = getPeerDataCall { minerID: miner_id }.abi_encode();
     let input = Bytes::from(call);
@@ -50,18 +49,15 @@ pub async fn valid_curio_provider(address: &str) -> Result<Option<String>> {
         .with_to(miner_peer_id_contract)
         .with_input(input);
 
-    let response = rpc_provider
-        .call(tx)
-        .await
-        .map_err(|e| eyre!("Transaction failed: {e}"))?;
+    let response = rpc_provider.call(tx).await?;
 
-    let peer_data: PeerData =
-        PeerData::abi_decode(response.as_ref()).map_err(|e| eyre!("Decode failed: {e}"))?;
+    let peer_data: PeerData = PeerData::abi_decode(response.as_ref())?;
 
     if peer_data.peerID.is_empty() {
         return Ok(None);
     }
 
+    println!("Curio provider found: {}", &peer_data.peerID);
     Ok(Some(peer_data.peerID.to_string()))
 }
 

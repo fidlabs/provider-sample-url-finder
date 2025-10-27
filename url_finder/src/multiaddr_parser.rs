@@ -62,6 +62,7 @@ fn parse_addr(addr: String) -> Option<String> {
             }
         }
         Err(e) => {
+            println!("Failed to parse multiaddr: {:?} due to {:?}", addr, e);
             info!("Failed to parse multiaddr: {:?} due to {:?}", addr, e);
             None
         }

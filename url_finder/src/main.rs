@@ -112,7 +112,7 @@ async fn main() -> Result<()> {
         .layer(cors)
         .with_state(app_state.clone());
 
-    let server_addr = SocketAddr::from(([0, 0, 0, 0], 3030));
+    let server_addr = SocketAddr::from(([0, 0, 0, 0], 3010));
     let listener = TcpListener::bind(&server_addr).await?;
 
     axum::serve(

@@ -77,7 +77,7 @@ pub fn get_all_addresses_from_response(json: serde_json::Value) -> Vec<String> {
         e_providers
             .iter()
             .filter_map(|addr| addr.as_str())
-            .for_each(|addr| {
+            .for_each(|addr: &str| {
                 let decoded_addr = decode(addr)
                     .map(|s| s.into_owned())
                     .unwrap_or_else(|_| addr.to_string());

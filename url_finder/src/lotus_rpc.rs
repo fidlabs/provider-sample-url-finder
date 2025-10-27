@@ -3,12 +3,14 @@ use reqwest::Client;
 use serde_json::json;
 use tracing::debug;
 
+use crate::config::CONFIG;
+
 pub async fn get_peer_id(address: &str) -> Result<String> {
     debug!("get_peer_id address: {}", address);
 
     let client = Client::new();
     let res = client
-        .post("https://api.node.glif.io/rpc/v1")
+        .post(&CONFIG.glif_url)
         .json(&json!({
             "jsonrpc": "2.0",
             "id": 1,
