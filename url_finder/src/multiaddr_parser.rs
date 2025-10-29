@@ -1,4 +1,4 @@
-use color_eyre::{eyre::eyre, Result};
+use color_eyre::{Result, eyre::eyre};
 use multiaddr::{Multiaddr, Protocol};
 use tracing::{debug, info};
 
@@ -62,6 +62,7 @@ fn parse_addr(addr: String) -> Option<String> {
             }
         }
         Err(e) => {
+            println!("Failed to parse multiaddr: {:?} due to {:?}", addr, e);
             info!("Failed to parse multiaddr: {:?} due to {:?}", addr, e);
             None
         }

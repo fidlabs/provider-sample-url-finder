@@ -13,7 +13,7 @@ use tokio::time::timeout;
 use tracing::debug;
 use utoipa::{IntoParams, ToSchema};
 
-use crate::{deal_service, provider_endpoints, url_tester, AppState};
+use crate::{AppState, deal_service, provider_endpoints, url_tester};
 
 use super::ResultCode;
 
@@ -104,7 +104,7 @@ pub async fn handle_find_retri_by_sp(
     // Make sure that the task is not running for too long
     let (_, retrievability_percent) = match timeout(
         Duration::from_secs(RETRIEVABILITY_TIMEOUT_SEC),
-        url_tester::get_retrivability_with_head(urls),
+        url_tester::check_retrievability_with_get(urls, true),
     )
     .await
     {
@@ -120,6 +120,6 @@ pub async fn handle_find_retri_by_sp(
 
     Ok(ok_response(FindRetriBySpResponse {
         result: ResultCode::Success,
-        retrievability_percent,
+        retrievability_percent: retrievability_percent.unwrap(),
     }))
 }
