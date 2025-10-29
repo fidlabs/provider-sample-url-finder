@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use alloy::sol_types::SolType;
 use alloy::{
     network::TransactionBuilder,
@@ -7,9 +9,9 @@ use alloy::{
     sol,
     sol_types::SolCall,
 };
-
 use color_eyre::{Result, eyre::eyre};
-use tracing::{debug, error};
+use tokio::time::sleep;
+use tracing::{debug, error, info};
 
 use crate::config::CONFIG;
 use crate::{
@@ -49,7 +51,22 @@ pub async fn valid_curio_provider(address: &str) -> Result<Option<String>> {
         .with_to(miner_peer_id_contract)
         .with_input(input);
 
-    let response = rpc_provider.call(tx).await?;
+    let mut response = None;
+
+    for attempt in 1..=3 {
+        match rpc_provider.call(tx.clone()).await {
+            Ok(res) => {
+                response = Some(res);
+                break;
+            }
+            Err(e) => {
+                info!("Attempt {attempt}/3 failed: {e} for address: {address}");
+                sleep(Duration::from_secs(1)).await;
+            }
+        }
+    }
+
+    let response = response.ok_or_else(|| eyre!("All 3 attempts failed for address {address}"))?;
 
     let peer_data: PeerData = PeerData::abi_decode(response.as_ref())?;
 
@@ -57,7 +74,7 @@ pub async fn valid_curio_provider(address: &str) -> Result<Option<String>> {
         return Ok(None);
     }
 
-    println!("Curio provider found: {}", &peer_data.peerID);
+    info!("Curio provider found: {}: {}", &peer_data.peerID, &address);
     Ok(Some(peer_data.peerID.to_string()))
 }
 

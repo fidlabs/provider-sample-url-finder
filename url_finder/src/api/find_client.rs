@@ -195,7 +195,7 @@ pub async fn handle_find_client(
             provider: provider.clone(),
             result: ResultCode::Success,
             working_url: first_url,
-            retrievability_percent: retrievability_percent.unwrap(),
+            retrievability_percent: retrievability_percent.unwrap_or(0.0),
         });
     }
 
