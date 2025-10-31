@@ -27,7 +27,7 @@ pub async fn get_contact(peer_id: &str) -> Result<serde_json::Value, CidContactE
     let res = client
         .get(&url)
         .header("Accept", "application/json")
-        .header("User-Agent", "url-finder/0.1.0")
+        .header("User-Agent", "rpa/0.4.0")
         .send()
         .await
         .map_err(|_| CidContactError::InvalidResponse)?;
