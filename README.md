@@ -1,8 +1,8 @@
-# RPA (Random Piece Availability)
+# Storage Provider Url Finder
 
 ## Introduction
 
-RPA (Random Piece Availability) is a microservice designed to test the retrievability of files claimed by Storage Providers (SPs) on the Filecoin network. Its primary goal is to verify whether files associated with deals are accessible via HTTP endpoints advertised by SPs. This service focuses exclusively on HTTP retrievability by randomly sampling pieceCIDs to ensure representative availability metrics.
+The Storage Provider Url Finder is a microservice designed to test the retrievability of files claimed by Storage Providers (SPs) on the Filecoin network. Its primary goal is to verify whether files associated with deals are accessible via HTTP endpoints advertised by SPs. This service focuses exclusively on HTTP retrievability.
 
 ## Table of Contents
 

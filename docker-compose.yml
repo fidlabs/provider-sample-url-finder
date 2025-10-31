@@ -25,15 +25,15 @@ services:
     networks:
       - sp_uf_network
 
-  rpa:
+  url_finder:
     build: 
       context: .
       dockerfile: Dockerfile.local
-    container_name: rpa
+    container_name: url_finder
     stop_grace_period: 30s
     working_dir: /app
     # run with cargo watch to auto-reload without restarting container
-    command: cargo watch --poll -x 'run --bin rpa'
+    command: cargo watch --poll -x 'run --bin url_finder'
     environment:
       - LOG_LEVEL=debug
       - DATABASE_URL=${DMOB_DATABASE_URL}

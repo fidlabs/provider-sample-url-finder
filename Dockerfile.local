@@ -17,7 +17,7 @@ RUN cargo install cargo-watch
 
 # copy cargo files for caching
 COPY Cargo.toml Cargo.lock ./
-COPY rpa/Cargo.toml ./rpa/
+COPY url_finder/Cargo.toml ./url_finder/
 
 # dummy main.rs
 RUN mkdir src && echo "fn main() {}" > src/main.rs

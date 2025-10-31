@@ -27,4 +27,4 @@ prepare:
 	@cargo clippy
 
 stop-app:
-	@docker compose down rpa
+	@docker compose down url_finder
