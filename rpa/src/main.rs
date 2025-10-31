@@ -65,7 +65,7 @@ async fn request_counter(
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    info!("UrlFinder is starting...");
+    info!("RPA is starting...");
 
     color_eyre::install()?;
 
@@ -122,7 +122,7 @@ async fn main() -> Result<()> {
     .with_graceful_shutdown(shutdown_signal(active_requests.clone()))
     .await?;
 
-    info!("UrlFinder shut down gracefully");
+    info!("RPA shut down gracefully");
 
     Ok(())
 }
