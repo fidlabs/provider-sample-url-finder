@@ -7,11 +7,11 @@ use crate::api::*;
 #[openapi(
     // API Metadata
     info(
-        title = "Url Finder",
+        title = "RPA (Random Piece Availability)",
         description = r#"
-This is the API documentation for the Url Finder micro-service.
+This is the API documentation for the RPA (Random Piece Availability) micro-service.
 
-The Url Finder service is responsible for finding the URL of a miner given its address.
+The RPA service is responsible for finding the URL of a miner given its address.
 
 The service is using [CID Contact](https://cid.contact) as source of HTTP entry point for any given miner address.
 
@@ -73,9 +73,9 @@ The service is using [CID Contact](https://cid.contact) as source of HTTP entry 
       ),
     tags(
         // API Categories
-        (name = "JOB", description = "Async Url Finder APIs"),
-        (name = "URL", description = "Url Finder APIs"),
-        (name = "Healthcheck", description = "Url Finder Misc APIs"),
+        (name = "JOB", description = "Async RPA APIs"),
+        (name = "URL", description = "RPA APIs"),
+        (name = "Healthcheck", description = "RPA Misc APIs"),
     )
 )]
 pub struct ApiDoc;

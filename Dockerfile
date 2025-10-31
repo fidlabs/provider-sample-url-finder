@@ -23,11 +23,11 @@ RUN cargo build --release --bins
 FROM debian:bullseye-slim as run
 RUN apt-get update && apt-get -y install ca-certificates libc6 iputils-ping curl jq
 
-COPY --from=build /app/target/release/url_finder /usr/local/bin/
+COPY --from=build /app/target/release/rpa /usr/local/bin/
 
-RUN adduser --system --group --no-create-home finderuser
-USER finderuser
+RUN adduser --system --group --no-create-home rpauser
+USER rpauser
 
-CMD ["url_finder"]
+CMD ["rpa"]
 
 
