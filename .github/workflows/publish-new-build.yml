@@ -13,8 +13,8 @@ on:
         description: "Enter the version number"
         required: true
         default: "latest"
-      deploy-to-production:
-        description: "Deploy the new version?"
+      deploy-to-staging:
+        description: "Deploy the new version on staging?"
         required: false
         type: boolean
         default: false
@@ -95,20 +95,20 @@ jobs:
           git tag $TAG_NAME
           git push origin $TAG_NAME
 
-  trigger-production-deploy:
+  trigger-staging-deploy:
     runs-on: ubuntu-latest
     needs:
       - code-check
       - bump-version
       - build-and-publish
-    if: ${{ github.ref_name == 'main' && inputs.version != '' && inputs.deploy-to-production == true }}
-    environment: production-fidl
+    if: ${{ inputs.version != '' && inputs.deploy-to-staging == true }}
+    environment: production-fidl # only one environment available, using for both: staging and production
     steps:
-      - name: Trigger production deploy
+      - name: Trigger staging deploy
         uses: neti-filplus-infra/filplus-deploy-action@main
         with:
           version: ${{ inputs.version }}
-          environment: production
+          environment: staging
           ecr-repository: provider-sample-url-finder
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_IMAGE_DEPLOYER }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_IMAGE_DEPLOYER }}
