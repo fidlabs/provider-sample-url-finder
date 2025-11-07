@@ -3336,6 +3336,7 @@ dependencies = [
  "chrono",
  "color-eyre",
  "common",
+ "dotenvy",
  "futures",
  "moka",
  "multiaddr",
