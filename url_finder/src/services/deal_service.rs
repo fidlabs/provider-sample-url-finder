@@ -1,6 +1,6 @@
 use color_eyre::Result;
 
-use crate::deal_repo::DealRepository;
+use crate::repository::DealRepository;
 
 /// get deals and extract piece_ids
 pub async fn get_piece_ids_by_provider(

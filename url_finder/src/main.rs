@@ -13,8 +13,8 @@ use axum::{
 };
 use color_eyre::Result;
 use config::CONFIG;
-use deal_repo::DealRepository;
 use moka::future::Cache;
+use repository::DealRepository;
 use routes::create_routes;
 use tokio::{
     net::TcpListener,
@@ -31,20 +31,20 @@ mod api;
 mod background;
 mod cid_contact;
 mod config;
-mod deal_repo;
-mod deal_service;
 mod lotus_rpc;
 mod multiaddr_parser;
 mod pix_filspark;
 mod provider_endpoints;
 mod repository;
 mod routes;
+mod services;
 mod url_tester;
 
 pub struct AppState {
     pub deal_repo: Arc<DealRepository>,
     pub active_requests: Arc<AtomicUsize>,
     pub job_repo: Arc<JobRepository>,
+    pub storage_provider_repo: Arc<StorageProviderRepository>,
     pub cache: Cache<String, serde_json::Value>,
 }
 
@@ -65,6 +65,8 @@ async fn request_counter(
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    dotenvy::dotenv().ok();
+
     info!("UrlFinder is starting...");
 
     color_eyre::install()?;
@@ -76,6 +78,14 @@ async fn main() -> Result<()> {
         .init();
 
     let pool = sqlx::PgPool::connect(&CONFIG.db_url).await?;
+    let dmob_pool = sqlx::PgPool::connect(&CONFIG.dmob_db_url).await?;
+
+    info!("Running database migrations...");
+    sqlx::migrate!("../migrations")
+        .run(&pool)
+        .await
+        .expect("Failed to run migrations");
+    info!("Database migrations applied successfully");
 
     let active_requests = Arc::new(AtomicUsize::new(0));
 
@@ -84,14 +94,27 @@ async fn main() -> Result<()> {
         .time_to_live(std::time::Duration::from_secs(60 * 60 * 23)) // 23 hours, just shy of 1 day
         .build();
 
+    let sp_repo = Arc::new(StorageProviderRepository::new(pool.clone()));
+    let deal_repo = Arc::new(DealRepository::new(dmob_pool.clone()));
+
     let app_state = Arc::new(AppState {
-        deal_repo: Arc::new(DealRepository::new(pool)),
+        deal_repo: deal_repo.clone(),
         active_requests: active_requests.clone(),
         job_repo: Arc::new(JobRepository::new()),
+        storage_provider_repo: sp_repo.clone(),
         cache,
     });
 
-    // start the job handler in the background
+    // Start the provider discovery the background
+    tokio::spawn({
+        let sp_repo = sp_repo.clone();
+        let deal_repo = deal_repo.clone();
+        async move {
+            background::run_provider_discovery(sp_repo, deal_repo).await;
+        }
+    });
+
+    // Start the job handler in the background
     tokio::spawn(background::job_handler(
         app_state.job_repo.clone(),
         app_state.deal_repo.clone(),

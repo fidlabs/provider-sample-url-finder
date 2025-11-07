@@ -13,7 +13,7 @@ use tokio::time::timeout;
 use tracing::debug;
 use utoipa::{IntoParams, ToSchema};
 
-use crate::{AppState, deal_service, provider_endpoints, url_tester};
+use crate::{provider_endpoints, services::deal_service, url_tester, AppState};
 
 use super::ResultCode;
 

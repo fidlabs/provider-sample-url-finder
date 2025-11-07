@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO\n                    storage_providers (provider_id)\n               VALUES\n                    ($1)\n               ON CONFLICT DO NOTHING\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7226de32a9b62d4130da824f49a1671a011dc9f5af9fc84ec15ee73a57db5322"
+}
