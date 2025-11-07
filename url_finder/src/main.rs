@@ -105,7 +105,7 @@ async fn main() -> Result<()> {
         cache,
     });
 
-    // Start the provider discovery the background
+    // Start the provider discovery in the background
     tokio::spawn({
         let sp_repo = sp_repo.clone();
         let deal_repo = deal_repo.clone();
