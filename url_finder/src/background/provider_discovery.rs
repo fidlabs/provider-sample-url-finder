@@ -36,15 +36,8 @@ async fn discover_and_sync_providers(
 
     debug!("Found {} distinct providers in dmob", providers.len());
 
-    let mut processed = 0;
-    for provider in &providers {
-        match sp_repo.insert_if_not_exists(provider).await {
-            Ok(_) => processed += 1,
-            Err(e) => error!("Failed to insert provider {}: {:?}", provider, e),
-        }
+    match sp_repo.insert_batch_if_not_exists(&providers).await {
+        Ok(count) => Ok(count),
+        Err(e) => Err(e),
     }
-
-    debug!("Processed {} providers", processed);
-
-    Ok(providers.len())
 }

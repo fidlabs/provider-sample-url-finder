@@ -47,7 +47,7 @@ migrate-status:
 	@sqlx migrate info --source migrations --database-url $(DATABASE_URL)
 
 # Init dev environment
-init-dev: run-db 
+init-dev: run-db
 	@until pg_isready -h localhost -p 5434 -U pguser > /dev/null 2>&1; do sleep 1; done
 	@$(MAKE) migrate-up init-dev-db
 # Init dev db (creates DMOB table and seeds data)
