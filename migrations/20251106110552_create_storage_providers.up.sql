@@ -1,6 +1,6 @@
 -- Create storage_providers table
 CREATE TABLE storage_providers (
-    id BIGSERIAL PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     provider_id VARCHAR(255) NOT NULL UNIQUE,
 
     -- URL discovery schedule

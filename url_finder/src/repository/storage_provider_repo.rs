@@ -3,10 +3,11 @@ use color_eyre::Result;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use utoipa::ToSchema;
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
 pub struct StorageProvider {
-    pub id: i64,
+    pub id: Uuid,
     pub provider_id: String,
     pub next_url_discovery_at: DateTime<Utc>,
     pub url_discovery_status: Option<String>,
