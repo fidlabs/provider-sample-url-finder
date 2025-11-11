@@ -14,13 +14,29 @@ on:
         type: choice
         options:
           - production
-        default: production
+          - staging
+        default: staging
 
 permissions:
   id-token: write
   contents: read
 
 jobs:
+  trigger-staging-deploy:
+    runs-on: ubuntu-latest
+    environment: production-fidl # only one environment available, using for both: staging and production
+    if: ${{ inputs.version != '' && inputs.environment == 'staging' }}
+    steps:
+      - name: Trigger staging deploy
+        uses: neti-filplus-infra/filplus-deploy-action@main
+        with:
+          version: ${{ inputs.version }}
+          environment: staging
+          ecr-repository: provider-sample-url-finder
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_IMAGE_DEPLOYER }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_IMAGE_DEPLOYER }}
+          aws-region: us-east-1
+
   trigger-production-deploy:
     runs-on: ubuntu-latest
     environment: production-fidl
