@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE\n                    storage_providers\n               SET\n                    url_discovery_status = 'pending'\n               WHERE\n                    provider_id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b3ce14f8f5f169fa7db5cc1c07d5da246c9bb88602ecc323a7dbece411cbf718"
+}

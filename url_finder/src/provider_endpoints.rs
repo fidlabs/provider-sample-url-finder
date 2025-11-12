@@ -18,6 +18,7 @@ use crate::{
     ErrorCode, ResultCode,
     cid_contact::{self, CidContactError},
     lotus_rpc, multiaddr_parser,
+    types::ProviderAddress,
 };
 
 sol! {
@@ -79,7 +80,7 @@ pub async fn valid_curio_provider(address: &str) -> Result<Option<String>> {
 }
 
 pub async fn get_provider_endpoints(
-    address: &str,
+    address: &ProviderAddress,
 ) -> Result<(ResultCode, Option<Vec<String>>), ErrorCode> {
     let peer_id = if let Some(curio_provider) =
         valid_curio_provider(address).await.map_err(|e| {

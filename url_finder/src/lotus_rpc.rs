@@ -4,8 +4,9 @@ use serde_json::json;
 use tracing::debug;
 
 use crate::config::CONFIG;
+use crate::types::ProviderAddress;
 
-pub async fn get_peer_id(address: &str) -> Result<String> {
+pub async fn get_peer_id(address: &ProviderAddress) -> Result<String> {
     debug!("get_peer_id address: {}", address);
 
     let client = Client::new();
@@ -15,7 +16,7 @@ pub async fn get_peer_id(address: &str) -> Result<String> {
             "jsonrpc": "2.0",
             "id": 1,
             "method": "Filecoin.StateMinerInfo",
-            "params": [address, null]
+            "params": [address.as_str(), null]
         }))
         .send()
         .await?;

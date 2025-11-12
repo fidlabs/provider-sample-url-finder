@@ -6,6 +6,9 @@ if [ -f .env ]; then
     export $(grep -v '^#' .env | xargs)
 fi
 
+# SQL file name or default
+FILE_NAME=${1:-"sample_deals.sql"}
+
 if [ -z "$DATABASE_URL" ]; then
     echo "ERROR: DATABASE_URL not set in .env"
     exit 1
@@ -56,7 +59,7 @@ EOF
 echo "Table created. Seeding sample data..."
 
 # Seed with sample data
-psql "$DATABASE_URL" < scripts/sql/sample_deals.sql
+psql "$DATABASE_URL" < scripts/sql/$FILE_NAME
 
 echo "✓ Development database setup complete!"
 echo "✓ unified_verified_deal table created and seeded"

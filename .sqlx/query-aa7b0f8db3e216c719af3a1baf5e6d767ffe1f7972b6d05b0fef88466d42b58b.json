@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT DISTINCT\n                    \"clientId\"\n               FROM\n                    unified_verified_deal\n               WHERE\n                    \"providerId\" = $1\n                    AND \"clientId\" IS NOT NULL\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "clientId",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "aa7b0f8db3e216c719af3a1baf5e6d767ffe1f7972b6d05b0fef88466d42b58b"
+}

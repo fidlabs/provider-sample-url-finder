@@ -31,6 +31,8 @@ run-db:
 	@docker compose up -d postgres
 stop-db:
 	@docker compose down postgres
+exec-db:
+	@docker compose exec postgres psql -U postgres -d uf
 clear-db:
 	@docker compose down -v postgres
 logs-db:

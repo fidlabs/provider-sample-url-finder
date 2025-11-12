@@ -2,6 +2,8 @@ use color_eyre::Result;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 
+use crate::types::{ClientId, ProviderId};
+
 #[derive(Clone)]
 pub struct DealRepository {
     pool: PgPool,
@@ -29,7 +31,7 @@ impl DealRepository {
 
     pub async fn get_deals_by_provider(
         &self,
-        provider: &str,
+        provider_id: &ProviderId,
         limit: i64,
         offset: i64,
     ) -> Result<Vec<UnifiedVerifiedDeal>, sqlx::Error> {
@@ -44,13 +46,13 @@ impl DealRepository {
                 "providerId" AS provider_id,
                 "pieceCid" AS piece_cid
             FROM unified_verified_deal
-            WHERE 
+            WHERE
                 "providerId" = $1
             ORDER BY random()
             LIMIT $2
             OFFSET $3
             "#,
-            provider,
+            provider_id.as_str(),
             limit,
             offset,
         )
@@ -62,8 +64,8 @@ impl DealRepository {
 
     pub async fn get_deals_by_provider_and_client(
         &self,
-        provider: &str,
-        client: &str,
+        provider_id: &ProviderId,
+        client_id: &ClientId,
         limit: i64,
         offset: i64,
     ) -> Result<Vec<UnifiedVerifiedDeal>, sqlx::Error> {
@@ -85,8 +87,8 @@ impl DealRepository {
             LIMIT $3
             OFFSET $4
             "#,
-            provider,
-            client,
+            provider_id.as_str(),
+            client_id.as_str(),
             limit,
             offset,
         )
@@ -98,8 +100,8 @@ impl DealRepository {
 
     pub async fn get_random_deals_by_provider_and_client(
         &self,
-        provider: &str,
-        client: &str,
+        provider_id: &ProviderId,
+        client_id: &ClientId,
         limit: i64,
         offset: i64,
     ) -> Result<Vec<UnifiedVerifiedDeal>, sqlx::Error> {
@@ -114,15 +116,15 @@ impl DealRepository {
                 "providerId" AS provider_id,
                 "pieceCid" AS piece_cid
             FROM unified_verified_deal
-            WHERE 
+            WHERE
                 "providerId" = $1
                 AND "clientId" = $2
             ORDER BY random()
             LIMIT $3
             OFFSET $4
             "#,
-            provider,
-            client,
+            provider_id.as_str(),
+            client_id.as_str(),
             limit,
             offset,
         )
@@ -134,7 +136,7 @@ impl DealRepository {
 
     pub async fn get_random_deals_by_provider(
         &self,
-        provider: &str,
+        provider_id: &ProviderId,
         limit: i64,
         offset: i64,
     ) -> Result<Vec<UnifiedVerifiedDeal>, sqlx::Error> {
@@ -149,13 +151,13 @@ impl DealRepository {
                 "providerId" AS provider_id,
                 "pieceCid" AS piece_cid
             FROM unified_verified_deal
-            WHERE 
+            WHERE
                 "providerId" = $1
             ORDER BY random()
             LIMIT $2
             OFFSET $3
             "#,
-            provider,
+            provider_id.as_str(),
             limit,
             offset,
         )
@@ -167,7 +169,7 @@ impl DealRepository {
 
     pub async fn get_distinct_providers_by_client(
         &self,
-        client: &str,
+        client_id: &ClientId,
     ) -> Result<Vec<Provider>, sqlx::Error> {
         let data = sqlx::query_as!(
             Provider,
@@ -179,7 +181,7 @@ impl DealRepository {
             WHERE
                 "clientId" = $1
             "#,
-            client,
+            client_id.as_str(),
         )
         .fetch_all(&self.pool)
         .await?;
@@ -187,8 +189,8 @@ impl DealRepository {
         Ok(data)
     }
 
-    pub async fn get_distinct_providers(&self) -> Result<Vec<String>, sqlx::Error> {
-        let providers = sqlx::query_scalar!(
+    pub async fn get_distinct_providers(&self) -> Result<Vec<ProviderId>, sqlx::Error> {
+        let providers: Vec<String> = sqlx::query_scalar!(
             r#"SELECT DISTINCT
                     "providerId"
                FROM
@@ -203,6 +205,34 @@ impl DealRepository {
         .flatten()
         .collect();
 
-        Ok(providers)
+        Ok(providers
+            .into_iter()
+            .filter_map(|s| ProviderId::new(s).ok())
+            .collect())
+    }
+
+    pub async fn get_clients_for_provider(
+        &self,
+        provider_id: &ProviderId,
+    ) -> Result<Vec<ClientId>, sqlx::Error> {
+        let clients = sqlx::query_scalar!(
+            r#"SELECT DISTINCT
+                    "clientId"
+               FROM
+                    unified_verified_deal
+               WHERE
+                    "providerId" = $1
+                    AND "clientId" IS NOT NULL
+            "#,
+            provider_id.as_str()
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(clients
+            .into_iter()
+            .flatten()
+            .filter_map(|s| ClientId::new(s).ok())
+            .collect())
     }
 }

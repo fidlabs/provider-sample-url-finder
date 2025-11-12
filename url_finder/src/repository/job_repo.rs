@@ -9,12 +9,15 @@ use serde::Serialize;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::{ErrorCode, ResultCode};
+use crate::{
+    types::{ClientAddress, ProviderAddress},
+    ErrorCode, ResultCode,
+};
 
 #[derive(Clone, Serialize, ToSchema)]
 pub struct ProviderResult {
-    pub provider: String,
-    pub client: Option<String>,
+    pub provider: ProviderAddress,
+    pub client: Option<ClientAddress>,
     pub working_url: Option<String>,
     pub retrievability: f64,
     pub result: ResultCode,
@@ -29,8 +32,8 @@ pub struct Job {
     pub working_url: Option<String>,
     pub retrievability: Option<i64>,
     pub results: Vec<ProviderResult>,
-    pub provider: Option<String>,
-    pub client: Option<String>,
+    pub provider: Option<ProviderAddress>,
+    pub client: Option<ClientAddress>,
     pub status: JobStatus,
     pub result: Option<ResultCode>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -39,7 +42,7 @@ pub struct Job {
     pub updated_at: DateTime<Utc>,
 }
 impl Job {
-    pub fn new(provider: Option<String>, client: Option<String>) -> Self {
+    pub fn new(provider: Option<ProviderAddress>, client: Option<ClientAddress>) -> Self {
         Self {
             id: Uuid::new_v4(),
             working_url: None,
@@ -82,8 +85,8 @@ impl JobRepository {
 
     pub async fn create_job(
         &self,
-        provider: Option<String>,
-        client: Option<String>,
+        provider: Option<ProviderAddress>,
+        client: Option<ClientAddress>,
     ) -> Result<Job> {
         let job = Job::new(provider, client);
 
@@ -96,8 +99,8 @@ impl JobRepository {
     pub async fn add_success_result(
         &self,
         job_id: Uuid,
-        provider: String,
-        client: Option<String>,
+        provider: ProviderAddress,
+        client: Option<ClientAddress>,
         working_url: Option<String>,
         retrievability: f64,
         result: ResultCode,
@@ -122,8 +125,8 @@ impl JobRepository {
     pub async fn add_error_result(
         &self,
         job_id: Uuid,
-        provider: String,
-        client: Option<String>,
+        provider: ProviderAddress,
+        client: Option<ClientAddress>,
         error: Option<ErrorCode>,
         result: Option<ResultCode>,
     ) {

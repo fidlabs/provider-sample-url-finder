@@ -16,6 +16,23 @@ pub enum ResultCode {
     Error,
 }
 
+impl fmt::Display for ResultCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            ResultCode::NoCidContactData => "NoCidContactData",
+            ResultCode::MissingAddrFromCidContact => "MissingAddrFromCidContact",
+            ResultCode::MissingHttpAddrFromCidContact => "MissingHttpAddrFromCidContact",
+            ResultCode::FailedToGetWorkingUrl => "FailedToGetWorkingUrl",
+            ResultCode::NoDealsFound => "NoDealsFound",
+            ResultCode::TimedOut => "TimedOut",
+            ResultCode::Success => "Success",
+            ResultCode::JobCreated => "JobCreated",
+            ResultCode::Error => "Error",
+        };
+        write!(f, "{s}")
+    }
+}
+
 #[allow(clippy::enum_variant_names)]
 #[derive(Debug, Serialize, ToSchema, Clone)]
 pub enum ErrorCode {

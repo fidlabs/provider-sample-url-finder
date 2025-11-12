@@ -4,8 +4,11 @@ use tokio::time::sleep;
 use tracing::{debug, info};
 
 use crate::{
-    ErrorCode, Job, JobRepository, JobStatus, ResultCode, provider_endpoints,
-    repository::DealRepository, services::deal_service, url_tester,
+    provider_endpoints,
+    repository::DealRepository,
+    services::deal_service,
+    types::{ClientAddress, ClientId, ProviderAddress, ProviderId},
+    url_tester, ErrorCode, Job, JobRepository, JobStatus, ResultCode,
 };
 
 const LOOP_DELAY: Duration = Duration::from_secs(5);
@@ -17,16 +20,16 @@ pub struct JobFailed {
 }
 
 pub struct JobSuccessResult {
-    pub provider: String,
-    pub client: Option<String>,
+    pub provider: ProviderAddress,
+    pub client: Option<ClientAddress>,
     pub working_url: Option<String>,
     pub retrievability: f64,
     pub result: ResultCode,
 }
 
 pub struct JobErrorResult {
-    pub provider: String,
-    pub client: Option<String>,
+    pub provider: ProviderAddress,
+    pub client: Option<ClientAddress>,
     pub error: Option<ErrorCode>,
     pub result: Option<ResultCode>,
 }
@@ -139,10 +142,12 @@ pub async fn job_handler(job_repo: Arc<JobRepository>, deal_repo: Arc<DealReposi
 
 async fn process_pending_job(deal_repo: &DealRepository, job: &Job) -> JobHandlerResult {
     match (&job.provider, &job.client) {
-        (Some(provider), None) => process_job_with_provider(deal_repo, provider).await,
-        (None, Some(client)) => process_job_with_client(deal_repo, client).await,
-        (Some(provider), Some(client)) => {
-            process_job_with_provider_and_client(deal_repo, provider, client).await
+        (Some(provider_address), None) => {
+            process_job_with_provider(deal_repo, provider_address).await
+        }
+        (None, Some(client_address)) => process_job_with_client(deal_repo, client_address).await,
+        (Some(provider_address), Some(client_address)) => {
+            process_job_with_provider_and_client(deal_repo, provider_address, client_address).await
         }
         (None, None) => {
             // should not happen
@@ -155,37 +160,44 @@ async fn process_pending_job(deal_repo: &DealRepository, job: &Job) -> JobHandle
     }
 }
 
-async fn process_job_with_client(deal_repo: &DealRepository, client: &str) -> JobHandlerResult {
-    let providers = match deal_service::get_distinct_providers_by_client(deal_repo, client).await {
-        Ok(providers) => providers,
-        Err(e) => {
-            debug!("Failed to get providers for client {}: {:?}", client, e);
-            return JobHandlerResult::Skip(format!("Failed to get providers for client {client}"));
-        }
-    };
+async fn process_job_with_client(
+    deal_repo: &DealRepository,
+    client_address: &ClientAddress,
+) -> JobHandlerResult {
+    let providers =
+        match deal_service::get_distinct_providers_by_client(deal_repo, client_address).await {
+            Ok(providers) => providers,
+            Err(e) => {
+                debug!(
+                    "Failed to get providers for client {}: {:?}",
+                    client_address, e
+                );
+                return JobHandlerResult::Skip(format!(
+                    "Failed to get providers for client {client_address}"
+                ));
+            }
+        };
 
     if providers.is_empty() {
         return JobHandlerResult::FailedJob(JobFailed {
             error: Some(ErrorCode::NoProvidersFound),
             result: Some(ResultCode::Error),
-            reason: format!("No providers found for client: {client}"),
+            reason: format!("No providers found for client: {client_address}"),
         });
     }
 
     let mut success_results = Vec::new();
     let mut error_results = Vec::new();
 
-    for provider in providers {
-        debug!("Processing job with provider: {}", &provider);
+    for provider_address in providers {
+        debug!("Processing job with provider: {}", &provider_address);
 
-        match process_job(deal_repo, &provider, Some(client)).await {
+        match process_job(deal_repo, &provider_address, Some(client_address)).await {
             JobHandlerResult::SuccessResult(result) => success_results.push(result),
             JobHandlerResult::ErrorResult(result) => error_results.push(result),
-            JobHandlerResult::Skip(reason) => {
-                return JobHandlerResult::Skip(reason);
-            }
+            JobHandlerResult::Skip(reason) => return JobHandlerResult::Skip(reason),
             JobHandlerResult::FailedJob(job_failed) => {
-                return JobHandlerResult::FailedJob(job_failed);
+                return JobHandlerResult::FailedJob(job_failed)
             }
             // should not happen here
             JobHandlerResult::MultipleResults(_, _) => continue,
@@ -197,33 +209,39 @@ async fn process_job_with_client(deal_repo: &DealRepository, client: &str) -> Jo
 
 async fn process_job_with_provider_and_client(
     deal_repo: &DealRepository,
-    provider: &str,
-    client: &str,
+    provider_address: &ProviderAddress,
+    client_address: &ClientAddress,
 ) -> JobHandlerResult {
     debug!(
         "Processing job with provider: {} and client: {}",
-        provider, client
+        provider_address, client_address
     );
 
-    process_job(deal_repo, provider, Some(client)).await
+    process_job(deal_repo, provider_address, Some(client_address)).await
 }
 
-async fn process_job_with_provider(deal_repo: &DealRepository, provider: &str) -> JobHandlerResult {
-    debug!("Processing job with provider: {}", provider);
+async fn process_job_with_provider(
+    deal_repo: &DealRepository,
+    provider_address: &ProviderAddress,
+) -> JobHandlerResult {
+    debug!("Processing job with provider: {}", provider_address);
 
-    process_job(deal_repo, provider, None).await
+    process_job(deal_repo, provider_address, None).await
 }
 
 async fn process_job(
     deal_repo: &DealRepository,
-    provider: &str,
-    client: Option<&str>,
+    provider_address: &ProviderAddress,
+    client_address: Option<&ClientAddress>,
 ) -> JobHandlerResult {
-    let (_, endpoints) = match provider_endpoints::get_provider_endpoints(provider).await {
+    let provider_id: ProviderId = provider_address.clone().into();
+    let client_id: Option<ClientId> = client_address.map(|c| c.clone().into());
+
+    let (_, endpoints) = match provider_endpoints::get_provider_endpoints(provider_address).await {
         Ok((result_code, _)) if result_code != ResultCode::Success => {
             return JobHandlerResult::ErrorResult(JobErrorResult {
-                provider: provider.to_string(),
-                client: client.map(|c| c.to_string()),
+                provider: provider_address.clone(),
+                client: client_address.cloned(),
                 result: Some(result_code),
                 error: None,
             });
@@ -231,8 +249,8 @@ async fn process_job(
         Ok(result) => result,
         Err(error_code) => {
             return JobHandlerResult::ErrorResult(JobErrorResult {
-                provider: provider.to_string(),
-                client: client.map(|c| c.to_string()),
+                provider: provider_address.clone(),
+                client: client_address.cloned(),
                 result: Some(ResultCode::Error),
                 error: Some(error_code),
             });
@@ -243,19 +261,18 @@ async fn process_job(
         debug!("No endpoints found");
 
         return JobHandlerResult::ErrorResult(JobErrorResult {
-            provider: provider.to_string(),
-            client: client.map(|c| c.to_string()),
+            provider: provider_address.clone(),
+            client: client_address.cloned(),
             result: Some(ResultCode::NoDealsFound),
             error: None,
         });
     }
     let endpoints = endpoints.unwrap();
 
-    let provider_db = provider.strip_prefix("f0").unwrap_or(provider);
-    let client_db = client.as_ref().map(|c| c.strip_prefix("f0").unwrap_or(c));
-
     let piece_ids =
-        match deal_service::get_piece_ids_by_provider(deal_repo, provider_db, client_db).await {
+        match deal_service::get_piece_ids_by_provider(deal_repo, &provider_id, client_id.as_ref())
+            .await
+        {
             Ok(ids) => ids,
             Err(e) => {
                 debug!("Failed to get piece ids: {:?}", e);
@@ -268,8 +285,8 @@ async fn process_job(
         debug!("No deals found");
 
         return JobHandlerResult::ErrorResult(JobErrorResult {
-            provider: provider.to_string(),
-            client: client.map(|c| c.to_string()),
+            provider: provider_address.clone(),
+            client: client_address.cloned(),
             result: Some(ResultCode::NoDealsFound),
             error: None,
         });
@@ -287,8 +304,8 @@ async fn process_job(
     };
 
     JobHandlerResult::SuccessResult(JobSuccessResult {
-        provider: provider.to_string(),
-        client: client.map(|c| c.to_string()),
+        provider: provider_address.clone(),
+        client: client_address.cloned(),
         working_url,
         retrievability: retrievability_percent.unwrap_or(0.0),
         result: result_code,

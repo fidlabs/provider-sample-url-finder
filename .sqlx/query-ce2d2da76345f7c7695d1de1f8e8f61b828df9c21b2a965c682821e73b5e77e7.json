@@ -1,0 +1,82 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                    id,\n                    provider_id AS \"provider_id: ProviderId\",\n                    next_url_discovery_at,\n                    url_discovery_status,\n                    last_working_url,\n                    next_bms_test_at,\n                    bms_test_status,\n                    bms_routing_key,\n                    last_bms_region_discovery_at,\n                    created_at,\n                    updated_at\n               FROM\n                    storage_providers\n                WHERE\n                    provider_id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "provider_id: ProviderId",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "next_url_discovery_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 3,
+        "name": "url_discovery_status",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "last_working_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "next_bms_test_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "bms_test_status",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 7,
+        "name": "bms_routing_key",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 8,
+        "name": "last_bms_region_discovery_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 9,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 10,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "ce2d2da76345f7c7695d1de1f8e8f61b828df9c21b2a965c682821e73b5e77e7"
+}

@@ -7,13 +7,17 @@ use axum::{
 use axum_extra::extract::WithRejection;
 use color_eyre::Result;
 use common::api_response::*;
-use regex::Regex;
 use serde::{Deserialize, Serialize};
 use tokio::time::timeout;
 use tracing::debug;
 use utoipa::{IntoParams, ToSchema};
 
-use crate::{AppState, provider_endpoints, services::deal_service, url_tester};
+use crate::{
+    provider_endpoints,
+    services::deal_service,
+    types::{ProviderAddress, ProviderId},
+    url_tester, AppState,
+};
 
 use super::ResultCode;
 
@@ -55,14 +59,12 @@ pub async fn handle_find_retri_by_sp(
 ) -> Result<ApiResponse<FindRetriBySpResponse>, ApiResponse<()>> {
     debug!("find retri for input address: {:?}", &path.provider);
 
-    // validate provider addresses
-    let address_pattern = Regex::new(r"^f0\d{1,8}$").unwrap();
-    if !address_pattern.is_match(&path.provider) {
-        return Err(bad_request("Invalid provider address".to_string()));
-    }
+    // Parse and validate provider address
+    let provider_address = ProviderAddress::new(path.provider)
+        .map_err(|e| bad_request(format!("Invalid provider address: {}", e)))?;
 
     let (result_code, endpoints) =
-        match provider_endpoints::get_provider_endpoints(&path.provider).await {
+        match provider_endpoints::get_provider_endpoints(&provider_address).await {
             Ok(endpoints) => endpoints,
             Err(e) => return Err(internal_server_error(e.to_string())),
         };
@@ -77,13 +79,9 @@ pub async fn handle_find_retri_by_sp(
     }
     let endpoints = endpoints.unwrap();
 
-    let provider = path
-        .provider
-        .strip_prefix("f0")
-        .unwrap_or(&path.provider)
-        .to_string();
+    let provider_id: ProviderId = provider_address.into();
 
-    let piece_ids = deal_service::get_random_piece_ids_by_provider(&state.deal_repo, &provider)
+    let piece_ids = deal_service::get_random_piece_ids_by_provider(&state.deal_repo, &provider_id)
         .await
         .map_err(|e| {
             debug!("Failed to get piece ids: {:?}", e);

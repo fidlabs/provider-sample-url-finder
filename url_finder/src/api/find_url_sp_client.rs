@@ -7,12 +7,16 @@ use axum::{
 use axum_extra::extract::WithRejection;
 use color_eyre::Result;
 use common::api_response::*;
-use regex::Regex;
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 use utoipa::{IntoParams, ToSchema};
 
-use crate::{AppState, ResultCode, provider_endpoints, services::deal_service, url_tester};
+use crate::{
+    provider_endpoints,
+    services::deal_service,
+    types::{ClientAddress, ClientId, ProviderAddress, ProviderId},
+    url_tester, AppState, ResultCode,
+};
 
 #[derive(Deserialize, ToSchema, IntoParams)]
 pub struct FindUrlSpClientPath {
@@ -52,16 +56,14 @@ pub async fn handle_find_url_sp_client(
 ) -> Result<ApiResponse<FindUrlSpClientResponse>, ApiResponse<()>> {
     debug!("find url input address: {:?}", &path.provider);
 
-    // validate provider and client addresses
-    let address_pattern = Regex::new(r"^f0\d{1,8}$").unwrap();
-    if !address_pattern.is_match(&path.provider) || !address_pattern.is_match(&path.client) {
-        return Err(bad_request(
-            "Invalid provider or client address".to_string(),
-        ));
-    }
+    // Parse and validate provider and client addresses
+    let provider_address = ProviderAddress::new(path.provider)
+        .map_err(|e| bad_request(format!("Invalid provider address: {}", e)))?;
+    let client_address = ClientAddress::new(path.client)
+        .map_err(|e| bad_request(format!("Invalid client address: {}", e)))?;
 
     let (result_code, endpoints) =
-        match provider_endpoints::get_provider_endpoints(&path.provider).await {
+        match provider_endpoints::get_provider_endpoints(&provider_address).await {
             Ok(endpoints) => endpoints,
             Err(e) => return Err(internal_server_error(e.to_string())),
         };
@@ -76,20 +78,11 @@ pub async fn handle_find_url_sp_client(
     }
     let endpoints = endpoints.unwrap();
 
-    let provider = path
-        .provider
-        .strip_prefix("f0")
-        .unwrap_or(&path.provider)
-        .to_string();
-
-    let client = path
-        .client
-        .strip_prefix("f0")
-        .unwrap_or(&path.client)
-        .to_string();
+    let provider_id: ProviderId = provider_address.into();
+    let client_id: ClientId = client_address.into();
 
     let piece_ids =
-        deal_service::get_piece_ids_by_provider(&state.deal_repo, &provider, Some(&client))
+        deal_service::get_piece_ids_by_provider(&state.deal_repo, &provider_id, Some(&client_id))
             .await
             .map_err(|e| {
                 debug!("Failed to get piece ids: {:?}", e);

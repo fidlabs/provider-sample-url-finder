@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO\n                    url_results (id, provider_id, client_id, result_type, working_url, retrievability_percent, result_code, error_code, tested_at)\n               SELECT\n                    UNNEST($1::uuid[]),\n                    UNNEST($2::text[]),\n                    UNNEST($3::text[]),\n                    UNNEST($4::text[]),\n                    UNNEST($5::text[]),\n                    UNNEST($6::double precision[]),\n                    UNNEST($7::text[]),\n                    UNNEST($8::text[]),\n                    UNNEST($9::timestamptz[])\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "UuidArray",
+        "TextArray",
+        "TextArray",
+        "TextArray",
+        "TextArray",
+        "Float8Array",
+        "TextArray",
+        "TextArray",
+        "TimestamptzArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1f5a838a40ce22f9e403016924f645dfc7a64858a44ad64bf1c44ee26b7dff7c"
+}
