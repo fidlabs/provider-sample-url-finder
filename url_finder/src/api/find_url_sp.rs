@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use tracing::debug;
 use utoipa::{IntoParams, ToSchema};
 
-use crate::{deal_service, provider_endpoints, url_tester, AppState, ResultCode};
+use crate::{AppState, ResultCode, deal_service, provider_endpoints, url_tester};
 
 #[derive(Deserialize, ToSchema, IntoParams)]
 pub struct FindUrlSpPath {
@@ -93,8 +93,8 @@ pub async fn handle_find_url_sp(
     }
 
     let urls = deal_service::get_piece_url(endpoints, piece_ids).await;
+    let (working_url, _) = url_tester::check_retrievability_with_get(urls, false).await;
 
-    let working_url = url_tester::filter_working_with_head(urls).await;
     if working_url.is_none() {
         debug!("Failed to get working url");
         return Ok(ok_response(FindUrlSpResponse {

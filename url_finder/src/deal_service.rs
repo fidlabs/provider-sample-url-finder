@@ -110,7 +110,7 @@ pub async fn get_random_piece_ids_by_provider(
 
 /// construct every piece_cid and endoint combination
 pub async fn get_piece_url(endpoints: Vec<String>, piece_ids: Vec<String>) -> Vec<String> {
-    let urls = endpoints
+    endpoints
         .iter()
         .flat_map(|endpoint| {
             let endpoint = endpoint.clone();
@@ -118,7 +118,5 @@ pub async fn get_piece_url(endpoints: Vec<String>, piece_ids: Vec<String>) -> Ve
                 .iter()
                 .map(move |piece_id| format!("{endpoint}/piece/{piece_id}"))
         })
-        .collect();
-
-    urls
+        .collect()
 }
