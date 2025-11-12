@@ -172,11 +172,11 @@ impl DealRepository {
         let data = sqlx::query_as!(
             Provider,
             r#"
-            SELECT DISTINCT 
+            SELECT DISTINCT
                 "providerId" AS provider_id
-            FROM 
+            FROM
                 unified_verified_deal
-            WHERE 
+            WHERE
                 "clientId" = $1
             "#,
             client,
@@ -185,5 +185,24 @@ impl DealRepository {
         .await?;
 
         Ok(data)
+    }
+
+    pub async fn get_distinct_providers(&self) -> Result<Vec<String>, sqlx::Error> {
+        let providers = sqlx::query_scalar!(
+            r#"SELECT DISTINCT
+                    "providerId"
+               FROM
+                    unified_verified_deal
+                WHERE
+                    "providerId" IS NOT NULL
+            "#
+        )
+        .fetch_all(&self.pool)
+        .await?
+        .into_iter()
+        .flatten()
+        .collect();
+
+        Ok(providers)
     }
 }

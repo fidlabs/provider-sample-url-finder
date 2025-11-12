@@ -3,7 +3,7 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-#[derive(Serialize, Deserialize, ToSchema, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, Clone, PartialEq)]
 pub enum ResultCode {
     NoCidContactData,
     MissingAddrFromCidContact,
@@ -17,7 +17,7 @@ pub enum ResultCode {
 }
 
 #[allow(clippy::enum_variant_names)]
-#[derive(Serialize, ToSchema, Clone)]
+#[derive(Debug, Serialize, ToSchema, Clone)]
 pub enum ErrorCode {
     NoProviderOrClient,
     NoProvidersFound,
