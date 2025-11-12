@@ -38,6 +38,7 @@ mod provider_endpoints;
 mod repository;
 mod routes;
 mod services;
+mod types;
 mod url_tester;
 
 pub struct AppState {
