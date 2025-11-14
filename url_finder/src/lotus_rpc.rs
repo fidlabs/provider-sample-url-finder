@@ -9,7 +9,7 @@ use crate::{config::CONFIG, types::ProviderAddress, utils::build_reqwest_retry_c
 pub async fn get_peer_id(address: &ProviderAddress) -> Result<String> {
     debug!("get_peer_id address: {}", address);
 
-    let client = build_reqwest_retry_client(4_000, 30_000);
+    let client = build_reqwest_retry_client(10_000, 300_000);
     let res = client
         .post(&CONFIG.glif_url)
         .json(&json!({
