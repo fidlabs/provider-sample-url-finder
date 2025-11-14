@@ -5,7 +5,6 @@ use crate::{
     types::{ClientAddress, ClientId, ProviderAddress, ProviderId},
     url_tester, ResultCode,
 };
-use color_eyre::Result;
 use tracing::error;
 use uuid::Uuid;
 
@@ -53,7 +52,7 @@ pub async fn discover_url(
     provider_address: &ProviderAddress,
     client_address: Option<ClientAddress>,
     deal_repo: &DealRepository,
-) -> Result<UrlDiscoveryResult> {
+) -> UrlDiscoveryResult {
     let provider_id: ProviderId = provider_address.clone().into();
     let client_id: Option<ClientId> = client_address.clone().map(|c| c.into());
 
@@ -72,13 +71,13 @@ pub async fn discover_url(
                 );
                 result.result_code = ResultCode::Error.to_string();
                 result.error_code = Some(format!("{:?}", e));
-                return Ok(result);
+                return result;
             }
         };
 
     if endpoints.is_none() {
         result.result_code = result_code.to_string();
-        return Ok(result);
+        return result;
     }
 
     let endpoints = endpoints.unwrap();
@@ -95,13 +94,13 @@ pub async fn discover_url(
                 );
                 result.result_code = ResultCode::Error.to_string();
                 result.error_code = Some(format!("{:?}", e));
-                return Ok(result);
+                return result;
             }
         };
 
     if piece_ids.is_empty() {
         result.result_code = ResultCode::NoDealsFound.to_string();
-        return Ok(result);
+        return result;
     }
 
     let urls = deal_service::get_piece_url(endpoints, piece_ids).await;
@@ -115,5 +114,5 @@ pub async fn discover_url(
         ResultCode::FailedToGetWorkingUrl.to_string()
     };
 
-    Ok(result)
+    result
 }

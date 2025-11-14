@@ -1,15 +1,13 @@
-use color_eyre::{Result, eyre::eyre};
-use reqwest::Client;
+use color_eyre::{eyre::eyre, Result};
 use serde_json::json;
 use tracing::debug;
 
-use crate::config::CONFIG;
-use crate::types::ProviderAddress;
+use crate::{config::CONFIG, types::ProviderAddress, utils::build_reqwest_retry_client};
 
 pub async fn get_peer_id(address: &ProviderAddress) -> Result<String> {
     debug!("get_peer_id address: {}", address);
 
-    let client = Client::new();
+    let client = build_reqwest_retry_client(1_000, 30_000);
     let res = client
         .post(&CONFIG.glif_url)
         .json(&json!({
@@ -31,10 +29,12 @@ pub async fn get_peer_id(address: &ProviderAddress) -> Result<String> {
 
     let peer_id = json
         .get("result")
-        .ok_or(if let Some(m) = message {
-            eyre!(m)
-        } else {
-            eyre!("Missing lotus rpc result")
+        .ok_or_else(|| {
+            if let Some(m) = message {
+                eyre!("{}", m)
+            } else {
+                eyre!("Missing lotus rpc result")
+            }
         })?
         .get("PeerId")
         .ok_or(eyre!("Missing lotus rpc PeerId"))?

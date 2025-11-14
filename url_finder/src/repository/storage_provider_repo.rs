@@ -13,6 +13,7 @@ pub struct StorageProvider {
     pub provider_id: ProviderId,
     pub next_url_discovery_at: DateTime<Utc>,
     pub url_discovery_status: Option<String>,
+    pub url_discovery_pending_since: Option<DateTime<Utc>>,
     pub last_working_url: Option<String>,
     pub next_bms_test_at: DateTime<Utc>,
     pub bms_test_status: Option<String>,
@@ -84,6 +85,7 @@ impl StorageProviderRepository {
                     provider_id AS "provider_id: ProviderId",
                     next_url_discovery_at,
                     url_discovery_status,
+                    url_discovery_pending_since,
                     last_working_url,
                     next_bms_test_at,
                     bms_test_status,
@@ -110,6 +112,7 @@ impl StorageProviderRepository {
                     provider_id AS "provider_id: ProviderId",
                     next_url_discovery_at,
                     url_discovery_status,
+                    url_discovery_pending_since,
                     last_working_url,
                     next_bms_test_at,
                     bms_test_status,
@@ -120,8 +123,15 @@ impl StorageProviderRepository {
                FROM
                     storage_providers
                WHERE
-                    next_url_discovery_at <= NOW()
-                    AND url_discovery_status IS DISTINCT FROM 'pending'
+                    (
+                        next_url_discovery_at <= NOW()
+                        AND url_discovery_status IS DISTINCT FROM 'pending'
+                    )
+                    OR
+                    (
+                        url_discovery_status = 'pending'
+                        AND url_discovery_pending_since < NOW() - INTERVAL '60 minutes'
+                    )
                ORDER BY
                     next_url_discovery_at ASC
                LIMIT $1
@@ -137,7 +147,8 @@ impl StorageProviderRepository {
             r#"UPDATE
                     storage_providers
                SET
-                    url_discovery_status = 'pending'
+                    url_discovery_status = 'pending',
+                    url_discovery_pending_since = NOW()
                WHERE
                     provider_id = $1
             "#,
@@ -159,6 +170,7 @@ impl StorageProviderRepository {
                SET
                     next_url_discovery_at = NOW() + INTERVAL '1 day',
                     url_discovery_status = NULL,
+                    url_discovery_pending_since = NULL,
                     last_working_url = $2,
                     updated_at = NOW()
                WHERE

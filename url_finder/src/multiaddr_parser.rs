@@ -1,6 +1,6 @@
 use color_eyre::{Result, eyre::eyre};
 use multiaddr::{Multiaddr, Protocol};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 pub struct UrlParts {
     protocol: Option<String>,
@@ -52,7 +52,7 @@ fn parse_addr(addr: String) -> Option<String> {
                     Some(endpoint)
                 }
                 Err(e) => {
-                    info!(
+                    warn!(
                         "Failed to convert multiaddr: {:?} to URL: {:?}",
                         addr,
                         e.to_string()

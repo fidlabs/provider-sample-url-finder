@@ -40,6 +40,7 @@ mod routes;
 mod services;
 mod types;
 mod url_tester;
+mod utils;
 
 pub struct AppState {
     pub deal_repo: Arc<DealRepository>,

@@ -1,8 +1,9 @@
 use color_eyre::Result;
-use reqwest::Client;
 use std::fmt;
-use tracing::{debug, info};
+use tracing::debug;
 use urlencoding::decode;
+
+use crate::utils::build_reqwest_retry_client;
 
 pub enum CidContactError {
     InvalidResponse,
@@ -19,7 +20,7 @@ impl fmt::Display for CidContactError {
 }
 
 pub async fn get_contact(peer_id: &str) -> Result<serde_json::Value, CidContactError> {
-    let client = Client::new();
+    let client = build_reqwest_retry_client(1_000, 30_000);
     let url = format!("https://cid.contact/providers/{peer_id}");
 
     debug!("cid contact url: {:?}", url);
@@ -35,7 +36,7 @@ pub async fn get_contact(peer_id: &str) -> Result<serde_json::Value, CidContactE
     debug!("cid contact status: {:?}", res.status());
 
     if !res.status().is_success() {
-        info!(
+        debug!(
             "cid contact returned non-success status: {:?}",
             res.status()
         );

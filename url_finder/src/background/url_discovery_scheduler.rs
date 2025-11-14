@@ -8,12 +8,13 @@ use color_eyre::Result;
 use futures::future::join_all;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::time::sleep;
-use tracing::{debug, error, info};
+use tokio::{sync::Semaphore, time::sleep};
+use tracing::{debug, error, info, warn};
 
 const SCHEDULER_SLEEP_INTERVAL: Duration = Duration::from_secs(3600);
 const SCHEDULER_NEXT_INTERVAL: Duration = Duration::from_secs(60);
 const BATCH_SIZE: i64 = 100;
+const MAX_CONCURRENT_CLIENT_TESTS: usize = 5;
 
 pub async fn run_url_discovery_scheduler(
     sp_repo: Arc<StorageProviderRepository>,
@@ -54,6 +55,13 @@ async fn schedule_url_discoveries(
     let mut total_tested = 0;
 
     for provider in providers {
+        if provider.url_discovery_status.as_deref() == Some("pending") {
+            warn!(
+                "Recovering stale pending provider: {} (pending since {:?})",
+                provider.provider_id, provider.url_discovery_pending_since
+            );
+        }
+
         sp_repo
             .set_url_discovery_pending(&provider.provider_id)
             .await?;
@@ -111,6 +119,7 @@ async fn test_provider_with_clients(
     client_ids: Vec<ClientId>,
     deal_repo: &DealRepository,
 ) -> Vec<url_discovery_service::UrlDiscoveryResult> {
+    let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_CLIENT_TESTS));
     let mut tasks = vec![];
     let provider_address: ProviderAddress = provider_id.clone().into();
 
@@ -122,18 +131,20 @@ async fn test_provider_with_clients(
     tasks.push(provider_task);
 
     for client_id in client_ids {
+        let permit = semaphore.clone().acquire_owned().await.unwrap();
         let provider_addr = provider_address.clone();
         let client_address: ClientAddress = client_id.into();
         let repo = deal_repo.clone();
         tasks.push(tokio::spawn(async move {
-            url_discovery_service::discover_url(&provider_addr, Some(client_address), &repo).await
+            let result =
+                url_discovery_service::discover_url(&provider_addr, Some(client_address), &repo)
+                    .await;
+            drop(permit); // release semaphore
+            result
         }));
     }
 
     let results = join_all(tasks).await;
 
-    results
-        .into_iter()
-        .filter_map(|r| r.ok().and_then(|inner| inner.ok()))
-        .collect()
+    results.into_iter().filter_map(|r| r.ok()).collect()
 }

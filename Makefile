@@ -3,7 +3,7 @@ include .env
 export
 
 .PHONY: check format lint build run stop logs prepare
-.PHONY: run-db stop-db clear-db logs-db
+.PHONY: run-db stop-db clean-db clear-db logs-db
 .PHONY: migrate-up migrate-down migrate-status init-dev init-dev-db
 
 check:
@@ -33,6 +33,7 @@ stop-db:
 	@docker compose down postgres
 exec-db:
 	@docker compose exec postgres psql -U postgres -d uf
+clean-db: clear-db
 clear-db:
 	@docker compose down -v postgres
 logs-db:
