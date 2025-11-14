@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use color_eyre::{eyre::eyre, Result};
 use serde_json::json;
 use tracing::debug;
@@ -16,6 +18,7 @@ pub async fn get_peer_id(address: &ProviderAddress) -> Result<String> {
             "method": "Filecoin.StateMinerInfo",
             "params": [address.as_str(), null]
         }))
+        .timeout(Duration::from_secs(30))
         .send()
         .await?;
 

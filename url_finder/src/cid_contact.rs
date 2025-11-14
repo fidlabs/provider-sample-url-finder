@@ -1,5 +1,6 @@
+use std::{fmt, time::Duration};
+
 use color_eyre::Result;
-use std::fmt;
 use tracing::debug;
 use urlencoding::decode;
 
@@ -29,6 +30,7 @@ pub async fn get_contact(peer_id: &str) -> Result<serde_json::Value, CidContactE
         .get(&url)
         .header("Accept", "application/json")
         .header("User-Agent", "url-finder/0.1.0")
+        .timeout(Duration::from_secs(30))
         .send()
         .await
         .map_err(|_| CidContactError::InvalidResponse)?;

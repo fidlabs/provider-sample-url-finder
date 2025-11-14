@@ -1,8 +1,9 @@
+use std::time::Duration;
+
 use reqwest::Client;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
 use retry_policies::Jitter;
-use std::time::Duration;
 
 pub fn build_reqwest_retry_client(
     min_retry_interval_ms: u64,

@@ -191,12 +191,13 @@ impl DealRepository {
 
     pub async fn get_distinct_providers(&self) -> Result<Vec<ProviderId>, sqlx::Error> {
         let providers: Vec<String> = sqlx::query_scalar!(
-            r#"SELECT DISTINCT
-                    "providerId"
-               FROM
-                    unified_verified_deal
-                WHERE
-                    "providerId" IS NOT NULL
+            r#"
+            SELECT DISTINCT
+                "providerId"
+            FROM
+                unified_verified_deal
+            WHERE
+                "providerId" IS NOT NULL
             "#
         )
         .fetch_all(&self.pool)
@@ -211,18 +212,21 @@ impl DealRepository {
             .collect())
     }
 
+    /// Get all unique client IDs for a given provider ID
+    /// NOTE: Production database has MAX 63 clients per provider
     pub async fn get_clients_for_provider(
         &self,
         provider_id: &ProviderId,
     ) -> Result<Vec<ClientId>, sqlx::Error> {
         let clients = sqlx::query_scalar!(
-            r#"SELECT DISTINCT
-                    "clientId"
-               FROM
-                    unified_verified_deal
-               WHERE
-                    "providerId" = $1
-                    AND "clientId" IS NOT NULL
+            r#"
+            SELECT DISTINCT
+                "clientId"
+            FROM
+                unified_verified_deal
+            WHERE
+                "providerId" = $1
+                AND "clientId" IS NOT NULL
             "#,
             provider_id.as_str()
         )

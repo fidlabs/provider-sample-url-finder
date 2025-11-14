@@ -75,12 +75,10 @@ pub async fn discover_url(
             }
         };
 
-    if endpoints.is_none() {
+    let Some(endpoints) = endpoints else {
         result.result_code = result_code.to_string();
         return result;
-    }
-
-    let endpoints = endpoints.unwrap();
+    };
 
     let piece_ids =
         match deal_service::get_piece_ids_by_provider(deal_repo, &provider_id, client_id.as_ref())

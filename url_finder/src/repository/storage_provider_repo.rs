@@ -33,22 +33,6 @@ impl StorageProviderRepository {
         Self { pool }
     }
 
-    #[allow(dead_code)]
-    pub async fn insert_if_not_exists(&self, provider_id: &ProviderId) -> Result<()> {
-        sqlx::query!(
-            r#"INSERT INTO
-                    storage_providers (provider_id)
-               VALUES
-                    ($1)
-               ON CONFLICT DO NOTHING
-            "#,
-            provider_id as &ProviderId
-        )
-        .execute(&self.pool)
-        .await?;
-        Ok(())
-    }
-
     pub async fn insert_batch_if_not_exists(&self, provider_ids: &[ProviderId]) -> Result<usize> {
         if provider_ids.is_empty() {
             return Ok(0);
