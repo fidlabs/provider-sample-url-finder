@@ -24,7 +24,6 @@ pub struct Provider {
     pub provider_id: Option<String>,
 }
 
-// TODO: consider using ProviderId directly instead of String
 impl DealRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
