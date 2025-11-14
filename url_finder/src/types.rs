@@ -2,9 +2,10 @@ use color_eyre::{eyre::eyre, Result};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use sqlx::error::BoxDynError;
-use sqlx::postgres::{PgArgumentBuffer, PgTypeInfo, PgValueRef};
+use sqlx::postgres::{PgArgumentBuffer, PgHasArrayType, PgTypeInfo, PgValueRef};
 use sqlx::{Decode, Encode, Postgres, Type};
 use std::fmt;
+use std::str::FromStr;
 use utoipa::ToSchema;
 
 #[derive(Deserialize)]
@@ -223,6 +224,208 @@ impl<'q> Encode<'q, Postgres> for ClientId {
         buf: &mut PgArgumentBuffer,
     ) -> Result<sqlx::encode::IsNull, BoxDynError> {
         <String as Encode<Postgres>>::encode_by_ref(&self.0, buf)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub enum DiscoveryType {
+    Provider,
+    ProviderClient,
+}
+
+impl fmt::Display for DiscoveryType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Provider => write!(f, "Provider"),
+            Self::ProviderClient => write!(f, "ProviderClient"),
+        }
+    }
+}
+
+impl FromStr for DiscoveryType {
+    type Err = color_eyre::eyre::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Provider" => Ok(Self::Provider),
+            "ProviderClient" => Ok(Self::ProviderClient),
+            _ => Err(color_eyre::eyre::eyre!("Invalid discovery type: {}", s)),
+        }
+    }
+}
+
+impl Type<Postgres> for DiscoveryType {
+    fn type_info() -> PgTypeInfo {
+        PgTypeInfo::with_name("discovery_type")
+    }
+}
+
+impl<'r> Decode<'r, Postgres> for DiscoveryType {
+    fn decode(value: PgValueRef<'r>) -> Result<Self, BoxDynError> {
+        let s = <&str as Decode<Postgres>>::decode(value)?;
+        s.parse().map_err(Into::into)
+    }
+}
+
+impl<'q> Encode<'q, Postgres> for DiscoveryType {
+    fn encode_by_ref(
+        &self,
+        buf: &mut PgArgumentBuffer,
+    ) -> Result<sqlx::encode::IsNull, BoxDynError> {
+        <&str as Encode<Postgres>>::encode_by_ref(&self.to_string().as_str(), buf)
+    }
+}
+
+impl PgHasArrayType for DiscoveryType {
+    fn array_type_info() -> PgTypeInfo {
+        PgTypeInfo::with_name("_discovery_type")
+    }
+}
+
+/// Result codes for URL discovery operations
+#[derive(Debug, Serialize, Deserialize, ToSchema, Clone, PartialEq)]
+pub enum ResultCode {
+    NoCidContactData,
+    MissingAddrFromCidContact,
+    MissingHttpAddrFromCidContact,
+    FailedToGetWorkingUrl,
+    NoDealsFound,
+    TimedOut,
+    Success,
+    JobCreated,
+    Error,
+}
+
+impl fmt::Display for ResultCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            ResultCode::NoCidContactData => "NoCidContactData",
+            ResultCode::MissingAddrFromCidContact => "MissingAddrFromCidContact",
+            ResultCode::MissingHttpAddrFromCidContact => "MissingHttpAddrFromCidContact",
+            ResultCode::FailedToGetWorkingUrl => "FailedToGetWorkingUrl",
+            ResultCode::NoDealsFound => "NoDealsFound",
+            ResultCode::TimedOut => "TimedOut",
+            ResultCode::Success => "Success",
+            ResultCode::JobCreated => "JobCreated",
+            ResultCode::Error => "Error",
+        };
+        write!(f, "{s}")
+    }
+}
+
+impl FromStr for ResultCode {
+    type Err = color_eyre::eyre::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "NoCidContactData" => Ok(Self::NoCidContactData),
+            "MissingAddrFromCidContact" => Ok(Self::MissingAddrFromCidContact),
+            "MissingHttpAddrFromCidContact" => Ok(Self::MissingHttpAddrFromCidContact),
+            "FailedToGetWorkingUrl" => Ok(Self::FailedToGetWorkingUrl),
+            "NoDealsFound" => Ok(Self::NoDealsFound),
+            "TimedOut" => Ok(Self::TimedOut),
+            "Success" => Ok(Self::Success),
+            "JobCreated" => Ok(Self::JobCreated),
+            "Error" => Ok(Self::Error),
+            _ => Err(color_eyre::eyre::eyre!("Invalid result code: {}", s)),
+        }
+    }
+}
+
+impl Type<Postgres> for ResultCode {
+    fn type_info() -> PgTypeInfo {
+        PgTypeInfo::with_name("result_code")
+    }
+}
+
+impl<'r> Decode<'r, Postgres> for ResultCode {
+    fn decode(value: PgValueRef<'r>) -> Result<Self, BoxDynError> {
+        let s = <&str as Decode<Postgres>>::decode(value)?;
+        s.parse().map_err(Into::into)
+    }
+}
+
+impl<'q> Encode<'q, Postgres> for ResultCode {
+    fn encode_by_ref(
+        &self,
+        buf: &mut PgArgumentBuffer,
+    ) -> Result<sqlx::encode::IsNull, BoxDynError> {
+        <&str as Encode<Postgres>>::encode_by_ref(&self.to_string().as_str(), buf)
+    }
+}
+
+impl PgHasArrayType for ResultCode {
+    fn array_type_info() -> PgTypeInfo {
+        PgTypeInfo::with_name("_result_code")
+    }
+}
+
+#[allow(clippy::enum_variant_names)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, Clone, PartialEq)]
+pub enum ErrorCode {
+    NoProviderOrClient,
+    NoProvidersFound,
+    FailedToRetrieveCidContactData,
+    FailedToGetPeerId,
+    FailedToGetDeals,
+    FailedToGetPeerIdFromCurio,
+}
+
+impl fmt::Display for ErrorCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            ErrorCode::NoProviderOrClient => "NoProviderOrClient",
+            ErrorCode::NoProvidersFound => "NoProvidersFound",
+            ErrorCode::FailedToRetrieveCidContactData => "FailedToRetrieveCidContactData",
+            ErrorCode::FailedToGetPeerId => "FailedToGetPeerId",
+            ErrorCode::FailedToGetDeals => "FailedToGetDeals",
+            ErrorCode::FailedToGetPeerIdFromCurio => "FailedToGetPeerIdFromCurio",
+        };
+        write!(f, "{s}")
+    }
+}
+
+impl FromStr for ErrorCode {
+    type Err = color_eyre::eyre::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "NoProviderOrClient" => Ok(Self::NoProviderOrClient),
+            "NoProvidersFound" => Ok(Self::NoProvidersFound),
+            "FailedToRetrieveCidContactData" => Ok(Self::FailedToRetrieveCidContactData),
+            "FailedToGetPeerId" => Ok(Self::FailedToGetPeerId),
+            "FailedToGetDeals" => Ok(Self::FailedToGetDeals),
+            "FailedToGetPeerIdFromCurio" => Ok(Self::FailedToGetPeerIdFromCurio),
+            _ => Err(color_eyre::eyre::eyre!("Invalid error code: {}", s)),
+        }
+    }
+}
+
+impl Type<Postgres> for ErrorCode {
+    fn type_info() -> PgTypeInfo {
+        PgTypeInfo::with_name("error_code")
+    }
+}
+
+impl<'r> Decode<'r, Postgres> for ErrorCode {
+    fn decode(value: PgValueRef<'r>) -> Result<Self, BoxDynError> {
+        let s = <&str as Decode<Postgres>>::decode(value)?;
+        s.parse().map_err(Into::into)
+    }
+}
+
+impl<'q> Encode<'q, Postgres> for ErrorCode {
+    fn encode_by_ref(
+        &self,
+        buf: &mut PgArgumentBuffer,
+    ) -> Result<sqlx::encode::IsNull, BoxDynError> {
+        <&str as Encode<Postgres>>::encode_by_ref(&self.to_string().as_str(), buf)
+    }
+}
+
+impl PgHasArrayType for ErrorCode {
+    fn array_type_info() -> PgTypeInfo {
+        PgTypeInfo::with_name("_error_code")
     }
 }
 

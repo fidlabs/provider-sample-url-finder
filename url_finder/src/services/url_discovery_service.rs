@@ -2,8 +2,10 @@ use crate::{
     provider_endpoints,
     repository::DealRepository,
     services::deal_service,
-    types::{ClientAddress, ClientId, ProviderAddress, ProviderId},
-    url_tester, ResultCode,
+    types::{
+        ClientAddress, ClientId, DiscoveryType, ErrorCode, ProviderAddress, ProviderId, ResultCode,
+    },
+    url_tester,
 };
 use tracing::error;
 use uuid::Uuid;
@@ -13,11 +15,11 @@ pub struct UrlDiscoveryResult {
     pub id: Uuid,
     pub provider_id: ProviderId,
     pub client_id: Option<ClientId>,
-    pub result_type: String,
+    pub result_type: DiscoveryType,
     pub working_url: Option<String>,
     pub retrievability_percent: f64,
-    pub result_code: String,
-    pub error_code: Option<String>,
+    pub result_code: ResultCode,
+    pub error_code: Option<ErrorCode>,
 }
 
 impl UrlDiscoveryResult {
@@ -26,10 +28,10 @@ impl UrlDiscoveryResult {
             id: Uuid::new_v4(),
             provider_id,
             client_id: None,
-            result_type: "Provider".to_string(),
+            result_type: DiscoveryType::Provider,
             working_url: None,
             retrievability_percent: 0.0,
-            result_code: ResultCode::Error.to_string(),
+            result_code: ResultCode::Error,
             error_code: None,
         }
     }
@@ -39,10 +41,10 @@ impl UrlDiscoveryResult {
             id: Uuid::new_v4(),
             provider_id,
             client_id: Some(client_id),
-            result_type: "ProviderClient".to_string(),
+            result_type: DiscoveryType::ProviderClient,
             working_url: None,
             retrievability_percent: 0.0,
-            result_code: ResultCode::Error.to_string(),
+            result_code: ResultCode::Error,
             error_code: None,
         }
     }
@@ -69,14 +71,14 @@ pub async fn discover_url(
                     "Failed to get provider endpoints for {}: {:?}",
                     provider_address, e
                 );
-                result.result_code = ResultCode::Error.to_string();
-                result.error_code = Some(format!("{:?}", e));
+                result.result_code = ResultCode::Error;
+                result.error_code = Some(e);
                 return result;
             }
         };
 
     let Some(endpoints) = endpoints else {
-        result.result_code = result_code.to_string();
+        result.result_code = result_code;
         return result;
     };
 
@@ -90,14 +92,14 @@ pub async fn discover_url(
                     "Failed to get piece ids for {} {:?}: {:?}",
                     provider_id, client_id, e
                 );
-                result.result_code = ResultCode::Error.to_string();
-                result.error_code = Some(format!("{:?}", e));
+                result.result_code = ResultCode::Error;
+                result.error_code = Some(ErrorCode::FailedToGetDeals);
                 return result;
             }
         };
 
     if piece_ids.is_empty() {
-        result.result_code = ResultCode::NoDealsFound.to_string();
+        result.result_code = ResultCode::NoDealsFound;
         return result;
     }
 
@@ -107,9 +109,9 @@ pub async fn discover_url(
     result.working_url = working_url.clone();
     result.retrievability_percent = retrievability_percent;
     result.result_code = if working_url.is_some() {
-        ResultCode::Success.to_string()
+        ResultCode::Success
     } else {
-        ResultCode::FailedToGetWorkingUrl.to_string()
+        ResultCode::FailedToGetWorkingUrl
     };
 
     result

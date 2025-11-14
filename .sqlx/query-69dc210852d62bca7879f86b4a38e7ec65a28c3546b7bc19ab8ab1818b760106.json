@@ -1,0 +1,83 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO\n                    url_results (id, provider_id, client_id, result_type, working_url, retrievability_percent, result_code, error_code, tested_at)\n               SELECT\n                    UNNEST($1::uuid[]),\n                    UNNEST($2::text[]),\n                    UNNEST($3::text[]),\n                    UNNEST($4::discovery_type[]),\n                    UNNEST($5::text[]),\n                    UNNEST($6::double precision[]),\n                    UNNEST($7::result_code[]),\n                    UNNEST($8::error_code[]),\n                    UNNEST($9::timestamptz[])\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "UuidArray",
+        "TextArray",
+        "TextArray",
+        {
+          "Custom": {
+            "name": "discovery_type[]",
+            "kind": {
+              "Array": {
+                "Custom": {
+                  "name": "discovery_type",
+                  "kind": {
+                    "Enum": [
+                      "Provider",
+                      "ProviderClient"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "TextArray",
+        "Float8Array",
+        {
+          "Custom": {
+            "name": "result_code[]",
+            "kind": {
+              "Array": {
+                "Custom": {
+                  "name": "result_code",
+                  "kind": {
+                    "Enum": [
+                      "NoCidContactData",
+                      "MissingAddrFromCidContact",
+                      "MissingHttpAddrFromCidContact",
+                      "FailedToGetWorkingUrl",
+                      "NoDealsFound",
+                      "TimedOut",
+                      "Success",
+                      "JobCreated",
+                      "Error"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "Custom": {
+            "name": "error_code[]",
+            "kind": {
+              "Array": {
+                "Custom": {
+                  "name": "error_code",
+                  "kind": {
+                    "Enum": [
+                      "NoProviderOrClient",
+                      "NoProvidersFound",
+                      "FailedToRetrieveCidContactData",
+                      "FailedToGetPeerId",
+                      "FailedToGetDeals"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "TimestamptzArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "69dc210852d62bca7879f86b4a38e7ec65a28c3546b7bc19ab8ab1818b760106"
+}

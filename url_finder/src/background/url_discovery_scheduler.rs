@@ -21,7 +21,7 @@ pub async fn run_url_discovery_scheduler(
     url_repo: Arc<UrlResultRepository>,
     deal_repo: Arc<DealRepository>,
 ) {
-    info!("Starting URL discovery scheduler");
+    info!("Starting URL discovery scheduler loop");
 
     loop {
         let interval = match schedule_url_discoveries(&sp_repo, &url_repo, &deal_repo).await {

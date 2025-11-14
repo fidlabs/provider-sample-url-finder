@@ -1,14 +1,36 @@
+CREATE TYPE discovery_type AS ENUM ('Provider', 'ProviderClient');
+
+CREATE TYPE result_code AS ENUM (
+    'NoCidContactData',
+    'MissingAddrFromCidContact',
+    'MissingHttpAddrFromCidContact',
+    'FailedToGetWorkingUrl',
+    'NoDealsFound',
+    'TimedOut',
+    'Success',
+    'JobCreated',
+    'Error'
+);
+
+CREATE TYPE error_code AS ENUM (
+    'NoProviderOrClient',
+    'NoProvidersFound',
+    'FailedToRetrieveCidContactData',
+    'FailedToGetPeerId',
+    'FailedToGetDeals'
+);
+
 CREATE TABLE url_results (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     provider_id VARCHAR(255) NOT NULL,
     client_id VARCHAR(255),
-    result_type VARCHAR(50) NOT NULL,
+    result_type discovery_type NOT NULL,
 
     working_url TEXT,
     retrievability_percent DOUBLE PRECISION NOT NULL DEFAULT 0.0,
 
-    result_code VARCHAR(100) NOT NULL,
-    error_code VARCHAR(100),
+    result_code result_code NOT NULL,
+    error_code error_code,
 
     tested_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
