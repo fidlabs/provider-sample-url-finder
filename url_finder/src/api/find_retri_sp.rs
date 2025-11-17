@@ -120,6 +120,6 @@ pub async fn handle_find_retri_by_sp(
 
     Ok(ok_response(FindRetriBySpResponse {
         result: ResultCode::Success,
-        retrievability_percent: retrievability_percent.unwrap(),
+        retrievability_percent: retrievability_percent.unwrap_or(0.0),
     }))
 }

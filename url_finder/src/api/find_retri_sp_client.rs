@@ -136,6 +136,6 @@ pub async fn handle_find_retri_by_client_and_sp(
 
     Ok(ok_response(FindRetriByClientAndSpResponse {
         result: ResultCode::Success,
-        retrievability_percent: retrievability_percent.unwrap(),
+        retrievability_percent: retrievability_percent.unwrap_or(0.0),
     }))
 }

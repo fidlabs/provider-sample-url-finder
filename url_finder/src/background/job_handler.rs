@@ -290,7 +290,7 @@ async fn process_job(
         provider: provider.to_string(),
         client: client.map(|c| c.to_string()),
         working_url,
-        retrievability: retrievability_percent.unwrap(),
+        retrievability: retrievability_percent.unwrap_or(0.0),
         result: result_code,
     })
 }
