@@ -6,10 +6,17 @@ use tracing::debug;
 
 use crate::{config::CONFIG, types::ProviderAddress, utils::build_reqwest_retry_client};
 
+const LOTUS_RPC_MIN_RETRY_INTERVAL_MS: u64 = 10_000;
+const LOTUS_RPC_MAX_RETRY_INTERVAL_MS: u64 = 180_000;
+const LOTUS_RPC_TOTAL_TIMEOUT_MS: u64 = 250_000;
+
 pub async fn get_peer_id(address: &ProviderAddress) -> Result<String> {
     debug!("get_peer_id address: {}", address);
 
-    let client = build_reqwest_retry_client(10_000, 300_000);
+    let client = build_reqwest_retry_client(
+        LOTUS_RPC_MIN_RETRY_INTERVAL_MS,
+        LOTUS_RPC_MAX_RETRY_INTERVAL_MS,
+    );
     let res = client
         .post(&CONFIG.glif_url)
         .json(&json!({
@@ -18,7 +25,7 @@ pub async fn get_peer_id(address: &ProviderAddress) -> Result<String> {
             "method": "Filecoin.StateMinerInfo",
             "params": [address.as_str(), null]
         }))
-        .timeout(Duration::from_secs(30))
+        .timeout(Duration::from_millis(LOTUS_RPC_TOTAL_TIMEOUT_MS))
         .send()
         .await?;
 

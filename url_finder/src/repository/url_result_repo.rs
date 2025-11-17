@@ -35,25 +35,28 @@ impl UrlResultRepository {
             return Ok(0);
         }
 
-        let ids: Vec<Uuid> = results.iter().map(|r| r.id).collect();
-        let provider_ids: Vec<String> = results
-            .iter()
-            .map(|r| r.provider_id.as_str().to_string())
-            .collect();
-        let client_ids: Vec<Option<String>> = results
-            .iter()
-            .map(|r| r.client_id.as_ref().map(|c| c.as_str().to_string()))
-            .collect();
-        let result_types: Vec<DiscoveryType> =
-            results.iter().map(|r| r.result_type.clone()).collect();
-        let working_urls: Vec<Option<String>> =
-            results.iter().map(|r| r.working_url.clone()).collect();
-        let retrievability_percents: Vec<f64> =
-            results.iter().map(|r| r.retrievability_percent).collect();
-        let result_codes: Vec<ResultCode> = results.iter().map(|r| r.result_code.clone()).collect();
-        let error_codes: Vec<Option<ErrorCode>> =
-            results.iter().map(|r| r.error_code.clone()).collect();
-        let tested_ats: Vec<DateTime<Utc>> = results.iter().map(|r| r.tested_at).collect();
+        let len = results.len();
+        let mut ids: Vec<Uuid> = Vec::with_capacity(len);
+        let mut provider_ids: Vec<String> = Vec::with_capacity(len);
+        let mut client_ids: Vec<Option<String>> = Vec::with_capacity(len);
+        let mut result_types: Vec<DiscoveryType> = Vec::with_capacity(len);
+        let mut working_urls: Vec<Option<String>> = Vec::with_capacity(len);
+        let mut retrievability_percents: Vec<f64> = Vec::with_capacity(len);
+        let mut result_codes: Vec<ResultCode> = Vec::with_capacity(len);
+        let mut error_codes: Vec<Option<ErrorCode>> = Vec::with_capacity(len);
+        let mut tested_ats: Vec<DateTime<Utc>> = Vec::with_capacity(len);
+
+        for result in results {
+            ids.push(result.id);
+            provider_ids.push(result.provider_id.as_str().to_string());
+            client_ids.push(result.client_id.as_ref().map(|c| c.as_str().to_string()));
+            result_types.push(result.result_type.clone());
+            working_urls.push(result.working_url.clone());
+            retrievability_percents.push(result.retrievability_percent);
+            result_codes.push(result.result_code.clone());
+            error_codes.push(result.error_code.clone());
+            tested_ats.push(result.tested_at);
+        }
 
         let result = sqlx::query!(
             r#"INSERT INTO

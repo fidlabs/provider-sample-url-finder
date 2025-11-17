@@ -73,6 +73,7 @@ impl From<ProviderId> for ProviderAddress {
 
 impl From<ProviderAddress> for ProviderId {
     fn from(addr: ProviderAddress) -> Self {
+        // ProviderAddress is validated at construction time, unwrap is safe here
         Self(addr.0.strip_prefix("f0").unwrap().to_string())
     }
 }
@@ -170,6 +171,7 @@ impl From<ClientId> for ClientAddress {
 
 impl From<ClientAddress> for ClientId {
     fn from(addr: ClientAddress) -> Self {
+        // ClientAddress is validated at construction time, unwrap is safe here
         Self(addr.0.strip_prefix("f0").unwrap().to_string())
     }
 }

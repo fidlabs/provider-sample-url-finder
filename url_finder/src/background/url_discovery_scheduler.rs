@@ -131,7 +131,11 @@ async fn test_provider_with_clients(
     tasks.push(provider_task);
 
     for client_id in client_ids {
-        let permit = semaphore.clone().acquire_owned().await.unwrap();
+        let permit = semaphore
+            .clone()
+            .acquire_owned()
+            .await
+            .expect("Semaphore should never be closed");
         let provider_addr = provider_address.clone();
         let client_address: ClientAddress = client_id.into();
         let repo = deal_repo.clone();
@@ -146,5 +150,14 @@ async fn test_provider_with_clients(
 
     let results = join_all(tasks).await;
 
-    results.into_iter().filter_map(|r| r.ok()).collect()
+    results
+        .into_iter()
+        .filter_map(|r| {
+            r.map_err(|e| {
+                error!("URL discovery task panicked: {:?}", e);
+                e
+            })
+            .ok()
+        })
+        .collect()
 }

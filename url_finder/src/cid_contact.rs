@@ -6,6 +6,10 @@ use urlencoding::decode;
 
 use crate::utils::build_reqwest_retry_client;
 
+const CID_CONTACT_MIN_RETRY_INTERVAL_MS: u64 = 2_000;
+const CID_CONTACT_MAX_RETRY_INTERVAL_MS: u64 = 30_000;
+const CID_CONTACT_TOTAL_TIMEOUT_MS: u64 = 60_000;
+
 pub enum CidContactError {
     InvalidResponse,
     NoData,
@@ -21,7 +25,10 @@ impl fmt::Display for CidContactError {
 }
 
 pub async fn get_contact(peer_id: &str) -> Result<serde_json::Value, CidContactError> {
-    let client = build_reqwest_retry_client(2_000, 30_000);
+    let client = build_reqwest_retry_client(
+        CID_CONTACT_MIN_RETRY_INTERVAL_MS,
+        CID_CONTACT_MAX_RETRY_INTERVAL_MS,
+    );
     let url = format!("https://cid.contact/providers/{peer_id}");
 
     debug!("cid contact url: {:?}", url);
@@ -30,7 +37,7 @@ pub async fn get_contact(peer_id: &str) -> Result<serde_json::Value, CidContactE
         .get(&url)
         .header("Accept", "application/json")
         .header("User-Agent", "url-finder/0.1.0")
-        .timeout(Duration::from_secs(30))
+        .timeout(Duration::from_millis(CID_CONTACT_TOTAL_TIMEOUT_MS))
         .send()
         .await
         .map_err(|_| CidContactError::InvalidResponse)?;
