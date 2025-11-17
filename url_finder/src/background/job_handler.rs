@@ -4,11 +4,11 @@ use tokio::time::sleep;
 use tracing::{debug, info};
 
 use crate::{
-    provider_endpoints,
+    ErrorCode, Job, JobRepository, JobStatus, ResultCode, provider_endpoints,
     repository::DealRepository,
     services::deal_service,
     types::{ClientAddress, ClientId, ProviderAddress, ProviderId},
-    url_tester, ErrorCode, Job, JobRepository, JobStatus, ResultCode,
+    url_tester,
 };
 
 const LOOP_DELAY: Duration = Duration::from_secs(5);
@@ -197,7 +197,7 @@ async fn process_job_with_client(
             JobHandlerResult::ErrorResult(result) => error_results.push(result),
             JobHandlerResult::Skip(reason) => return JobHandlerResult::Skip(reason),
             JobHandlerResult::FailedJob(job_failed) => {
-                return JobHandlerResult::FailedJob(job_failed)
+                return JobHandlerResult::FailedJob(job_failed);
             }
             // should not happen here
             JobHandlerResult::MultipleResults(_, _) => continue,

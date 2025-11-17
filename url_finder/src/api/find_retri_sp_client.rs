@@ -13,10 +13,10 @@ use tracing::debug;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::{
-    provider_endpoints,
+    AppState, provider_endpoints,
     services::deal_service,
     types::{ClientAddress, ClientId, ProviderAddress, ProviderId},
-    url_tester, AppState,
+    url_tester,
 };
 
 use super::ResultCode;

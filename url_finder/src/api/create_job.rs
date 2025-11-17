@@ -10,9 +10,8 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::{
-    provider_endpoints,
+    AppState, provider_endpoints,
     types::{ClientAddress, ProviderAddress},
-    AppState,
 };
 
 use super::ResultCode;

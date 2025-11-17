@@ -10,8 +10,8 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::{
-    types::{ClientAddress, ProviderAddress},
     ErrorCode, ResultCode,
+    types::{ClientAddress, ProviderAddress},
 };
 
 #[derive(Clone, Serialize, ToSchema)]

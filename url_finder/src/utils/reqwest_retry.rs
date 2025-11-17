@@ -3,7 +3,7 @@ use std::time::Duration;
 use http::Extensions;
 use reqwest::{Client, Request, Response};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, Middleware, Next};
-use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
+use reqwest_retry::{RetryTransientMiddleware, policies::ExponentialBackoff};
 use retry_policies::Jitter;
 use tracing::Instrument;
 

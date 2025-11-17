@@ -30,7 +30,7 @@ sol! {
     function getPeerData(uint64 minerID) view returns (PeerData);
 }
 
-pub async fn valid_curio_provider(address: &str) -> Result<Option<String>> {
+pub async fn valid_curio_provider(address: &ProviderAddress) -> Result<Option<String>> {
     let rpc_url = &CONFIG.glif_url;
 
     let rpc_provider = ProviderBuilder::new()
@@ -41,6 +41,7 @@ pub async fn valid_curio_provider(address: &str) -> Result<Option<String>> {
     let miner_peer_id_contract: Address = address!("0x14183aD016Ddc83D638425D6328009aa390339Ce");
 
     let miner_id = address
+        .as_str()
         .strip_prefix("f")
         .ok_or_else(|| eyre!("Address does not start with 'f': {}", address))?
         .parse::<u64>()

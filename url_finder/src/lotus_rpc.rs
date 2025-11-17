@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use color_eyre::{eyre::eyre, Result};
+use color_eyre::{Result, eyre::eyre};
 use serde_json::json;
 use tracing::debug;
 

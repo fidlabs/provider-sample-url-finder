@@ -1,4 +1,4 @@
-use color_eyre::{eyre::eyre, Result};
+use color_eyre::{Result, eyre::eyre};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use sqlx::error::BoxDynError;

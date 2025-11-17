@@ -12,10 +12,10 @@ use tracing::debug;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::{
-    provider_endpoints,
+    AppState, ResultCode, provider_endpoints,
     services::deal_service,
     types::{ClientAddress, ClientId, ProviderAddress, ProviderId},
-    url_tester, AppState, ResultCode,
+    url_tester,
 };
 
 #[derive(Deserialize, ToSchema, IntoParams)]
