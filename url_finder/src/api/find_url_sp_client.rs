@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use tracing::debug;
 use utoipa::{IntoParams, ToSchema};
 
-use crate::{provider_endpoints, services::deal_service, url_tester, AppState, ResultCode};
+use crate::{AppState, ResultCode, provider_endpoints, services::deal_service, url_tester};
 
 #[derive(Deserialize, ToSchema, IntoParams)]
 pub struct FindUrlSpClientPath {

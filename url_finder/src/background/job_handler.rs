@@ -4,8 +4,8 @@ use tokio::time::sleep;
 use tracing::{debug, info};
 
 use crate::{
-    provider_endpoints, repository::DealRepository, services::deal_service, url_tester, ErrorCode,
-    Job, JobRepository, JobStatus, ResultCode,
+    ErrorCode, Job, JobRepository, JobStatus, ResultCode, provider_endpoints,
+    repository::DealRepository, services::deal_service, url_tester,
 };
 
 const LOOP_DELAY: Duration = Duration::from_secs(5);
