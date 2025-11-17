@@ -25,7 +25,7 @@ RUN apt-get update && apt-get -y install ca-certificates libc6 iputils-ping curl
 
 COPY --from=build /app/target/release/url_finder /usr/local/bin/
 
-RUN adduser --system --group --no-create-home finderuser
+RUN useradd --system --no-create-home --shell /usr/sbin/nologin finderuser
 USER finderuser
 
 CMD ["url_finder"]
