@@ -36,8 +36,5 @@ async fn discover_and_sync_providers(
 
     debug!("Found {} distinct providers in dmob", providers.len());
 
-    match sp_repo.insert_batch_if_not_exists(&providers).await {
-        Ok(count) => Ok(count),
-        Err(e) => Err(e),
-    }
+    sp_repo.insert_batch_if_not_exists(&providers).await
 }

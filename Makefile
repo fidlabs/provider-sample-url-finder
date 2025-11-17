@@ -3,8 +3,8 @@ include .env
 export
 
 .PHONY: check format lint build run stop logs prepare
-.PHONY: run-db stop-db clean-db clear-db logs-db
-.PHONY: migrate-up migrate-down migrate-status init-dev init-dev-db
+.PHONY: run-db stop-db clean-db clear-db logs-db exec-db
+.PHONY: migration migrate-up migrate-down migrate-status init-dev init-dev-db
 
 check:
 	@-cargo fmt -- --check

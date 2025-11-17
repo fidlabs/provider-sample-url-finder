@@ -22,6 +22,7 @@ impl Middleware for HttpRequestContextLogger {
         let method = req.method().as_str();
         let service = req.url().host_str().unwrap_or("unknown");
 
+        // TODO: At some point we should change WARN to INFO after we verify this is working as intended.
         let span = tracing::warn_span!(
             "http_retry_request",
             method = %method,

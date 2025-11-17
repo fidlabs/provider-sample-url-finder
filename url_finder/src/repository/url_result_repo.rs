@@ -59,15 +59,18 @@ impl UrlResultRepository {
             r#"INSERT INTO
                     url_results (id, provider_id, client_id, result_type, working_url, retrievability_percent, result_code, error_code, tested_at)
                SELECT
-                    UNNEST($1::uuid[]),
-                    UNNEST($2::text[]),
-                    UNNEST($3::text[]),
-                    UNNEST($4::discovery_type[]),
-                    UNNEST($5::text[]),
-                    UNNEST($6::double precision[]),
-                    UNNEST($7::result_code[]),
-                    UNNEST($8::error_code[]),
-                    UNNEST($9::timestamptz[])
+                    a1, a2, a3, a4, a5, a6, a7, a8, a9
+               FROM UNNEST(
+                    $1::uuid[],
+                    $2::text[],
+                    $3::text[],
+                    $4::discovery_type[],
+                    $5::text[],
+                    $6::double precision[],
+                    $7::result_code[],
+                    $8::error_code[],
+                    $9::timestamptz[]
+               ) AS t(a1, a2, a3, a4, a5, a6, a7, a8, a9)
             "#,
             &ids as &[Uuid],
             &provider_ids as &[String],

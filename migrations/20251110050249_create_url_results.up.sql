@@ -27,7 +27,7 @@ CREATE TABLE url_results (
     result_type discovery_type NOT NULL,
 
     working_url TEXT,
-    retrievability_percent DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    retrievability_percent NUMERIC(5, 2) NOT NULL DEFAULT 0.0 CHECK (retrievability_percent >= 0.0 AND retrievability_percent <= 100.0),
 
     result_code result_code NOT NULL,
     error_code error_code,
