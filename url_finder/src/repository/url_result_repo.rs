@@ -88,6 +88,6 @@ impl UrlResultRepository {
         .execute(&self.pool)
         .await?;
 
-        Ok(result.rows_affected() as usize)
+        Ok(result.rows_affected().try_into()?)
     }
 }

@@ -104,10 +104,11 @@ pub async fn discover_url(
     }
 
     let urls = deal_service::get_piece_url(endpoints, piece_ids).await;
-    let (working_url, retrievability_percent) = url_tester::get_retrivability_with_head(urls).await;
+    let (working_url, retrievability_percent) =
+        url_tester::check_retrievability_with_get(urls, true).await;
 
     result.working_url = working_url.clone();
-    result.retrievability_percent = retrievability_percent;
+    result.retrievability_percent = retrievability_percent.unwrap_or(0.0);
     result.result_code = if working_url.is_some() {
         ResultCode::Success
     } else {

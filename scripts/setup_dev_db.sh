@@ -15,7 +15,6 @@ if [ -z "$DATABASE_URL" ]; then
 fi
 
 echo "Setting up development database..."
-echo "Database: $DATABASE_URL"
 
 # Create unified_verified_deal table (matches DMOB schema)
 psql "$DATABASE_URL" <<EOF

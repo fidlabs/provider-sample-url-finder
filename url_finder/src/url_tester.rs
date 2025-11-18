@@ -193,7 +193,7 @@ pub async fn check_retrievability_with_get(
         0.0
     };
 
-    debug!(
+    info!(
         "Successfully retrieved URLs: {} out of {} ({:.2}%)",
         success, total, retri_percentage
     );
