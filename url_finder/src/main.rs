@@ -33,6 +33,7 @@ mod cid_contact;
 mod config;
 mod deal_repo;
 mod deal_service;
+mod http_client;
 mod lotus_rpc;
 mod multiaddr_parser;
 mod pix_filspark;
