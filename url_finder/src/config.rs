@@ -11,6 +11,9 @@ pub struct Config {
     pub log_level: String,
     pub glif_url: String,
     pub cid_contact_url: String,
+    pub proxy_url: Option<String>,
+    pub proxy_user: Option<String>,
+    pub proxy_password: Option<String>,
 }
 
 impl Config {
@@ -32,6 +35,9 @@ impl Config {
             glif_url: env::var("GLIF_URL").unwrap_or("https://api.node.glif.io/rpc/v1".to_string()),
             cid_contact_url: env::var("CID_CONTACT_URL")
                 .unwrap_or("https://cid.contact".to_string()),
+            proxy_url: env::var("PROXY_URL").unwrap_or("US".to_string()).into(),
+            proxy_user: env::var("PROXY_USER").ok(),
+            proxy_password: env::var("PROXY_PASSWORD").ok(),
         })
     }
 
@@ -43,6 +49,9 @@ impl Config {
             log_level: "info".to_string(),
             glif_url,
             cid_contact_url,
+            proxy_password: None,
+            proxy_url: None,
+            proxy_user: None,
         }
     }
 }

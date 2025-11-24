@@ -9,7 +9,8 @@ use tracing::{debug, info};
 
 const FILTER_CONCURENCY_LIMIT: usize = 5;
 const RETRI_CONCURENCY_LIMIT: usize = 20;
-const RETRI_TIMEOUT_SEC: u64 = 15;
+
+use crate::http_client::build_client;
 
 /// return first working url through head requests
 /// let's keep both head and get versions for now
@@ -62,10 +63,7 @@ pub async fn filter_working_with_head(urls: Vec<String>) -> Option<String> {
 /// let's keep both head and get versions for now
 #[allow(dead_code)]
 pub async fn get_retrivability_with_head(urls: Vec<String>) -> (Option<String>, f64) {
-    let client = Client::builder()
-        .timeout(std::time::Duration::from_secs(RETRI_TIMEOUT_SEC))
-        .build()
-        .unwrap();
+    let client: Client = build_client().unwrap();
     let success_counter = Arc::new(AtomicUsize::new(0));
     let total_counter = Arc::new(AtomicUsize::new(0));
 
@@ -124,10 +122,7 @@ pub async fn check_retrievability_with_get(
     urls: Vec<String>,
     with_stats: bool,
 ) -> (Option<String>, Option<f64>) {
-    let client = Client::builder()
-        .timeout(std::time::Duration::from_secs(RETRI_TIMEOUT_SEC))
-        .build()
-        .expect("Failed to build reqwest client");
+    let client = build_client().unwrap();
 
     let success_counter = Arc::new(AtomicUsize::new(0));
     let total_counter = Arc::new(AtomicUsize::new(0));
