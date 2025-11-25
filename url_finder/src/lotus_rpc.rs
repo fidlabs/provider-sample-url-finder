@@ -4,13 +4,13 @@ use color_eyre::{Result, eyre::eyre};
 use serde_json::json;
 use tracing::debug;
 
-use crate::{config::CONFIG, types::ProviderAddress, utils::build_reqwest_retry_client};
+use crate::{config::Config, types::ProviderAddress, utils::build_reqwest_retry_client};
 
 const LOTUS_RPC_MIN_RETRY_INTERVAL_MS: u64 = 10_000;
 const LOTUS_RPC_MAX_RETRY_INTERVAL_MS: u64 = 180_000;
 const LOTUS_RPC_TOTAL_TIMEOUT_MS: u64 = 250_000;
 
-pub async fn get_peer_id(address: &ProviderAddress) -> Result<String> {
+pub async fn get_peer_id(config: &Config, address: &ProviderAddress) -> Result<String> {
     debug!("get_peer_id address: {}", address);
 
     let client = build_reqwest_retry_client(
@@ -18,7 +18,7 @@ pub async fn get_peer_id(address: &ProviderAddress) -> Result<String> {
         LOTUS_RPC_MAX_RETRY_INTERVAL_MS,
     );
     let res = client
-        .post(&CONFIG.glif_url)
+        .post(&config.glif_url)
         .json(&json!({
             "jsonrpc": "2.0",
             "id": 1,

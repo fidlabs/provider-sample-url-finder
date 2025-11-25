@@ -38,4 +38,7 @@ jobs:
         uses: actions-rust-lang/rustfmt@v1
 
       - name: Run Clippy
-        run: cargo clippy
+        run: SQLX_OFFLINE=true cargo clippy --workspace
+
+      - name: Run Tests
+        run: SQLX_OFFLINE=true cargo test --workspace

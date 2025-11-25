@@ -4,11 +4,9 @@ use axum::{
     Router,
     body::Body,
     http::Response,
-    middleware,
     response::IntoResponse,
     routing::{get, post},
 };
-use common::api_response::*;
 use tower_governor::{
     GovernorError, GovernorLayer, governor::GovernorConfigBuilder,
     key_extractor::SmartIpKeyExtractor,
@@ -16,44 +14,44 @@ use tower_governor::{
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
-use crate::{AppState, api::*};
+use crate::{AppState, api::*, api_response::*};
 
 fn too_many_requests_error_handler(error: GovernorError) -> Response<Body> {
-    tracing::error!("Rate limit error: {:?}", error);
-
     match error {
         GovernorError::TooManyRequests { .. } => {
+            tracing::warn!("Rate limit hit: {:?}", error);
             too_many_requests("Rate limit exceeded").into_response()
         }
-        _ => internal_server_error("Rate limit error").into_response(),
+        _ => {
+            tracing::error!("Rate limit error: {:?}", error);
+            internal_server_error("Rate limit error").into_response()
+        }
     }
 }
 
-pub fn create_routes(app_state: Arc<AppState>) -> Router<Arc<AppState>> {
+pub fn create_routes() -> Router<Arc<AppState>> {
     // more strict rate limiting for the sync routes
-    let governor_secure = Arc::new(
+    let governor_secure_config = Arc::new(
         GovernorConfigBuilder::default()
             .per_millisecond(30)
             .burst_size(30)
             .key_extractor(SmartIpKeyExtractor)
-            .error_handler(too_many_requests_error_handler)
             .finish()
             .unwrap(),
     );
 
     // less strict rate limiting for the async routes that will have internal queue anyway
-    let governor_async = Arc::new(
+    let governor_async_config = Arc::new(
         GovernorConfigBuilder::default()
             .per_millisecond(30)
             .burst_size(30)
             .key_extractor(SmartIpKeyExtractor)
-            .error_handler(too_many_requests_error_handler)
             .finish()
             .unwrap(),
     );
 
-    let governor_secure_limiter = governor_secure.limiter().clone();
-    let governor_async_limiter = governor_async.limiter().clone();
+    let governor_secure_limiter = governor_secure_config.limiter().clone();
+    let governor_async_limiter = governor_async_config.limiter().clone();
 
     let interval = Duration::from_secs(60);
 
@@ -79,44 +77,43 @@ pub fn create_routes(app_state: Arc<AppState>) -> Router<Arc<AppState>> {
     let swagger_routes = SwaggerUi::new("/").url("/api-doc/openapi.json", ApiDoc::openapi());
 
     let sync_routes = Router::new()
-        .route("/url/find/:provider", get(handle_find_url_sp))
+        .route("/url/find/{provider}", get(handle_find_url_sp))
         .route(
-            "/url/find/:provider/:client",
+            "/url/find/{provider}/{client}",
             get(handle_find_url_sp_client),
         )
         .route(
-            "/url/retrievability/:provider/:client",
+            "/url/retrievability/{provider}/{client}",
             get(handle_find_retri_by_client_and_sp),
         )
         .route(
-            "/url/retrievability/:provider",
+            "/url/retrievability/{provider}",
             get(handle_find_retri_by_sp),
         )
-        .route("/url/client/:client", get(handle_find_client))
-        .layer(middleware::from_fn_with_state(
-            app_state.clone(),
-            cache_middleware,
-        ))
-        .layer(GovernorLayer {
-            config: governor_secure.clone(),
-        });
+        .route("/url/client/{client}", get(handle_find_client))
+        .layer(
+            GovernorLayer::new(governor_secure_config.clone())
+                .error_handler(too_many_requests_error_handler),
+        );
 
     let async_routes = Router::new()
-        .route("/jobs/:id", get(handle_get_job))
+        .route("/jobs/{id}", get(handle_get_job))
         .route("/jobs", post(handle_create_job))
-        .layer(GovernorLayer {
-            config: governor_async.clone(),
-        });
+        .layer(
+            GovernorLayer::new(governor_async_config.clone())
+                .error_handler(too_many_requests_error_handler),
+        );
 
     let healthcheck_route = Router::new()
         .route("/healthcheck", get(handle_healthcheck))
-        .layer(GovernorLayer {
-            config: governor_secure.clone(),
-        });
+        .layer(
+            GovernorLayer::new(governor_secure_config.clone())
+                .error_handler(too_many_requests_error_handler),
+        );
 
     Router::new()
         .merge(swagger_routes)
         .merge(sync_routes)
         .merge(async_routes)
-        .merge(healthcheck_route.clone())
+        .merge(healthcheck_route)
 }

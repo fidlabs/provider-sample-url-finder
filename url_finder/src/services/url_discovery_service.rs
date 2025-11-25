@@ -1,4 +1,5 @@
 use crate::{
+    config::Config,
     provider_endpoints,
     repository::DealRepository,
     services::deal_service,
@@ -7,7 +8,7 @@ use crate::{
     },
     url_tester,
 };
-use tracing::error;
+use tracing::{debug, error};
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -51,6 +52,7 @@ impl UrlDiscoveryResult {
 }
 
 pub async fn discover_url(
+    config: &Config,
     provider_address: &ProviderAddress,
     client_address: Option<ClientAddress>,
     deal_repo: &DealRepository,
@@ -58,13 +60,19 @@ pub async fn discover_url(
     let provider_id: ProviderId = provider_address.clone().into();
     let client_id: Option<ClientId> = client_address.clone().map(|c| c.into());
 
+    tracing::info!(
+        "discover_url called for provider={}, client={:?}",
+        provider_address,
+        client_address
+    );
+
     let mut result = match &client_id {
         Some(c) => UrlDiscoveryResult::new_provider_client(provider_id.clone(), c.clone()),
         None => UrlDiscoveryResult::new_provider_only(provider_id.clone()),
     };
 
     let (result_code, endpoints) =
-        match provider_endpoints::get_provider_endpoints(provider_address).await {
+        match provider_endpoints::get_provider_endpoints(config, provider_address).await {
             Ok((code, eps)) => (code, eps),
             Err(e) => {
                 error!(
@@ -103,9 +111,19 @@ pub async fn discover_url(
         return result;
     }
 
-    let urls = deal_service::get_piece_url(endpoints, piece_ids).await;
+    let urls = deal_service::get_piece_url(endpoints.clone(), piece_ids).await;
+    debug!(
+        "Built {} URLs to test from endpoints: {:?}",
+        urls.len(),
+        endpoints
+    );
+    debug!("Testing URLs: {:?}", urls);
     let (working_url, retrievability_percent) =
         url_tester::check_retrievability_with_get(urls, true).await;
+    debug!(
+        "URL test result - working_url: {:?}, retrievability: {:?}",
+        working_url, retrievability_percent
+    );
 
     result.working_url = working_url.clone();
     result.retrievability_percent = retrievability_percent.unwrap_or(0.0);

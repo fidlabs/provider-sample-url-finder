@@ -1,12 +1,12 @@
 use std::{sync::Arc, time::Duration};
 
+use crate::api_response::*;
 use axum::{
     debug_handler,
     extract::{Path, State},
 };
 use axum_extra::extract::WithRejection;
 use color_eyre::Result;
-use common::api_response::*;
 use serde::{Deserialize, Serialize};
 use tokio::time::timeout;
 use tracing::debug;
@@ -70,7 +70,7 @@ pub async fn handle_find_client(
 
     // Parse and validate client address
     let client_address = ClientAddress::new(path.client.clone())
-        .map_err(|e| bad_request(format!("Invalid client address: {}", e)))?;
+        .map_err(|e| bad_request(format!("Invalid client address: {e}")))?;
 
     let providers =
         match deal_service::get_distinct_providers_by_client(&state.deal_repo, &client_address)
@@ -83,9 +83,9 @@ pub async fn handle_find_client(
                     &path.client, e
                 );
 
+                let client = &path.client;
                 return Err(internal_server_error(format!(
-                    "Failed to get providers for client {0}",
-                    path.client
+                    "Failed to get providers for client {client}"
                 )));
             }
         };
@@ -104,7 +104,7 @@ pub async fn handle_find_client(
 
     for provider in providers {
         let (result_code, endpoints) =
-            match provider_endpoints::get_provider_endpoints(&provider).await {
+            match provider_endpoints::get_provider_endpoints(&state.config, &provider).await {
                 Ok(endpoints) => endpoints,
                 Err(e) => return Err(internal_server_error(e.to_string())),
             };
