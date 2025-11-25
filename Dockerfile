@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.5
-FROM lukemathwalker/cargo-chef:latest-rust-1.90.0-slim-bullseye AS base
+FROM lukemathwalker/cargo-chef:latest-rust-1.91.0-slim-trixie AS base
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends build-essential libssl-dev pkg-config curl && \
@@ -20,12 +20,12 @@ RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
 RUN cargo build --release --bins
 
-FROM debian:bullseye-slim as run
+FROM debian:trixie-slim as run
 RUN apt-get update && apt-get -y install ca-certificates libc6 iputils-ping curl jq
 
 COPY --from=build /app/target/release/url_finder /usr/local/bin/
 
-RUN adduser --system --group --no-create-home finderuser
+RUN useradd --system --no-create-home --shell /usr/sbin/nologin finderuser
 USER finderuser
 
 CMD ["url_finder"]

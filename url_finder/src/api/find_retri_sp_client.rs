@@ -13,7 +13,7 @@ use tokio::time::timeout;
 use tracing::debug;
 use utoipa::{IntoParams, ToSchema};
 
-use crate::{AppState, deal_service, provider_endpoints, url_tester};
+use crate::{AppState, provider_endpoints, services::deal_service, url_tester};
 
 use super::ResultCode;
 
@@ -136,6 +136,6 @@ pub async fn handle_find_retri_by_client_and_sp(
 
     Ok(ok_response(FindRetriByClientAndSpResponse {
         result: ResultCode::Success,
-        retrievability_percent: retrievability_percent.unwrap(),
+        retrievability_percent: retrievability_percent.unwrap_or(0.0),
     }))
 }

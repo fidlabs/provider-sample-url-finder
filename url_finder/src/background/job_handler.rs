@@ -4,8 +4,8 @@ use tokio::time::sleep;
 use tracing::{debug, info};
 
 use crate::{
-    ErrorCode, Job, JobRepository, JobStatus, ResultCode, deal_repo::DealRepository, deal_service,
-    provider_endpoints, url_tester,
+    ErrorCode, Job, JobRepository, JobStatus, ResultCode, provider_endpoints,
+    repository::DealRepository, services::deal_service, url_tester,
 };
 
 const LOOP_DELAY: Duration = Duration::from_secs(5);
@@ -40,7 +40,7 @@ pub(super) enum JobHandlerResult {
 }
 
 pub async fn job_handler(job_repo: Arc<JobRepository>, deal_repo: Arc<DealRepository>) {
-    info!("Starting job handler");
+    info!("Starting job handler loop");
 
     loop {
         sleep(LOOP_DELAY).await;
@@ -290,7 +290,7 @@ async fn process_job(
         provider: provider.to_string(),
         client: client.map(|c| c.to_string()),
         working_url,
-        retrievability: retrievability_percent.unwrap(),
+        retrievability: retrievability_percent.unwrap_or(0.0),
         result: result_code,
     })
 }

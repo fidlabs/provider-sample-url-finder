@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                    COUNT(*)::bigint\n               FROM\n                    storage_providers\n                ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "f3d5c5b47906af1bd3508c0b9d423a19edd421546c941a4267eab0a44d6108a1"
+}
