@@ -7,13 +7,17 @@ use axum::{
 use axum_extra::extract::WithRejection;
 use color_eyre::Result;
 use common::api_response::*;
-use regex::Regex;
 use serde::{Deserialize, Serialize};
 use tokio::time::timeout;
 use tracing::debug;
 use utoipa::{IntoParams, ToSchema};
 
-use crate::{AppState, provider_endpoints, services::deal_service, url_tester};
+use crate::{
+    AppState, provider_endpoints,
+    services::deal_service,
+    types::{ClientAddress, ClientId, ProviderId},
+    url_tester,
+};
 
 use super::ResultCode;
 
@@ -64,33 +68,27 @@ pub async fn handle_find_client(
         &path.client
     );
 
-    // validate provider and client addresses
-    let address_pattern = Regex::new(r"^f0\d{1,8}$").unwrap();
-    if !address_pattern.is_match(&path.client) {
-        return Err(bad_request(
-            "Invalid provider or client address".to_string(),
-        ));
-    }
+    // Parse and validate client address
+    let client_address = ClientAddress::new(path.client.clone())
+        .map_err(|e| bad_request(format!("Invalid client address: {}", e)))?;
 
-    let providers = match deal_service::get_distinct_providers_by_client(
-        &state.deal_repo,
-        &path.client,
-    )
-    .await
-    {
-        Ok(providers) => providers,
-        Err(e) => {
-            debug!(
-                "Failed to get providers for client {}: {:?}",
-                &path.client, e
-            );
+    let providers =
+        match deal_service::get_distinct_providers_by_client(&state.deal_repo, &client_address)
+            .await
+        {
+            Ok(providers) => providers,
+            Err(e) => {
+                debug!(
+                    "Failed to get providers for client {}: {:?}",
+                    &path.client, e
+                );
 
-            return Err(internal_server_error(format!(
-                "Failed to get providers for client {0}",
-                path.client
-            )));
-        }
-    };
+                return Err(internal_server_error(format!(
+                    "Failed to get providers for client {0}",
+                    path.client
+                )));
+            }
+        };
 
     if providers.is_empty() {
         debug!("No providers found for client {}", &path.client);
@@ -115,7 +113,7 @@ pub async fn handle_find_client(
             debug!("No endpoints found for provider {}", &provider);
 
             results.push(ProviderResult {
-                provider: provider.clone(),
+                provider: provider.to_string(),
                 result: result_code,
                 working_url: None,
                 retrievability_percent: 0.0,
@@ -124,17 +122,13 @@ pub async fn handle_find_client(
         }
         let endpoints = endpoints.unwrap();
 
-        let provider_db = provider.strip_prefix("f0").unwrap_or(&provider).to_string();
-        let client = path
-            .client
-            .strip_prefix("f0")
-            .unwrap_or(&path.client)
-            .to_string();
+        let provider_id: ProviderId = provider.clone().into();
+        let client_id: ClientId = client_address.clone().into();
 
         let piece_ids = deal_service::get_random_piece_ids_by_provider_and_client(
             &state.deal_repo,
-            &provider_db,
-            &client,
+            &provider_id,
+            &client_id,
         )
         .await
         .map_err(|e| {
@@ -147,7 +141,7 @@ pub async fn handle_find_client(
             debug!("No deals found for provider {}", &provider);
 
             results.push(ProviderResult {
-                provider: provider.clone(),
+                provider: provider.to_string(),
                 result: ResultCode::NoDealsFound,
                 working_url: None,
                 retrievability_percent: 0.0,
@@ -182,7 +176,7 @@ pub async fn handle_find_client(
                 );
                 // In case of timeout
                 results.push(ProviderResult {
-                    provider: provider.clone(),
+                    provider: provider.to_string(),
                     result: ResultCode::TimedOut,
                     working_url: first_url,
                     retrievability_percent: 0.0,
@@ -192,7 +186,7 @@ pub async fn handle_find_client(
         };
 
         results.push(ProviderResult {
-            provider: provider.clone(),
+            provider: provider.to_string(),
             result: ResultCode::Success,
             working_url: first_url,
             retrievability_percent: retrievability_percent.unwrap_or(0.0),

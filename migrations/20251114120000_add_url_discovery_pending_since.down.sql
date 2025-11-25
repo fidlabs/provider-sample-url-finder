@@ -1,0 +1,2 @@
+ALTER TABLE storage_providers
+DROP COLUMN url_discovery_pending_since;

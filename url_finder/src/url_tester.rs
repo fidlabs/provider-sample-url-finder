@@ -5,7 +5,7 @@ use std::sync::{
 
 use futures::{StreamExt, stream};
 use reqwest::Client;
-use tracing::debug;
+use tracing::{debug, info};
 
 const FILTER_CONCURENCY_LIMIT: usize = 5;
 const RETRI_CONCURENCY_LIMIT: usize = 20;
@@ -79,12 +79,11 @@ pub async fn get_retrivability_with_head(urls: Vec<String>) -> (Option<String>, 
                 total_clone.fetch_add(1, Ordering::SeqCst);
                 match client.head(&url).send().await {
                     Ok(resp) if resp.status().is_success() => {
-                        tracing::info!("url WORKING: {:?}", url);
+                        debug!("url WORKING: {:?}", url);
                         success_clone.fetch_add(1, Ordering::SeqCst);
                         Some(url)
                     }
                     _ => {
-                        tracing::error!("url not working: {:?}", url);
                         debug!("url not working: {:?}", url);
                         None
                     }
@@ -113,7 +112,7 @@ pub async fn get_retrivability_with_head(urls: Vec<String>) -> (Option<String>, 
         0.0
     };
 
-    debug!(
+    info!(
         "Successfully retrieved URLs: {} out of {} ({:.2}%)",
         success, total, retri_percentage
     );
@@ -194,7 +193,7 @@ pub async fn check_retrievability_with_get(
         0.0
     };
 
-    debug!(
+    info!(
         "Successfully retrieved URLs: {} out of {} ({:.2}%)",
         success, total, retri_percentage
     );

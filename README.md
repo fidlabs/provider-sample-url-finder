@@ -41,8 +41,8 @@ The Storage Provider Url Finder is a microservice designed to test the retrievab
 
 ### Two types of Requests
 
-1. **Async Job**: User requests a job, which is processed in the background. The user receives a `job_id` that is used to check the status and results later. The jobs are processed one by one, allowing for multiple jobs to be created without blocking the service
-2. **Direct Call**: User requests measurement in synchronous mode, which is processed immediately. The result is not stored or cached and its returned as a response to the request. Response might take up to several minutes and might time out if the request takes too long
+1. **Async Job**: User requests a job, which is processed in the background. The user receives a `job_id` that is used to check the status and results later. The jobs are processed one by one, allowing for multiple jobs to be created without blocking the service.
+2. **Direct Call**: User requests measurement in synchronous mode, which is processed immediately. The result is not stored or cached and its returned as a response to the request. Response might take up to several minutes and might time out if the request takes too long.
 
 ### High-Level Workflow 
 

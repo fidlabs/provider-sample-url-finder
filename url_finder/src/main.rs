@@ -40,6 +40,7 @@ mod routes;
 mod services;
 mod types;
 mod url_tester;
+mod utils;
 
 pub struct AppState {
     pub deal_repo: Arc<DealRepository>,
@@ -97,6 +98,7 @@ async fn main() -> Result<()> {
 
     let sp_repo = Arc::new(StorageProviderRepository::new(pool.clone()));
     let deal_repo = Arc::new(DealRepository::new(dmob_pool.clone()));
+    let url_repo = Arc::new(UrlResultRepository::new(pool.clone()));
 
     let app_state = Arc::new(AppState {
         deal_repo: deal_repo.clone(),
@@ -112,6 +114,16 @@ async fn main() -> Result<()> {
         let deal_repo = deal_repo.clone();
         async move {
             background::run_provider_discovery(sp_repo, deal_repo).await;
+        }
+    });
+
+    // Start the URL discovery scheduler in the background
+    tokio::spawn({
+        let sp_repo = sp_repo.clone();
+        let url_repo = url_repo.clone();
+        let deal_repo = deal_repo.clone();
+        async move {
+            background::run_url_discovery_scheduler(sp_repo, url_repo, deal_repo).await;
         }
     });
 

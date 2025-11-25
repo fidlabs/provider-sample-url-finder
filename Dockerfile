@@ -15,6 +15,7 @@ FROM base as build
 ARG GITHUB_SHA
 ENV GITHUB_SHA ${GITHUB_SHA}
 ENV PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig
+ENV SQLX_OFFLINE=true
 COPY --from=plan /app/recipe.json .
 RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
