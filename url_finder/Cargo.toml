@@ -3,11 +3,19 @@ name = "url_finder"
 version = "0.5.0"
 edition = "2024"
 
+[lib]
+name = "url_finder"
+path = "src/lib.rs"
+
+[[bin]]
+name = "url_finder"
+path = "src/main.rs"
+
 [dependencies]
 tokio = { version = "1.40.0", features = ["full"] }
 color-eyre = "0.6.3"
-axum = { version = "0.7.9", features = ["macros", "tokio"] }
-axum-extra = { version = "0.9.3" }
+axum = { version = "0.8", features = ["macros", "tokio"] }
+axum-extra = { version = "0.10" }
 reqwest = { version = "0.12.7", features = ["json"] }
 reqwest-middleware = { version = "0.4", features = ["json"] }
 reqwest-retry = "0.7"
@@ -17,7 +25,7 @@ http = "1.1"
 serde = { version = "1.0.209" }
 serde_json = "1.0.128"
 tracing = "0.1.40"
-tracing-subscriber = { version = "0.3.18", features = ["env-filter", 'fmt'] }
+tracing-subscriber = { version = "0.3.18", features = ["env-filter", "fmt"] }
 sqlx = { version = "0.8.2", features = [
   "runtime-tokio",
   "postgres",
@@ -29,18 +37,17 @@ sqlx = { version = "0.8.2", features = [
 ] }
 futures = "0.3.31"
 once_cell = "1.20.2"
-common = { git = "https://github.com/fidlabs/bandwidth-measurement-system.git", rev = "0ca8779" }
 tower = { version = "0.5.2", features = ["timeout", "limit"] }
 tower-http = { version = "0.6.2", features = ["cors"]}
-utoipa = { version = "5.2.0", features = [
+utoipa = { version = "5.4.0", features = [
   "axum_extras",
   "uuid",
   "url",
   "chrono",
   "debug",
 ] }
-utoipa-swagger-ui = { version = "8.0.3", features = ["axum", "reqwest", "url"] }
-tower_governor = { version = "0.5.0", features = ["axum"] }
+utoipa-swagger-ui = { version = "9.0.2", features = ["axum", "reqwest", "url"] }
+tower_governor = { version = "0.8.0", features = ["axum"] }
 uuid = { version = "1.10.0", features = ["v4", "serde"] }
 chrono = { version = "0.4.38", features = ["serde"] }
 regex = "1.11.1"
@@ -51,4 +58,11 @@ multiaddr = "0.18.2"
 dotenvy = "0.15.7"
 
 [dev-dependencies]
-wiremock = "0.6"
+wiremock = "0.6.5"
+assert-json-diff = "2.0"
+pretty_assertions = "1.4.1"
+tokio-test = "0.4"
+axum-test = "18.2"
+serial_test = "3.2"
+testcontainers = "0.25.2"
+testcontainers-modules = { version = "0.13.0", features = ["postgres"] }

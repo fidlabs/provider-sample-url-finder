@@ -1,4 +1,4 @@
-use common::api_response::ErrorResponse;
+use crate::api_response::ErrorResponse;
 use utoipa::OpenApi;
 
 use crate::api::*;

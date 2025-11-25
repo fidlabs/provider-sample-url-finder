@@ -12,10 +12,7 @@ use axum::{
     response::Response,
 };
 use color_eyre::Result;
-use config::CONFIG;
 use moka::future::Cache;
-use repository::DealRepository;
-use routes::create_routes;
 use tokio::{
     net::TcpListener,
     signal::unix::{SignalKind, signal},
@@ -24,31 +21,10 @@ use tower_http::cors::{Any, CorsLayer};
 use tracing::{debug, info};
 use tracing_subscriber::EnvFilter;
 
-use crate::api::*;
-use crate::repository::*;
-
-mod api;
-mod background;
-mod cid_contact;
-mod config;
-mod lotus_rpc;
-mod multiaddr_parser;
-mod pix_filspark;
-mod provider_endpoints;
-mod repository;
-mod routes;
-mod services;
-mod types;
-mod url_tester;
-mod utils;
-
-pub struct AppState {
-    pub deal_repo: Arc<DealRepository>,
-    pub active_requests: Arc<AtomicUsize>,
-    pub job_repo: Arc<JobRepository>,
-    pub storage_provider_repo: Arc<StorageProviderRepository>,
-    pub cache: Cache<String, serde_json::Value>,
-}
+use url_finder::{
+    AppState, api::cache_middleware, background, config::Config, repository::*,
+    routes::create_routes,
+};
 
 /// Active requests counter middleware.
 /// Keeps track of the number of active requests.
@@ -73,14 +49,16 @@ async fn main() -> Result<()> {
 
     color_eyre::install()?;
 
+    let config = Arc::new(Config::new_from_env()?);
+
     tracing_subscriber::fmt()
         .with_env_filter(
-            EnvFilter::try_from_default_env().unwrap_or(EnvFilter::new(CONFIG.log_level.clone())),
+            EnvFilter::try_from_default_env().unwrap_or(EnvFilter::new(config.log_level.clone())),
         )
         .init();
 
-    let pool = sqlx::PgPool::connect(&CONFIG.db_url).await?;
-    let dmob_pool = sqlx::PgPool::connect(&CONFIG.dmob_db_url).await?;
+    let pool = sqlx::PgPool::connect(&config.db_url).await?;
+    let dmob_pool = sqlx::PgPool::connect(&config.dmob_db_url).await?;
 
     info!("Running database migrations...");
     sqlx::migrate!("../migrations")
@@ -106,6 +84,7 @@ async fn main() -> Result<()> {
         job_repo: Arc::new(JobRepository::new()),
         storage_provider_repo: sp_repo.clone(),
         cache,
+        config: config.clone(),
     });
 
     // Start the provider discovery in the background
@@ -122,13 +101,15 @@ async fn main() -> Result<()> {
         let sp_repo = sp_repo.clone();
         let url_repo = url_repo.clone();
         let deal_repo = deal_repo.clone();
+        let config = config.clone();
         async move {
-            background::run_url_discovery_scheduler(sp_repo, url_repo, deal_repo).await;
+            background::run_url_discovery_scheduler(config, sp_repo, url_repo, deal_repo).await;
         }
     });
 
     // Start the job handler in the background
     tokio::spawn(background::job_handler(
+        config.clone(),
         app_state.job_repo.clone(),
         app_state.deal_repo.clone(),
     ));
@@ -140,7 +121,11 @@ async fn main() -> Result<()> {
         .allow_methods(Any)
         .allow_headers(Any);
 
-    let app = create_routes(app_state.clone())
+    let app = create_routes()
+        .route_layer(middleware::from_fn_with_state(
+            app_state.clone(),
+            cache_middleware,
+        ))
         .layer(middleware::from_fn_with_state(
             app_state.clone(),
             request_counter,

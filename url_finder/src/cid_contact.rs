@@ -4,7 +4,7 @@ use color_eyre::Result;
 use tracing::debug;
 use urlencoding::decode;
 
-use crate::utils::build_reqwest_retry_client;
+use crate::{config::Config, utils::build_reqwest_retry_client};
 
 const CID_CONTACT_MIN_RETRY_INTERVAL_MS: u64 = 2_000;
 const CID_CONTACT_MAX_RETRY_INTERVAL_MS: u64 = 30_000;
@@ -24,12 +24,16 @@ impl fmt::Display for CidContactError {
     }
 }
 
-pub async fn get_contact(peer_id: &str) -> Result<serde_json::Value, CidContactError> {
+pub async fn get_contact(
+    config: &Config,
+    peer_id: &str,
+) -> Result<serde_json::Value, CidContactError> {
     let client = build_reqwest_retry_client(
         CID_CONTACT_MIN_RETRY_INTERVAL_MS,
         CID_CONTACT_MAX_RETRY_INTERVAL_MS,
     );
-    let url = format!("https://cid.contact/providers/{peer_id}");
+    let base_url = config.cid_contact_url.trim_end_matches('/');
+    let url = format!("{base_url}/providers/{peer_id}");
 
     debug!("cid contact url: {:?}", url);
 
@@ -99,9 +103,10 @@ pub fn get_all_addresses_from_response(json: serde_json::Value) -> Vec<String> {
                     None => &cleaned,
                 };
 
-                let final_addr = if trimmed.ends_with("/https") {
+                let has_tcp = trimmed.contains("/tcp/");
+                let final_addr = if !has_tcp && trimmed.ends_with("/https") {
                     trimmed.replace("/https", "/tcp/443/https")
-                } else if trimmed.ends_with("/http") {
+                } else if !has_tcp && trimmed.ends_with("/http") {
                     trimmed.replace("/http", "/tcp/80/http")
                 } else {
                     trimmed.to_string()
@@ -112,4 +117,61 @@ pub fn get_all_addresses_from_response(json: serde_json::Value) -> Vec<String> {
     }
 
     addresses
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    // Real-world example: https://cid.contact/providers/12D3KooWRf7tJR2NfJYE3PQJKXGt1EFqmFBBfQCgPRBLwwR9XL15
+    #[test]
+    fn transforms_publisher_https_with_http_path() {
+        let response = json!({
+            "Publisher": {
+                "ID": "12D3KooWRf7tJR2NfJYE3PQJKXGt1EFqmFBBfQCgPRBLwwR9XL15",
+                "Addrs": [
+                    "/dns/adela.myfil.net/https/http-path/%2Fipni-provider%2F12D3KooWRf7tJR2NfJYE3PQJKXGt1EFqmFBBfQCgPRBLwwR9XL15"
+                ]
+            }
+        });
+
+        let addrs = get_all_addresses_from_response(response);
+
+        assert_eq!(addrs.len(), 1);
+        assert_eq!(addrs[0], "/dns/adela.myfil.net/tcp/443/https");
+    }
+
+    #[test]
+    fn preserves_publisher_addr_with_explicit_tcp() {
+        let response = json!({
+            "Publisher": {
+                "ID": "test-peer-id",
+                "Addrs": ["/ip4/1.2.3.4/tcp/8080/http"]
+            }
+        });
+
+        let addrs = get_all_addresses_from_response(response);
+
+        assert_eq!(addrs.len(), 1);
+        assert_eq!(addrs[0], "/ip4/1.2.3.4/tcp/8080/http");
+    }
+
+    // ExtendedProviders path does NOT transform addresses (unlike Publisher path)
+    #[test]
+    fn extended_providers_not_transformed() {
+        let response = json!({
+            "ExtendedProviders": {
+                "Providers": [{
+                    "ID": "test-peer-id",
+                    "Addrs": ["/dns/example.com/https"]
+                }]
+            }
+        });
+
+        let addrs = get_all_addresses_from_response(response);
+
+        assert_eq!(addrs.len(), 1);
+        assert_eq!(addrs[0], "/dns/example.com/https");
+    }
 }

@@ -1,4 +1,5 @@
 use crate::{
+    config::Config,
     repository::{DealRepository, StorageProviderRepository, UrlResult, UrlResultRepository},
     services::url_discovery_service,
     types::{ClientAddress, ClientId, ProviderAddress, ProviderId},
@@ -17,6 +18,7 @@ const BATCH_SIZE: i64 = 100;
 const MAX_CONCURRENT_CLIENT_TESTS: usize = 5;
 
 pub async fn run_url_discovery_scheduler(
+    config: Arc<Config>,
     sp_repo: Arc<StorageProviderRepository>,
     url_repo: Arc<UrlResultRepository>,
     deal_repo: Arc<DealRepository>,
@@ -24,26 +26,28 @@ pub async fn run_url_discovery_scheduler(
     info!("Starting URL discovery scheduler loop");
 
     loop {
-        let interval = match schedule_url_discoveries(&sp_repo, &url_repo, &deal_repo).await {
-            Ok(0) => {
-                info!("No providers due for URL discovery, sleeping...");
-                SCHEDULER_SLEEP_INTERVAL
-            }
-            Ok(count) => {
-                info!("URL discovery cycle completed: {} providers tested", count);
-                SCHEDULER_NEXT_INTERVAL
-            }
-            Err(e) => {
-                error!("URL discovery scheduler failed: {:?}", e);
-                SCHEDULER_SLEEP_INTERVAL
-            }
-        };
+        let interval =
+            match schedule_url_discoveries(&config, &sp_repo, &url_repo, &deal_repo).await {
+                Ok(0) => {
+                    info!("No providers due for URL discovery, sleeping...");
+                    SCHEDULER_SLEEP_INTERVAL
+                }
+                Ok(count) => {
+                    info!("URL discovery cycle completed: {} providers tested", count);
+                    SCHEDULER_NEXT_INTERVAL
+                }
+                Err(e) => {
+                    error!("URL discovery scheduler failed: {:?}", e);
+                    SCHEDULER_SLEEP_INTERVAL
+                }
+            };
 
         sleep(interval).await;
     }
 }
 
 async fn schedule_url_discoveries(
+    config: &Config,
     sp_repo: &StorageProviderRepository,
     url_repo: &UrlResultRepository,
     deal_repo: &DealRepository,
@@ -76,7 +80,8 @@ async fn schedule_url_discoveries(
             clients.len()
         );
 
-        let results = test_provider_with_clients(&provider.provider_id, clients, deal_repo).await;
+        let results =
+            test_provider_with_clients(config, &provider.provider_id, clients, deal_repo).await;
 
         let url_results: Vec<UrlResult> = results
             .iter()
@@ -115,6 +120,7 @@ async fn schedule_url_discoveries(
 }
 
 async fn test_provider_with_clients(
+    config: &Config,
     provider_id: &ProviderId,
     client_ids: Vec<ClientId>,
     deal_repo: &DealRepository,
@@ -124,9 +130,12 @@ async fn test_provider_with_clients(
     let provider_address: ProviderAddress = provider_id.clone().into();
 
     let provider_task = {
+        let cfg = config.clone();
         let addr = provider_address.clone();
         let repo = deal_repo.clone();
-        tokio::spawn(async move { url_discovery_service::discover_url(&addr, None, &repo).await })
+        tokio::spawn(
+            async move { url_discovery_service::discover_url(&cfg, &addr, None, &repo).await },
+        )
     };
     tasks.push(provider_task);
 
@@ -136,13 +145,18 @@ async fn test_provider_with_clients(
             .acquire_owned()
             .await
             .expect("Semaphore should never be closed");
+        let cfg = config.clone();
         let provider_addr = provider_address.clone();
         let client_address: ClientAddress = client_id.into();
         let repo = deal_repo.clone();
         tasks.push(tokio::spawn(async move {
-            let result =
-                url_discovery_service::discover_url(&provider_addr, Some(client_address), &repo)
-                    .await;
+            let result = url_discovery_service::discover_url(
+                &cfg,
+                &provider_addr,
+                Some(client_address),
+                &repo,
+            )
+            .await;
             drop(permit); // release semaphore
             result
         }));

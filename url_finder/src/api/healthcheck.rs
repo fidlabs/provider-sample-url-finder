@@ -2,7 +2,7 @@ use axum::debug_handler;
 use serde::Serialize;
 use utoipa::ToSchema;
 
-use common::api_response::*;
+use crate::api_response::*;
 
 #[derive(Serialize, ToSchema)]
 pub struct HealthcheckResponse {

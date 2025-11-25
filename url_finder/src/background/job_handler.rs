@@ -4,7 +4,9 @@ use tokio::time::sleep;
 use tracing::{debug, info};
 
 use crate::{
-    ErrorCode, Job, JobRepository, JobStatus, ResultCode, provider_endpoints,
+    ErrorCode, Job, JobRepository, JobStatus, ResultCode,
+    config::Config,
+    provider_endpoints,
     repository::DealRepository,
     services::deal_service,
     types::{ClientAddress, ClientId, ProviderAddress, ProviderId},
@@ -42,7 +44,11 @@ pub(super) enum JobHandlerResult {
     MultipleResults(Vec<JobSuccessResult>, Vec<JobErrorResult>),
 }
 
-pub async fn job_handler(job_repo: Arc<JobRepository>, deal_repo: Arc<DealRepository>) {
+pub async fn job_handler(
+    config: Arc<Config>,
+    job_repo: Arc<JobRepository>,
+    deal_repo: Arc<DealRepository>,
+) {
     info!("Starting job handler loop");
 
     loop {
@@ -57,7 +63,7 @@ pub async fn job_handler(job_repo: Arc<JobRepository>, deal_repo: Arc<DealReposi
 
         debug!("Found job: {:?}", job.id);
 
-        match process_pending_job(&deal_repo, &job).await {
+        match process_pending_job(&config, &deal_repo, &job).await {
             JobHandlerResult::Skip(reason) => {
                 debug!("Skipping job: {}", reason);
                 continue;
@@ -140,14 +146,26 @@ pub async fn job_handler(job_repo: Arc<JobRepository>, deal_repo: Arc<DealReposi
     }
 }
 
-async fn process_pending_job(deal_repo: &DealRepository, job: &Job) -> JobHandlerResult {
+async fn process_pending_job(
+    config: &Config,
+    deal_repo: &DealRepository,
+    job: &Job,
+) -> JobHandlerResult {
     match (&job.provider, &job.client) {
         (Some(provider_address), None) => {
-            process_job_with_provider(deal_repo, provider_address).await
+            process_job_with_provider(config, deal_repo, provider_address).await
         }
-        (None, Some(client_address)) => process_job_with_client(deal_repo, client_address).await,
+        (None, Some(client_address)) => {
+            process_job_with_client(config, deal_repo, client_address).await
+        }
         (Some(provider_address), Some(client_address)) => {
-            process_job_with_provider_and_client(deal_repo, provider_address, client_address).await
+            process_job_with_provider_and_client(
+                config,
+                deal_repo,
+                provider_address,
+                client_address,
+            )
+            .await
         }
         (None, None) => {
             // should not happen
@@ -161,6 +179,7 @@ async fn process_pending_job(deal_repo: &DealRepository, job: &Job) -> JobHandle
 }
 
 async fn process_job_with_client(
+    config: &Config,
     deal_repo: &DealRepository,
     client_address: &ClientAddress,
 ) -> JobHandlerResult {
@@ -192,7 +211,7 @@ async fn process_job_with_client(
     for provider_address in providers {
         debug!("Processing job with provider: {}", &provider_address);
 
-        match process_job(deal_repo, &provider_address, Some(client_address)).await {
+        match process_job(config, deal_repo, &provider_address, Some(client_address)).await {
             JobHandlerResult::SuccessResult(result) => success_results.push(result),
             JobHandlerResult::ErrorResult(result) => error_results.push(result),
             JobHandlerResult::Skip(reason) => return JobHandlerResult::Skip(reason),
@@ -208,6 +227,7 @@ async fn process_job_with_client(
 }
 
 async fn process_job_with_provider_and_client(
+    config: &Config,
     deal_repo: &DealRepository,
     provider_address: &ProviderAddress,
     client_address: &ClientAddress,
@@ -217,19 +237,21 @@ async fn process_job_with_provider_and_client(
         provider_address, client_address
     );
 
-    process_job(deal_repo, provider_address, Some(client_address)).await
+    process_job(config, deal_repo, provider_address, Some(client_address)).await
 }
 
 async fn process_job_with_provider(
+    config: &Config,
     deal_repo: &DealRepository,
     provider_address: &ProviderAddress,
 ) -> JobHandlerResult {
     debug!("Processing job with provider: {}", provider_address);
 
-    process_job(deal_repo, provider_address, None).await
+    process_job(config, deal_repo, provider_address, None).await
 }
 
 async fn process_job(
+    config: &Config,
     deal_repo: &DealRepository,
     provider_address: &ProviderAddress,
     client_address: Option<&ClientAddress>,
@@ -237,25 +259,26 @@ async fn process_job(
     let provider_id: ProviderId = provider_address.clone().into();
     let client_id: Option<ClientId> = client_address.map(|c| c.clone().into());
 
-    let (_, endpoints) = match provider_endpoints::get_provider_endpoints(provider_address).await {
-        Ok((result_code, _)) if result_code != ResultCode::Success => {
-            return JobHandlerResult::ErrorResult(JobErrorResult {
-                provider: provider_address.clone(),
-                client: client_address.cloned(),
-                result: Some(result_code),
-                error: None,
-            });
-        }
-        Ok(result) => result,
-        Err(error_code) => {
-            return JobHandlerResult::ErrorResult(JobErrorResult {
-                provider: provider_address.clone(),
-                client: client_address.cloned(),
-                result: Some(ResultCode::Error),
-                error: Some(error_code),
-            });
-        }
-    };
+    let (_, endpoints) =
+        match provider_endpoints::get_provider_endpoints(config, provider_address).await {
+            Ok((result_code, _)) if result_code != ResultCode::Success => {
+                return JobHandlerResult::ErrorResult(JobErrorResult {
+                    provider: provider_address.clone(),
+                    client: client_address.cloned(),
+                    result: Some(result_code),
+                    error: None,
+                });
+            }
+            Ok(result) => result,
+            Err(error_code) => {
+                return JobHandlerResult::ErrorResult(JobErrorResult {
+                    provider: provider_address.clone(),
+                    client: client_address.cloned(),
+                    result: Some(ResultCode::Error),
+                    error: Some(error_code),
+                });
+            }
+        };
 
     if endpoints.is_none() || endpoints.as_ref().unwrap().is_empty() {
         debug!("No endpoints found");

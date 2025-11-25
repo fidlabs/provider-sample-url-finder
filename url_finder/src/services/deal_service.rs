@@ -111,7 +111,7 @@ pub async fn get_piece_url(endpoints: Vec<String>, piece_ids: Vec<String>) -> Ve
     endpoints
         .iter()
         .flat_map(|endpoint| {
-            let endpoint = endpoint.clone();
+            let endpoint = endpoint.trim_end_matches('/');
             piece_ids
                 .iter()
                 .map(move |piece_id| format!("{endpoint}/piece/{piece_id}"))

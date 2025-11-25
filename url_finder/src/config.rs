@@ -1,19 +1,18 @@
 use std::env;
 
 use color_eyre::Result;
-use once_cell::sync::Lazy;
 
 use crate::types::DbConnectParams;
 
-pub static CONFIG: Lazy<Config> = Lazy::new(|| Config::new_from_env().unwrap());
-
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Config {
     pub db_url: String,
     pub dmob_db_url: String,
     pub log_level: String,
     pub glif_url: String,
+    pub cid_contact_url: String,
 }
+
 impl Config {
     pub fn new_from_env() -> Result<Self> {
         let db_url = env::var("DATABASE_URL").unwrap_or_else(|_| {
@@ -31,6 +30,19 @@ impl Config {
             dmob_db_url: env::var("DMOB_DATABASE_URL").expect("DMOB_DATABASE_URL must be set"),
             log_level: env::var("LOG_LEVEL").unwrap_or("info".to_string()),
             glif_url: env::var("GLIF_URL").unwrap_or("https://api.node.glif.io/rpc/v1".to_string()),
+            cid_contact_url: env::var("CID_CONTACT_URL")
+                .unwrap_or("https://cid.contact".to_string()),
         })
+    }
+
+    // Test helper
+    pub fn new_for_test(glif_url: String, cid_contact_url: String) -> Self {
+        Self {
+            db_url: "dummy".to_string(),
+            dmob_db_url: "dummy".to_string(),
+            log_level: "info".to_string(),
+            glif_url,
+            cid_contact_url,
+        }
     }
 }
