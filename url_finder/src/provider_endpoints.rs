@@ -11,12 +11,12 @@ use alloy::{
 };
 use color_eyre::{Result, eyre::eyre};
 use tokio::time::sleep;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
-use crate::config::CONFIG;
 use crate::{
     ErrorCode, ResultCode,
     cid_contact::{self, CidContactError},
+    config::Config,
     lotus_rpc, multiaddr_parser,
     types::ProviderAddress,
 };
@@ -30,8 +30,11 @@ sol! {
     function getPeerData(uint64 minerID) view returns (PeerData);
 }
 
-pub async fn valid_curio_provider(address: &ProviderAddress) -> Result<Option<String>> {
-    let rpc_url = &CONFIG.glif_url;
+pub async fn valid_curio_provider(
+    config: &Config,
+    address: &ProviderAddress,
+) -> Result<Option<String>> {
+    let rpc_url = &config.glif_url;
 
     let rpc_provider = ProviderBuilder::new()
         .connect(rpc_url)
@@ -68,7 +71,10 @@ pub async fn valid_curio_provider(address: &ProviderAddress) -> Result<Option<St
         }
     }
 
-    let response = response.ok_or_else(|| eyre!("All 3 attempts failed for address {address}"))?;
+    let Some(response) = response else {
+        warn!("Curio lookup failed after 3 attempts for {address}");
+        return Err(eyre!("All 3 attempts failed for address {address}"));
+    };
 
     let peer_data: PeerData = PeerData::abi_decode(response.as_ref())?;
 
@@ -81,24 +87,22 @@ pub async fn valid_curio_provider(address: &ProviderAddress) -> Result<Option<St
 }
 
 pub async fn get_provider_endpoints(
+    config: &Config,
     address: &ProviderAddress,
 ) -> Result<(ResultCode, Option<Vec<String>>), ErrorCode> {
-    let peer_id = if let Some(curio_provider) =
-        valid_curio_provider(address).await.map_err(|e| {
-            error!("Failed to get peer id from curio: {:?}", e);
-            ErrorCode::FailedToGetPeerIdFromCurio
-        })? {
-        curio_provider
-    } else {
-        // get peer_id from miner info from lotus rpc
-        lotus_rpc::get_peer_id(address).await.map_err(|e| {
-            error!("Failed to get peer id: {:?}", e);
-            ErrorCode::FailedToGetPeerId
-        })?
+    let peer_id = match valid_curio_provider(config, address).await {
+        Ok(Some(curio_provider)) => curio_provider,
+        _ => {
+            debug!("Falling back to lotus for peer_id lookup");
+            lotus_rpc::get_peer_id(config, address).await.map_err(|e| {
+                error!("Failed to get peer id from lotus: {e:?}");
+                ErrorCode::FailedToGetPeerId
+            })?
+        }
     };
 
     // get cid contact response
-    let cid_contact_res = match cid_contact::get_contact(&peer_id).await {
+    let cid_contact_res = match cid_contact::get_contact(config, &peer_id).await {
         Ok(res) => res,
         Err(CidContactError::NoData) => {
             return Ok((ResultCode::NoCidContactData, None));

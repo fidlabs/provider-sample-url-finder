@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
+use crate::api_response::*;
 use axum::{Json, extract::State};
 use axum_extra::extract::WithRejection;
 use color_eyre::Result;
-use common::api_response::*;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error};
 use utoipa::ToSchema;
@@ -66,8 +66,8 @@ pub async fn handle_create_job(
     // Parse and validate client address if provided
     let client_address = if let Some(client) = &payload.client {
         Some(ClientAddress::new(client.clone()).map_err(|e| {
-            error!("Invalid client address: {}", e);
-            bad_request(format!("Invalid client address: {}", e))
+            error!("Invalid client address: {e}");
+            bad_request(format!("Invalid client address: {e}"))
         })?)
     } else {
         None
@@ -76,22 +76,23 @@ pub async fn handle_create_job(
     // Parse and validate provider address if provided
     let provider_address = if let Some(provider) = &payload.provider {
         let provider_addr = ProviderAddress::new(provider.clone()).map_err(|e| {
-            error!("Invalid provider address: {}", e);
-            bad_request(format!("Invalid provider address: {}", e))
+            error!("Invalid provider address: {e}");
+            bad_request(format!("Invalid provider address: {e}"))
         })?;
 
         // Verify that we have http endpoint for the provider
-        let _ = match provider_endpoints::get_provider_endpoints(&provider_addr).await {
-            Ok((result_code, endpoints)) if endpoints.is_none() => {
-                debug!("No endpoints found");
-                return Ok(ok_response(CreateJobResponse {
-                    result: result_code,
-                    id: None,
-                }));
-            }
-            Err(e) => return Err(internal_server_error(e.to_string())),
-            Ok(result) => result,
-        };
+        let _ =
+            match provider_endpoints::get_provider_endpoints(&state.config, &provider_addr).await {
+                Ok((result_code, endpoints)) if endpoints.is_none() => {
+                    debug!("No endpoints found");
+                    return Ok(ok_response(CreateJobResponse {
+                        result: result_code,
+                        id: None,
+                    }));
+                }
+                Err(e) => return Err(internal_server_error(e.to_string())),
+                Ok(result) => result,
+            };
 
         Some(provider_addr)
     } else {

@@ -45,7 +45,7 @@ jobs:
         run: cargo set-version ${{ inputs.version }}
 
       - name: Run cargo check
-        run: cargo check
+        run: SQLX_OFFLINE=true cargo check
 
       - name: Git config
         run: |

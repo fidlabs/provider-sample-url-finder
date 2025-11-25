@@ -1,12 +1,12 @@
 use std::{sync::Arc, time::Duration};
 
+use crate::api_response::*;
 use axum::{
     debug_handler,
     extract::{Path, State},
 };
 use axum_extra::extract::WithRejection;
 use color_eyre::Result;
-use common::api_response::*;
 use serde::{Deserialize, Serialize};
 use tokio::time::timeout;
 use tracing::debug;
@@ -61,10 +61,10 @@ pub async fn handle_find_retri_by_sp(
 
     // Parse and validate provider address
     let provider_address = ProviderAddress::new(path.provider)
-        .map_err(|e| bad_request(format!("Invalid provider address: {}", e)))?;
+        .map_err(|e| bad_request(format!("Invalid provider address: {e}")))?;
 
     let (result_code, endpoints) =
-        match provider_endpoints::get_provider_endpoints(&provider_address).await {
+        match provider_endpoints::get_provider_endpoints(&state.config, &provider_address).await {
             Ok(endpoints) => endpoints,
             Err(e) => return Err(internal_server_error(e.to_string())),
         };

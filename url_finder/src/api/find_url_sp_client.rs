@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
+use crate::api_response::*;
 use axum::{
     debug_handler,
     extract::{Path, State},
 };
 use axum_extra::extract::WithRejection;
 use color_eyre::Result;
-use common::api_response::*;
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 use utoipa::{IntoParams, ToSchema};
@@ -58,12 +58,12 @@ pub async fn handle_find_url_sp_client(
 
     // Parse and validate provider and client addresses
     let provider_address = ProviderAddress::new(path.provider)
-        .map_err(|e| bad_request(format!("Invalid provider address: {}", e)))?;
+        .map_err(|e| bad_request(format!("Invalid provider address: {e}")))?;
     let client_address = ClientAddress::new(path.client)
-        .map_err(|e| bad_request(format!("Invalid client address: {}", e)))?;
+        .map_err(|e| bad_request(format!("Invalid client address: {e}")))?;
 
     let (result_code, endpoints) =
-        match provider_endpoints::get_provider_endpoints(&provider_address).await {
+        match provider_endpoints::get_provider_endpoints(&state.config, &provider_address).await {
             Ok(endpoints) => endpoints,
             Err(e) => return Err(internal_server_error(e.to_string())),
         };

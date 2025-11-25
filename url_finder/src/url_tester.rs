@@ -141,15 +141,22 @@ pub async fn check_retrievability_with_get(
             async move {
                 total_clone.fetch_add(1, Ordering::SeqCst);
 
+                debug!("Testing URL: {}", url);
                 match client.get(&url).send().await {
                     Ok(resp) => {
+                        let status = resp.status();
                         let content_type = resp
                             .headers()
                             .get("content-type")
                             .and_then(|v| v.to_str().ok());
                         let etag = resp.headers().get("etag");
 
-                        if resp.status().is_success()
+                        debug!(
+                            "Response for {}: status={}, content_type={:?}, etag={:?}",
+                            url, status, content_type, etag
+                        );
+
+                        if status.is_success()
                             && matches!(
                                 content_type,
                                 Some("application/octet-stream") | Some("application/piece")
