@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use crate::api_response::*;
 use axum::{
@@ -8,15 +8,12 @@ use axum::{
 use axum_extra::extract::WithRejection;
 use color_eyre::Result;
 use serde::{Deserialize, Serialize};
-use tokio::time::timeout;
 use tracing::debug;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::{
-    AppState, provider_endpoints,
-    services::deal_service,
+    AppState,
     types::{ClientAddress, ClientId, ProviderAddress, ProviderId},
-    url_tester,
 };
 
 use super::ResultCode;
@@ -31,11 +28,11 @@ pub struct FindRetriByClientAndSpPath {
 pub struct FindRetriByClientAndSpResponse {
     pub result: ResultCode,
     pub retrievability_percent: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
 }
 
-const RETRIEVABILITY_TIMEOUT_SEC: u64 = 2 * 60; // 2 min
-
-/// Find retrivabiliy of urls for a given SP and Client address
+/// Find retrievability of urls for a given SP and Client address
 #[utoipa::path(
     get,
     path = "/url/retrievability/{provider}/{client}",
@@ -69,66 +66,31 @@ pub async fn handle_find_retri_by_client_and_sp(
     let client_address = ClientAddress::new(path.client)
         .map_err(|e| bad_request(format!("Invalid client address: {e}")))?;
 
-    let (result_code, endpoints) =
-        match provider_endpoints::get_provider_endpoints(&state.config, &provider_address).await {
-            Ok(endpoints) => endpoints,
-            Err(e) => return Err(internal_server_error(e.to_string())),
-        };
-
-    if endpoints.is_none() {
-        debug!("No endpoints found");
-
-        return Ok(ok_response(FindRetriByClientAndSpResponse {
-            result: result_code,
-            retrievability_percent: 0.0,
-        }));
-    }
-    let endpoints = endpoints.unwrap();
-
     let provider_id: ProviderId = provider_address.into();
     let client_id: ClientId = client_address.into();
 
-    let piece_ids = deal_service::get_random_piece_ids_by_provider_and_client(
-        &state.deal_repo,
-        &provider_id,
-        &client_id,
-    )
-    .await
-    .map_err(|e| {
-        debug!("Failed to get piece ids: {:?}", e);
-        internal_server_error("Failed to get piece ids")
-    })?;
+    let result = state
+        .url_repo
+        .get_latest_for_provider_client(&provider_id, &client_id)
+        .await
+        .map_err(|e| {
+            debug!("Failed to query url_results: {:?}", e);
+            internal_server_error("Failed to query url results")
+        })?;
 
-    if piece_ids.is_empty() {
-        debug!("No deals found");
-        return Ok(ok_response(FindRetriByClientAndSpResponse {
-            result: ResultCode::NoDealsFound,
+    match result {
+        Some(url_result) => Ok(ok_response(FindRetriByClientAndSpResponse {
+            result: url_result.result_code,
+            retrievability_percent: url_result.retrievability_percent,
+            message: None,
+        })),
+        None => Ok(ok_response(FindRetriByClientAndSpResponse {
+            result: ResultCode::Error,
             retrievability_percent: 0.0,
-        }));
+            message: Some(
+                "Provider/client pair has not been indexed yet. Please try again later."
+                    .to_string(),
+            ),
+        })),
     }
-
-    let urls = deal_service::get_piece_url(endpoints, piece_ids).await;
-
-    // Get retrievability percent
-    // Make sure that the task is not running for too long
-    let (_, retrievability_percent) = match timeout(
-        Duration::from_secs(RETRIEVABILITY_TIMEOUT_SEC),
-        url_tester::check_retrievability_with_get(urls, true),
-    )
-    .await
-    {
-        Ok(result) => result,
-        Err(_) => {
-            // In case of timeout
-            return Ok(ok_response(FindRetriByClientAndSpResponse {
-                result: ResultCode::TimedOut,
-                retrievability_percent: 0.0,
-            }));
-        }
-    };
-
-    Ok(ok_response(FindRetriByClientAndSpResponse {
-        result: ResultCode::Success,
-        retrievability_percent: retrievability_percent.unwrap_or(0.0),
-    }))
 }

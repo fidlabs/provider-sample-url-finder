@@ -4,7 +4,6 @@ use crate::{
     services::url_discovery_service,
     types::{ClientAddress, ClientId, ProviderAddress, ProviderId},
 };
-use chrono::Utc;
 use color_eyre::Result;
 use futures::future::join_all;
 use std::sync::Arc;
@@ -83,20 +82,12 @@ async fn schedule_url_discoveries(
         let results =
             test_provider_with_clients(config, &provider.provider_id, clients, deal_repo).await;
 
-        let url_results: Vec<UrlResult> = results
+        let url_results: Vec<UrlResult> = results.into_iter().map(|r| r.into()).collect();
+
+        let last_working_url = url_results
             .iter()
-            .map(|r| UrlResult {
-                id: r.id,
-                provider_id: r.provider_id.clone(),
-                client_id: r.client_id.clone(),
-                result_type: r.result_type.clone(),
-                working_url: r.working_url.clone(),
-                retrievability_percent: r.retrievability_percent,
-                result_code: r.result_code.clone(),
-                error_code: r.error_code.clone(),
-                tested_at: Utc::now(),
-            })
-            .collect();
+            .find(|r| r.client_id.is_none())
+            .and_then(|r| r.working_url.clone());
 
         match url_repo.insert_batch(&url_results).await {
             Ok(count) => debug!(
@@ -105,9 +96,6 @@ async fn schedule_url_discoveries(
             ),
             Err(e) => error!("Failed to insert URL results: {:?}", e),
         }
-
-        let provider_only_result = results.iter().find(|r| r.client_id.is_none());
-        let last_working_url = provider_only_result.and_then(|r| r.working_url.clone());
 
         sp_repo
             .update_after_url_discovery(&provider.provider_id, last_working_url)

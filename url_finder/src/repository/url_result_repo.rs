@@ -5,6 +5,7 @@ use sqlx::PgPool;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+use crate::services::url_discovery_service::UrlDiscoveryResult;
 use crate::types::{ClientId, DiscoveryType, ErrorCode, ProviderId, ResultCode};
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
@@ -20,6 +21,22 @@ pub struct UrlResult {
     pub tested_at: DateTime<Utc>,
 }
 
+impl From<UrlDiscoveryResult> for UrlResult {
+    fn from(result: UrlDiscoveryResult) -> Self {
+        Self {
+            id: result.id,
+            provider_id: result.provider_id,
+            client_id: result.client_id,
+            result_type: result.result_type,
+            working_url: result.working_url,
+            retrievability_percent: result.retrievability_percent,
+            result_code: result.result_code,
+            error_code: result.error_code,
+            tested_at: Utc::now(),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct UrlResultRepository {
     pool: PgPool,
@@ -28,6 +45,108 @@ pub struct UrlResultRepository {
 impl UrlResultRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
+    }
+
+    pub async fn get_latest_for_provider(
+        &self,
+        provider_id: &ProviderId,
+    ) -> Result<Option<UrlResult>> {
+        let result = sqlx::query_as!(
+            UrlResult,
+            r#"SELECT
+                    id,
+                    provider_id AS "provider_id: ProviderId",
+                    client_id AS "client_id: ClientId",
+                    result_type AS "result_type: DiscoveryType",
+                    working_url,
+                    retrievability_percent::float8 AS "retrievability_percent!",
+                    result_code AS "result_code: ResultCode",
+                    error_code AS "error_code: ErrorCode",
+                    tested_at
+               FROM
+                    url_results
+               WHERE
+                    provider_id = $1
+                    AND result_type = 'Provider'
+               ORDER BY
+                    tested_at DESC
+               LIMIT 1
+            "#,
+            provider_id.as_str()
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(result)
+    }
+
+    pub async fn get_latest_for_provider_client(
+        &self,
+        provider_id: &ProviderId,
+        client_id: &ClientId,
+    ) -> Result<Option<UrlResult>> {
+        let result = sqlx::query_as!(
+            UrlResult,
+            r#"SELECT
+                    id,
+                    provider_id AS "provider_id: ProviderId",
+                    client_id AS "client_id: ClientId",
+                    result_type AS "result_type: DiscoveryType",
+                    working_url,
+                    retrievability_percent::float8 AS "retrievability_percent!",
+                    result_code AS "result_code: ResultCode",
+                    error_code AS "error_code: ErrorCode",
+                    tested_at
+               FROM
+                    url_results
+               WHERE
+                    provider_id = $1
+                    AND client_id = $2
+                    AND result_type = 'ProviderClient'
+               ORDER BY
+                    tested_at DESC
+               LIMIT 1
+            "#,
+            provider_id.as_str(),
+            client_id.as_str()
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(result)
+    }
+
+    pub async fn get_latest_for_client_all_providers(
+        &self,
+        client_id: &ClientId,
+    ) -> Result<Vec<UrlResult>> {
+        let results = sqlx::query_as!(
+            UrlResult,
+            r#"SELECT DISTINCT ON (provider_id)
+                    id,
+                    provider_id AS "provider_id: ProviderId",
+                    client_id AS "client_id: ClientId",
+                    result_type AS "result_type: DiscoveryType",
+                    working_url,
+                    retrievability_percent::float8 AS "retrievability_percent!",
+                    result_code AS "result_code: ResultCode",
+                    error_code AS "error_code: ErrorCode",
+                    tested_at
+               FROM
+                    url_results
+               WHERE
+                    client_id = $1
+                    AND result_type = 'ProviderClient'
+               ORDER BY
+                    provider_id,
+                    tested_at DESC
+            "#,
+            client_id.as_str()
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(results)
     }
 
     pub async fn insert_batch(&self, results: &[UrlResult]) -> Result<usize> {

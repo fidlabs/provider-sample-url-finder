@@ -12,7 +12,6 @@ use axum::{
     response::Response,
 };
 use color_eyre::Result;
-use moka::future::Cache;
 use tokio::{
     net::TcpListener,
     signal::unix::{SignalKind, signal},
@@ -21,10 +20,7 @@ use tower_http::cors::{Any, CorsLayer};
 use tracing::{debug, info};
 use tracing_subscriber::EnvFilter;
 
-use url_finder::{
-    AppState, api::cache_middleware, background, config::Config, repository::*,
-    routes::create_routes,
-};
+use url_finder::{AppState, background, config::Config, repository::*, routes::create_routes};
 
 /// Active requests counter middleware.
 /// Keeps track of the number of active requests.
@@ -69,11 +65,6 @@ async fn main() -> Result<()> {
 
     let active_requests = Arc::new(AtomicUsize::new(0));
 
-    let cache: Cache<String, serde_json::Value> = Cache::builder()
-        .max_capacity(100_000) // arbitrary number, 6x current sp and client pair count, adjust as needed
-        .time_to_live(std::time::Duration::from_secs(60 * 60 * 23)) // 23 hours, just shy of 1 day
-        .build();
-
     let sp_repo = Arc::new(StorageProviderRepository::new(pool.clone()));
     let deal_repo = Arc::new(DealRepository::new(dmob_pool.clone()));
     let url_repo = Arc::new(UrlResultRepository::new(pool.clone()));
@@ -81,9 +72,8 @@ async fn main() -> Result<()> {
     let app_state = Arc::new(AppState {
         deal_repo: deal_repo.clone(),
         active_requests: active_requests.clone(),
-        job_repo: Arc::new(JobRepository::new()),
         storage_provider_repo: sp_repo.clone(),
-        cache,
+        url_repo: url_repo.clone(),
         config: config.clone(),
     });
 
@@ -107,13 +97,6 @@ async fn main() -> Result<()> {
         }
     });
 
-    // Start the job handler in the background
-    tokio::spawn(background::job_handler(
-        config.clone(),
-        app_state.job_repo.clone(),
-        app_state.deal_repo.clone(),
-    ));
-
     let allowed_origins = ["https://sp-tool.allocator.tech".parse().unwrap()];
     let cors = CorsLayer::new()
         .allow_origin(allowed_origins)
@@ -122,10 +105,6 @@ async fn main() -> Result<()> {
         .allow_headers(Any);
 
     let app = create_routes()
-        .route_layer(middleware::from_fn_with_state(
-            app_state.clone(),
-            cache_middleware,
-        ))
         .layer(middleware::from_fn_with_state(
             app_state.clone(),
             request_counter,
