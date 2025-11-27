@@ -5,6 +5,7 @@ use sqlx::PgPool;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+use crate::services::url_discovery_service::UrlDiscoveryResult;
 use crate::types::{ClientId, DiscoveryType, ErrorCode, ProviderId, ResultCode};
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
@@ -18,6 +19,22 @@ pub struct UrlResult {
     pub result_code: ResultCode,
     pub error_code: Option<ErrorCode>,
     pub tested_at: DateTime<Utc>,
+}
+
+impl From<UrlDiscoveryResult> for UrlResult {
+    fn from(result: UrlDiscoveryResult) -> Self {
+        Self {
+            id: result.id,
+            provider_id: result.provider_id,
+            client_id: result.client_id,
+            result_type: result.result_type,
+            working_url: result.working_url,
+            retrievability_percent: result.retrievability_percent,
+            result_code: result.result_code,
+            error_code: result.error_code,
+            tested_at: Utc::now(),
+        }
+    }
 }
 
 #[derive(Clone)]

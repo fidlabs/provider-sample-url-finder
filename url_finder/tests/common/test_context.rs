@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
 use axum_test::TestServer;
-use chrono::Utc;
 use sqlx::{Postgres, migrate::MigrateDatabase};
 use std::env;
 use std::sync::Arc;
@@ -192,17 +191,7 @@ impl TestContext {
         )
         .await;
 
-        let url_result = UrlResult {
-            id: discovery_result.id,
-            provider_id: discovery_result.provider_id,
-            client_id: discovery_result.client_id,
-            result_type: discovery_result.result_type,
-            working_url: discovery_result.working_url,
-            retrievability_percent: discovery_result.retrievability_percent,
-            result_code: discovery_result.result_code,
-            error_code: discovery_result.error_code,
-            tested_at: Utc::now(),
-        };
+        let url_result: UrlResult = discovery_result.into();
 
         url_repo
             .insert_batch(&[url_result])
