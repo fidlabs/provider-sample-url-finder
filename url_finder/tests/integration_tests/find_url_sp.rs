@@ -8,7 +8,7 @@ async fn test_find_url_sp_invalid_provider() {
 }
 
 #[tokio::test]
-async fn test_find_url_sp_no_deals() {
+async fn test_find_url_sp_not_indexed() {
     let ctx = TestContext::new().await;
 
     let fixture = ctx
@@ -20,8 +20,28 @@ async fn test_find_url_sp_no_deals() {
         .get(&format!("/url/find/{}", fixture.provider_address))
         .await;
 
+    let body = assert_json_response_ok(response, json!({"result": "Error"}));
+    assert_no_url(&body);
+    assert_message_contains(&body, "not been indexed");
+}
+
+#[tokio::test]
+async fn test_find_url_sp_no_deals() {
+    let ctx = TestContext::new().await;
+
+    let fixture = ctx
+        .setup_provider_no_deals("99991235", multiaddrs_http_80())
+        .await;
+
+    ctx.run_discovery_for_provider(&fixture, None).await;
+
+    let response = ctx
+        .app
+        .get(&format!("/url/find/{}", fixture.provider_address))
+        .await;
+
     let body = assert_json_response_ok(response, json!({"result": "NoDealsFound"}));
-    assert!(body.get("url").is_none());
+    assert_no_url(&body);
 }
 
 #[tokio::test]
@@ -32,13 +52,15 @@ async fn test_find_url_sp_unreachable_endpoints() {
         .setup_provider_with_deals("99995678", None, multiaddrs_http_8080())
         .await;
 
+    ctx.run_discovery_for_provider(&fixture, None).await;
+
     let response = ctx
         .app
         .get(&format!("/url/find/{}", fixture.provider_address))
         .await;
 
     let body = assert_json_response_ok(response, json!({"result": "FailedToGetWorkingUrl"}));
-    assert!(body.get("url").is_none());
+    assert_no_url(&body);
 }
 
 #[tokio::test]
@@ -51,6 +73,8 @@ async fn test_find_url_sp_success() {
     let fixture = ctx
         .setup_provider_with_deals_and_mock_server("88885000", None, vec![piece_cid], 1.0)
         .await;
+
+    ctx.run_discovery_for_provider(&fixture, None).await;
 
     let response = ctx
         .app
@@ -79,6 +103,8 @@ async fn test_find_url_sp_partial_retrievability() {
             0.5,
         )
         .await;
+
+    ctx.run_discovery_for_provider(&fixture, None).await;
 
     let response = ctx
         .app

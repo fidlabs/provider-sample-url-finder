@@ -6,7 +6,6 @@ use axum::{
     response::Response,
 };
 use axum_test::TestServer;
-use moka::future::Cache;
 use std::{
     net::SocketAddr,
     sync::{Arc, atomic::AtomicUsize},
@@ -23,10 +22,6 @@ async fn inject_socket_addr(mut request: Request, next: Next) -> Response {
 
 pub async fn create_test_app(dbs: &TestDatabases, mocks: &MockExternalServices) -> TestServer {
     let active_requests = Arc::new(AtomicUsize::new(0));
-    let cache: Cache<String, serde_json::Value> = Cache::builder()
-        .max_capacity(1000)
-        .time_to_live(std::time::Duration::from_secs(3600))
-        .build();
 
     let lotus_url = mocks.lotus_url();
     let lotus_base = lotus_url.trim_end_matches('/');
@@ -38,9 +33,8 @@ pub async fn create_test_app(dbs: &TestDatabases, mocks: &MockExternalServices) 
     let app_state = Arc::new(AppState {
         deal_repo: Arc::new(DealRepository::new(dbs.app_pool.clone())),
         active_requests,
-        job_repo: Arc::new(JobRepository::new()),
         storage_provider_repo: Arc::new(StorageProviderRepository::new(dbs.app_pool.clone())),
-        cache,
+        url_repo: Arc::new(UrlResultRepository::new(dbs.app_pool.clone())),
         config,
     });
 

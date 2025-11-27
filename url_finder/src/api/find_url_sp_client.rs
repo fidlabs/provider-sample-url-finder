@@ -12,10 +12,8 @@ use tracing::debug;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::{
-    AppState, ResultCode, provider_endpoints,
-    services::deal_service,
+    AppState, ResultCode,
     types::{ClientAddress, ClientId, ProviderAddress, ProviderId},
-    url_tester,
 };
 
 #[derive(Deserialize, ToSchema, IntoParams)]
@@ -29,6 +27,8 @@ pub struct FindUrlSpClientResponse {
     pub result: ResultCode,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
 }
 
 /// Find a working url for a given SP address
@@ -62,53 +62,31 @@ pub async fn handle_find_url_sp_client(
     let client_address = ClientAddress::new(path.client)
         .map_err(|e| bad_request(format!("Invalid client address: {e}")))?;
 
-    let (result_code, endpoints) =
-        match provider_endpoints::get_provider_endpoints(&state.config, &provider_address).await {
-            Ok(endpoints) => endpoints,
-            Err(e) => return Err(internal_server_error(e.to_string())),
-        };
-
-    if endpoints.is_none() {
-        debug!("No endpoints found");
-
-        return Ok(ok_response(FindUrlSpClientResponse {
-            result: result_code,
-            url: None,
-        }));
-    }
-    let endpoints = endpoints.unwrap();
-
     let provider_id: ProviderId = provider_address.into();
     let client_id: ClientId = client_address.into();
 
-    let piece_ids =
-        deal_service::get_piece_ids_by_provider(&state.deal_repo, &provider_id, Some(&client_id))
-            .await
-            .map_err(|e| {
-                debug!("Failed to get piece ids: {:?}", e);
-                internal_server_error("Failed to get piece ids")
-            })?;
-    if piece_ids.is_empty() {
-        debug!("No deals found");
-        return Ok(ok_response(FindUrlSpClientResponse {
-            result: ResultCode::NoDealsFound,
+    let result = state
+        .url_repo
+        .get_latest_for_provider_client(&provider_id, &client_id)
+        .await
+        .map_err(|e| {
+            debug!("Failed to query url_results: {:?}", e);
+            internal_server_error("Failed to query url results")
+        })?;
+
+    match result {
+        Some(url_result) => Ok(ok_response(FindUrlSpClientResponse {
+            result: url_result.result_code,
+            url: url_result.working_url,
+            message: None,
+        })),
+        None => Ok(ok_response(FindUrlSpClientResponse {
+            result: ResultCode::Error,
             url: None,
-        }));
+            message: Some(
+                "Provider/client pair has not been indexed yet. Please try again later."
+                    .to_string(),
+            ),
+        })),
     }
-
-    let urls = deal_service::get_piece_url(endpoints, piece_ids).await;
-
-    let (working_url, _) = url_tester::check_retrievability_with_get(urls, false).await;
-    if working_url.is_none() {
-        debug!("Failed to get working url");
-        return Ok(ok_response(FindUrlSpClientResponse {
-            result: ResultCode::FailedToGetWorkingUrl,
-            url: None,
-        }));
-    }
-
-    Ok(ok_response(FindUrlSpClientResponse {
-        result: ResultCode::Success,
-        url: working_url,
-    }))
 }
