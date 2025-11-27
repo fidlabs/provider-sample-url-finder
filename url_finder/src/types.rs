@@ -294,8 +294,27 @@ pub enum ResultCode {
     NoDealsFound,
     TimedOut,
     Success,
-    JobCreated,
     Error,
+}
+
+impl ResultCode {
+    // Human-readable message for each result code
+    pub fn message(&self) -> Option<&'static str> {
+        match self {
+            Self::Success => None,
+            Self::NoCidContactData => Some("No data available from cid.contact for this provider"),
+            Self::MissingAddrFromCidContact => {
+                Some("No address information found from cid.contact")
+            }
+            Self::MissingHttpAddrFromCidContact => {
+                Some("No HTTP address found in cid.contact data")
+            }
+            Self::FailedToGetWorkingUrl => Some("Failed to find a working URL for this provider"),
+            Self::NoDealsFound => Some("No deals found for this provider"),
+            Self::TimedOut => Some("Request timed out while discovering URL"),
+            Self::Error => Some("An error occurred during URL discovery"),
+        }
+    }
 }
 
 impl fmt::Display for ResultCode {
@@ -308,7 +327,6 @@ impl fmt::Display for ResultCode {
             ResultCode::NoDealsFound => "NoDealsFound",
             ResultCode::TimedOut => "TimedOut",
             ResultCode::Success => "Success",
-            ResultCode::JobCreated => "JobCreated",
             ResultCode::Error => "Error",
         };
         write!(f, "{s}")
@@ -327,7 +345,6 @@ impl FromStr for ResultCode {
             "NoDealsFound" => Ok(Self::NoDealsFound),
             "TimedOut" => Ok(Self::TimedOut),
             "Success" => Ok(Self::Success),
-            "JobCreated" => Ok(Self::JobCreated),
             "Error" => Ok(Self::Error),
             _ => Err(color_eyre::eyre::eyre!("Invalid result code: {}", s)),
         }

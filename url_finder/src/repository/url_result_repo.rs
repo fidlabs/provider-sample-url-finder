@@ -30,6 +30,108 @@ impl UrlResultRepository {
         Self { pool }
     }
 
+    pub async fn get_latest_for_provider(
+        &self,
+        provider_id: &ProviderId,
+    ) -> Result<Option<UrlResult>> {
+        let result = sqlx::query_as!(
+            UrlResult,
+            r#"SELECT
+                    id,
+                    provider_id AS "provider_id: ProviderId",
+                    client_id AS "client_id: ClientId",
+                    result_type AS "result_type: DiscoveryType",
+                    working_url,
+                    retrievability_percent::float8 AS "retrievability_percent!",
+                    result_code AS "result_code: ResultCode",
+                    error_code AS "error_code: ErrorCode",
+                    tested_at
+               FROM
+                    url_results
+               WHERE
+                    provider_id = $1
+                    AND result_type = 'Provider'
+               ORDER BY
+                    tested_at DESC
+               LIMIT 1
+            "#,
+            provider_id.as_str()
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(result)
+    }
+
+    pub async fn get_latest_for_provider_client(
+        &self,
+        provider_id: &ProviderId,
+        client_id: &ClientId,
+    ) -> Result<Option<UrlResult>> {
+        let result = sqlx::query_as!(
+            UrlResult,
+            r#"SELECT
+                    id,
+                    provider_id AS "provider_id: ProviderId",
+                    client_id AS "client_id: ClientId",
+                    result_type AS "result_type: DiscoveryType",
+                    working_url,
+                    retrievability_percent::float8 AS "retrievability_percent!",
+                    result_code AS "result_code: ResultCode",
+                    error_code AS "error_code: ErrorCode",
+                    tested_at
+               FROM
+                    url_results
+               WHERE
+                    provider_id = $1
+                    AND client_id = $2
+                    AND result_type = 'ProviderClient'
+               ORDER BY
+                    tested_at DESC
+               LIMIT 1
+            "#,
+            provider_id.as_str(),
+            client_id.as_str()
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(result)
+    }
+
+    pub async fn get_latest_for_client_all_providers(
+        &self,
+        client_id: &ClientId,
+    ) -> Result<Vec<UrlResult>> {
+        let results = sqlx::query_as!(
+            UrlResult,
+            r#"SELECT DISTINCT ON (provider_id)
+                    id,
+                    provider_id AS "provider_id: ProviderId",
+                    client_id AS "client_id: ClientId",
+                    result_type AS "result_type: DiscoveryType",
+                    working_url,
+                    retrievability_percent::float8 AS "retrievability_percent!",
+                    result_code AS "result_code: ResultCode",
+                    error_code AS "error_code: ErrorCode",
+                    tested_at
+               FROM
+                    url_results
+               WHERE
+                    client_id = $1
+                    AND result_type = 'ProviderClient'
+               ORDER BY
+                    provider_id,
+                    tested_at DESC
+            "#,
+            client_id.as_str()
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(results)
+    }
+
     pub async fn insert_batch(&self, results: &[UrlResult]) -> Result<usize> {
         if results.is_empty() {
             return Ok(0);

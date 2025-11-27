@@ -1,11 +1,15 @@
 #![allow(dead_code)]
 
 use axum_test::TestServer;
+use chrono::Utc;
 use sqlx::{Postgres, migrate::MigrateDatabase};
 use std::env;
 use std::sync::Arc;
 use tracing::{debug, warn};
-use url_finder::types::{ProviderAddress, ProviderId};
+use url_finder::config::Config;
+use url_finder::repository::{DealRepository, UrlResult, UrlResultRepository};
+use url_finder::services::url_discovery_service::discover_url;
+use url_finder::types::{ClientAddress, ProviderAddress, ProviderId};
 
 use super::container::{ContainerState, get_or_create_container};
 use super::db_setup::{
@@ -164,6 +168,46 @@ impl TestContext {
             provider_address: ProviderAddress::new(format!("f0{provider_id}")).unwrap(),
             peer_id,
         }
+    }
+
+    /// Simulate the background URL Discovery job.
+    pub async fn run_discovery_for_provider(
+        &self,
+        fixture: &ProviderFixture,
+        client_address: Option<ClientAddress>,
+    ) {
+        let lotus_url = self.mocks.lotus_url();
+        let lotus_base = lotus_url.trim_end_matches('/');
+        let config =
+            Config::new_for_test(format!("{lotus_base}/rpc/v1"), self.mocks.cid_contact_url());
+
+        let deal_repo = DealRepository::new(self.dbs.app_pool.clone());
+        let url_repo = UrlResultRepository::new(self.dbs.app_pool.clone());
+
+        let discovery_result = discover_url(
+            &config,
+            &fixture.provider_address,
+            client_address,
+            &deal_repo,
+        )
+        .await;
+
+        let url_result = UrlResult {
+            id: discovery_result.id,
+            provider_id: discovery_result.provider_id,
+            client_id: discovery_result.client_id,
+            result_type: discovery_result.result_type,
+            working_url: discovery_result.working_url,
+            retrievability_percent: discovery_result.retrievability_percent,
+            result_code: discovery_result.result_code,
+            error_code: discovery_result.error_code,
+            tested_at: Utc::now(),
+        };
+
+        url_repo
+            .insert_batch(&[url_result])
+            .await
+            .expect("Failed to insert discovery result");
     }
 }
 

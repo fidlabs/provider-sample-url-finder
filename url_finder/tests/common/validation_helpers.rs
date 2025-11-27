@@ -34,3 +34,21 @@ pub fn assert_json_response_ok(
 ) -> serde_json::Value {
     assert_json_response(response, StatusCode::OK, expected_json)
 }
+
+pub fn assert_message_contains(body: &serde_json::Value, expected_text: &str) {
+    let message = body["message"]
+        .as_str()
+        .expect("Expected 'message' field in response");
+    assert!(
+        message.contains(expected_text),
+        "Expected message containing '{expected_text}', got: '{message}'"
+    );
+}
+
+pub fn assert_no_url(body: &serde_json::Value) {
+    assert!(
+        body.get("url").is_none(),
+        "Expected no 'url' field, but got: {:?}",
+        body.get("url")
+    );
+}

@@ -24,7 +24,7 @@ async fn test_find_url_sp_client_invalid_client() {
 }
 
 #[tokio::test]
-async fn test_find_url_sp_client_no_deals() {
+async fn test_find_url_sp_client_not_indexed() {
     let ctx = TestContext::new().await;
 
     let fixture = ctx
@@ -39,8 +39,33 @@ async fn test_find_url_sp_client_no_deals() {
         ))
         .await;
 
+    let body = assert_json_response_ok(response, json!({"result": "Error"}));
+    assert_no_url(&body);
+    assert_message_contains(&body, "not been indexed");
+}
+
+#[tokio::test]
+async fn test_find_url_sp_client_no_deals() {
+    let ctx = TestContext::new().await;
+
+    let fixture = ctx
+        .setup_provider_no_deals("99992001", multiaddrs_http_80())
+        .await;
+
+    // Run discovery to populate url_results
+    ctx.run_discovery_for_provider(&fixture, Some(test_client_address()))
+        .await;
+
+    let response = ctx
+        .app
+        .get(&format!(
+            "/url/find/{}/{}",
+            fixture.provider_address, TEST_CLIENT_ID_API
+        ))
+        .await;
+
     let body = assert_json_response_ok(response, json!({"result": "NoDealsFound"}));
-    assert!(body.get("url").is_none());
+    assert_no_url(&body);
 }
 
 #[tokio::test]
@@ -49,6 +74,9 @@ async fn test_find_url_sp_client_unreachable_endpoints() {
 
     let fixture = ctx
         .setup_provider_with_deals("99993000", Some(TEST_CLIENT_ID_DB), multiaddrs_http_8080())
+        .await;
+
+    ctx.run_discovery_for_provider(&fixture, Some(test_client_address()))
         .await;
 
     let response = ctx
@@ -60,7 +88,7 @@ async fn test_find_url_sp_client_unreachable_endpoints() {
         .await;
 
     let body = assert_json_response_ok(response, json!({"result": "FailedToGetWorkingUrl"}));
-    assert!(body.get("url").is_none());
+    assert_no_url(&body);
 }
 
 #[tokio::test]
@@ -77,6 +105,9 @@ async fn test_find_url_sp_client_success() {
             vec![piece_cid],
             1.0,
         )
+        .await;
+
+    ctx.run_discovery_for_provider(&fixture, Some(test_client_address()))
         .await;
 
     let response = ctx
@@ -108,6 +139,9 @@ async fn test_find_url_sp_client_partial_retrievability() {
             vec![TEST_PIECE_CID, TEST_PIECE_CID_2],
             0.5,
         )
+        .await;
+
+    ctx.run_discovery_for_provider(&fixture, Some(test_client_address()))
         .await;
 
     let response = ctx
