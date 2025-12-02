@@ -1,23 +1,26 @@
 use color_eyre::Result;
 
-use crate::repository::DealRepository;
+use crate::{
+    repository::DealRepository,
+    types::{ClientAddress, ClientId, ProviderAddress, ProviderId},
+};
 
 /// get deals and extract piece_ids
 pub async fn get_piece_ids_by_provider(
     deal_repo: &DealRepository,
-    provider: &str,
-    client: Option<&str>,
+    provider_id: &ProviderId,
+    client_id: Option<&ClientId>,
 ) -> Result<Vec<String>> {
     let limit = 100;
     let offset = 0;
 
-    let deals = if let Some(client) = client {
+    let deals = if let Some(client) = client_id {
         deal_repo
-            .get_deals_by_provider_and_client(provider, client, limit, offset)
+            .get_deals_by_provider_and_client(provider_id, client, limit, offset)
             .await?
     } else {
         deal_repo
-            .get_deals_by_provider(provider, limit, offset)
+            .get_deals_by_provider(provider_id, limit, offset)
             .await?
     };
 
@@ -35,27 +38,22 @@ pub async fn get_piece_ids_by_provider(
 
 pub async fn get_distinct_providers_by_client(
     deal_repo: &DealRepository,
-    client: &str,
-) -> Result<Vec<String>> {
-    let client_db = client.strip_prefix("f0").unwrap_or(client);
+    client_address: &ClientAddress,
+) -> Result<Vec<ProviderAddress>> {
+    let client_id: ClientId = client_address.clone().into();
     let deals = deal_repo
-        .get_distinct_providers_by_client(client_db)
+        .get_distinct_providers_by_client(&client_id)
         .await?;
 
     if deals.is_empty() {
         return Ok(vec![]);
     }
 
-    let providers: Vec<String> = deals
+    let providers: Vec<ProviderAddress> = deals
         .iter()
         .filter_map(|deal| deal.provider_id.clone())
-        .map(|provider| {
-            if !provider.starts_with("f0") {
-                format!("f0{provider}")
-            } else {
-                provider
-            }
-        })
+        .filter_map(|provider_id| ProviderId::new(provider_id).ok())
+        .map(|provider_id| provider_id.into())
         .collect();
 
     Ok(providers)
@@ -63,14 +61,14 @@ pub async fn get_distinct_providers_by_client(
 
 pub async fn get_random_piece_ids_by_provider_and_client(
     deal_repo: &DealRepository,
-    provider: &str,
-    client: &str,
+    provider_id: &ProviderId,
+    client_id: &ClientId,
 ) -> Result<Vec<String>> {
     let limit = 100;
     let offset = 0;
 
     let deals = deal_repo
-        .get_random_deals_by_provider_and_client(provider, client, limit, offset)
+        .get_random_deals_by_provider_and_client(provider_id, client_id, limit, offset)
         .await?;
 
     if deals.is_empty() {
@@ -87,13 +85,13 @@ pub async fn get_random_piece_ids_by_provider_and_client(
 
 pub async fn get_random_piece_ids_by_provider(
     deal_repo: &DealRepository,
-    provider: &str,
+    provider_id: &ProviderId,
 ) -> Result<Vec<String>> {
     let limit = 100;
     let offset = 0;
 
     let deals = deal_repo
-        .get_random_deals_by_provider(provider, limit, offset)
+        .get_random_deals_by_provider(provider_id, limit, offset)
         .await?;
 
     if deals.is_empty() {

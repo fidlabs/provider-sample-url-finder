@@ -1,8 +1,14 @@
+use std::{fmt, time::Duration};
+
 use color_eyre::Result;
-use reqwest::Client;
-use std::fmt;
-use tracing::{debug, info};
+use tracing::debug;
 use urlencoding::decode;
+
+use crate::utils::build_reqwest_retry_client;
+
+const CID_CONTACT_MIN_RETRY_INTERVAL_MS: u64 = 2_000;
+const CID_CONTACT_MAX_RETRY_INTERVAL_MS: u64 = 30_000;
+const CID_CONTACT_TOTAL_TIMEOUT_MS: u64 = 60_000;
 
 pub enum CidContactError {
     InvalidResponse,
@@ -19,7 +25,10 @@ impl fmt::Display for CidContactError {
 }
 
 pub async fn get_contact(peer_id: &str) -> Result<serde_json::Value, CidContactError> {
-    let client = Client::new();
+    let client = build_reqwest_retry_client(
+        CID_CONTACT_MIN_RETRY_INTERVAL_MS,
+        CID_CONTACT_MAX_RETRY_INTERVAL_MS,
+    );
     let url = format!("https://cid.contact/providers/{peer_id}");
 
     debug!("cid contact url: {:?}", url);
@@ -28,6 +37,7 @@ pub async fn get_contact(peer_id: &str) -> Result<serde_json::Value, CidContactE
         .get(&url)
         .header("Accept", "application/json")
         .header("User-Agent", "url-finder/0.1.0")
+        .timeout(Duration::from_millis(CID_CONTACT_TOTAL_TIMEOUT_MS))
         .send()
         .await
         .map_err(|_| CidContactError::InvalidResponse)?;
@@ -35,7 +45,7 @@ pub async fn get_contact(peer_id: &str) -> Result<serde_json::Value, CidContactE
     debug!("cid contact status: {:?}", res.status());
 
     if !res.status().is_success() {
-        info!(
+        debug!(
             "cid contact returned non-success status: {:?}",
             res.status()
         );
