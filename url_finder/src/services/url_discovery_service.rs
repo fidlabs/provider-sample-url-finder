@@ -1,3 +1,5 @@
+use chrono::{DateTime, Utc};
+
 use crate::{
     config::Config,
     provider_endpoints,
@@ -21,6 +23,7 @@ pub struct UrlDiscoveryResult {
     pub retrievability_percent: f64,
     pub result_code: ResultCode,
     pub error_code: Option<ErrorCode>,
+    pub tested_at: DateTime<Utc>,
 }
 
 impl UrlDiscoveryResult {
@@ -34,6 +37,7 @@ impl UrlDiscoveryResult {
             retrievability_percent: 0.0,
             result_code: ResultCode::Error,
             error_code: None,
+            tested_at: Utc::now(),
         }
     }
 
@@ -47,6 +51,7 @@ impl UrlDiscoveryResult {
             retrievability_percent: 0.0,
             result_code: ResultCode::Error,
             error_code: None,
+            tested_at: Utc::now(),
         }
     }
 }

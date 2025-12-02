@@ -1,8 +1,26 @@
 use std::env;
 
 use color_eyre::Result;
+use tracing::warn;
 
 use crate::types::DbConnectParams;
+
+fn parse_positive_i64_or_default(env_var: &str, default: i64) -> i64 {
+    match env::var(env_var) {
+        Ok(s) => match s.parse::<i64>() {
+            Ok(v) if v > 0 => v,
+            Ok(v) => {
+                warn!("{env_var}={v} is not positive, defaulting to {default}");
+                default
+            }
+            Err(e) => {
+                warn!("{env_var}='{s}' is not a valid integer ({e}), defaulting to {default}");
+                default
+            }
+        },
+        Err(_) => default,
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -11,6 +29,9 @@ pub struct Config {
     pub log_level: String,
     pub glif_url: String,
     pub cid_contact_url: String,
+    pub bms_url: String,
+    pub bms_default_worker_count: i64,
+    pub bms_test_interval_days: i64,
 }
 
 impl Config {
@@ -32,6 +53,9 @@ impl Config {
             glif_url: env::var("GLIF_URL").unwrap_or("https://api.node.glif.io/rpc/v1".to_string()),
             cid_contact_url: env::var("CID_CONTACT_URL")
                 .unwrap_or("https://cid.contact".to_string()),
+            bms_url: env::var("BMS_URL").expect("BMS_URL must be set"),
+            bms_default_worker_count: parse_positive_i64_or_default("BMS_WORKER_COUNT", 10),
+            bms_test_interval_days: parse_positive_i64_or_default("BMS_TEST_INTERVAL_DAYS", 7),
         })
     }
 
@@ -43,6 +67,9 @@ impl Config {
             log_level: "info".to_string(),
             glif_url,
             cid_contact_url,
+            bms_url: "http://localhost:8080".to_string(),
+            bms_default_worker_count: 10,
+            bms_test_interval_days: 7,
         }
     }
 }

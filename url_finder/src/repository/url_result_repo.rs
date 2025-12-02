@@ -32,7 +32,7 @@ impl From<UrlDiscoveryResult> for UrlResult {
             retrievability_percent: result.retrievability_percent,
             result_code: result.result_code,
             error_code: result.error_code,
-            tested_at: Utc::now(),
+            tested_at: result.tested_at,
         }
     }
 }

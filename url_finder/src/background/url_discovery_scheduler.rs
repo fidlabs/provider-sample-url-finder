@@ -9,6 +9,7 @@ use futures::future::join_all;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::{sync::Semaphore, time::sleep};
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
 const SCHEDULER_SLEEP_INTERVAL: Duration = Duration::from_secs(3600);
@@ -21,6 +22,7 @@ pub async fn run_url_discovery_scheduler(
     sp_repo: Arc<StorageProviderRepository>,
     url_repo: Arc<UrlResultRepository>,
     deal_repo: Arc<DealRepository>,
+    shutdown: CancellationToken,
 ) {
     info!("Starting URL discovery scheduler loop");
 
@@ -41,8 +43,16 @@ pub async fn run_url_discovery_scheduler(
                 }
             };
 
-        sleep(interval).await;
+        tokio::select! {
+            _ = sleep(interval) => {}
+            _ = shutdown.cancelled() => {
+                info!("URL discovery scheduler received shutdown signal");
+                break;
+            }
+        }
     }
+
+    info!("URL discovery scheduler stopped");
 }
 
 async fn schedule_url_discoveries(
