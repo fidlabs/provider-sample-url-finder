@@ -9,6 +9,7 @@ fi
 # SQL file name or default
 FILE_NAME=${1:-"sample_deals.sql"}
 
+
 if [ -z "$DATABASE_URL" ]; then
     echo "ERROR: DATABASE_URL not set in .env"
     exit 1
