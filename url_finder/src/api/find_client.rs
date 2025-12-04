@@ -13,7 +13,8 @@ use utoipa::{IntoParams, ToSchema};
 
 use crate::{
     AppState,
-    types::{ClientAddress, ClientId, ProviderAddress},
+    services::provider_service::ProviderData,
+    types::{ClientAddress, ProviderAddress},
 };
 
 use super::ResultCode;
@@ -31,6 +32,17 @@ pub struct ProviderResult {
     pub retrievability_percent: f64,
 }
 
+impl From<ProviderData> for ProviderResult {
+    fn from(data: ProviderData) -> Self {
+        Self {
+            provider: data.provider_id.into(),
+            result: data.result_code,
+            working_url: data.working_url,
+            retrievability_percent: data.retrievability_percent,
+        }
+    }
+}
+
 #[derive(Serialize, ToSchema)]
 pub struct FindByClientResponse {
     pub client: String,
@@ -40,11 +52,10 @@ pub struct FindByClientResponse {
     pub message: Option<String>,
 }
 
-/// Find retrivabiliy of urls for a given SP and Client address
 #[utoipa::path(
     get,
     path = "/url/client/{client}",
-    params (FindByClientPath),
+    params(FindByClientPath),
     description = r#"
 **Find client SPs with working url and retrievabiliy of urls for for each found SP**
     "#,
@@ -65,22 +76,21 @@ pub async fn handle_find_client(
         &path.client
     );
 
-    // Parse and validate client address
-    let client_address = ClientAddress::new(path.client.clone())
+    let client_address = ClientAddress::new(&path.client)
         .map_err(|e| bad_request(format!("Invalid client address: {e}")))?;
 
-    let client_id: ClientId = client_address.into();
+    let client_id = client_address.into();
 
-    let url_results = state
-        .url_repo
-        .get_latest_for_client_all_providers(&client_id)
+    let providers_data = state
+        .provider_service
+        .get_providers_for_client(&client_id)
         .await
         .map_err(|e| {
-            debug!("Failed to query url_results: {:?}", e);
+            debug!("Failed to query client providers: {:?}", e);
             internal_server_error("Failed to query url results")
         })?;
 
-    if url_results.is_empty() {
+    if providers_data.is_empty() {
         return Ok(ok_response(FindByClientResponse {
             result: ResultCode::Error,
             client: path.client.clone(),
@@ -92,15 +102,7 @@ pub async fn handle_find_client(
         }));
     }
 
-    let providers: Vec<ProviderResult> = url_results
-        .into_iter()
-        .map(|r| ProviderResult {
-            provider: r.provider_id.into(),
-            result: r.result_code,
-            working_url: r.working_url,
-            retrievability_percent: r.retrievability_percent,
-        })
-        .collect();
+    let providers: Vec<ProviderResult> = providers_data.into_iter().map(Into::into).collect();
 
     Ok(ok_response(FindByClientResponse {
         result: ResultCode::Success,

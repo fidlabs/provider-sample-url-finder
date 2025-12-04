@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE\n                    storage_providers\n               SET\n                    next_bms_test_at = NOW() + ($2 || ' days')::INTERVAL,\n                    updated_at = NOW()\n               WHERE\n                    provider_id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "12d7f6ae8955ca4b916c0d4d311455c156a6d9e1b09fbac16f65f47beef4ab8b"
+}

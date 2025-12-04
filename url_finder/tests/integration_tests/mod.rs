@@ -1,7 +1,12 @@
+pub mod clients_providers;
 pub mod find_client;
 pub mod find_retri_sp;
 pub mod find_retri_sp_client;
 pub mod find_url_sp;
 pub mod find_url_sp_client;
+pub mod providers_bulk;
+pub mod providers_client;
+pub mod providers_get;
+pub mod providers_list;
 pub mod rate_limiting;
 pub mod url_discovery_service;

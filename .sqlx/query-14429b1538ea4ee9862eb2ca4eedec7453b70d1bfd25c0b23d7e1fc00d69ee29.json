@@ -1,0 +1,94 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT DISTINCT ON (provider_id)\n                    id,\n                    provider_id,\n                    bms_job_id,\n                    url_tested,\n                    routing_key,\n                    worker_count,\n                    status,\n                    ping_avg_ms,\n                    head_avg_ms,\n                    ttfb_ms,\n                    download_speed_mbps,\n                    created_at,\n                    completed_at\n               FROM\n                    bms_bandwidth_results\n               WHERE\n                    provider_id = ANY($1)\n                    AND status != 'Pending'\n               ORDER BY\n                    provider_id,\n                    completed_at DESC NULLS LAST\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "provider_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "bms_job_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "url_tested",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "routing_key",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "worker_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "status",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 7,
+        "name": "ping_avg_ms",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 8,
+        "name": "head_avg_ms",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 9,
+        "name": "ttfb_ms",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 10,
+        "name": "download_speed_mbps",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 11,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 12,
+        "name": "completed_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "14429b1538ea4ee9862eb2ca4eedec7453b70d1bfd25c0b23d7e1fc00d69ee29"
+}

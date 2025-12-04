@@ -1,0 +1,98 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO\n                    bms_bandwidth_results (\n                        provider_id,\n                        bms_job_id,\n                        url_tested,\n                        routing_key,\n                        worker_count,\n                        status\n                    )\n               VALUES ($1, $2, $3, $4, $5, 'Pending')\n               RETURNING\n                    id,\n                    provider_id,\n                    bms_job_id,\n                    url_tested,\n                    routing_key,\n                    worker_count,\n                    status,\n                    ping_avg_ms,\n                    head_avg_ms,\n                    ttfb_ms,\n                    download_speed_mbps,\n                    created_at,\n                    completed_at\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "provider_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "bms_job_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "url_tested",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "routing_key",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "worker_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "status",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 7,
+        "name": "ping_avg_ms",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 8,
+        "name": "head_avg_ms",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 9,
+        "name": "ttfb_ms",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 10,
+        "name": "download_speed_mbps",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 11,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 12,
+        "name": "completed_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Uuid",
+        "Text",
+        "Varchar",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "5eff09a6443b679f3bc725a5d9117f117c721086e0e2040e4476461de67e4355"
+}

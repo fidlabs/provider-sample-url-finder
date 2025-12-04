@@ -5,6 +5,7 @@ pub use std::sync::{Arc, atomic::AtomicUsize};
 pub mod api;
 pub mod api_response;
 pub mod background;
+pub mod bms_client;
 mod cid_contact;
 pub mod config;
 mod lotus_rpc;
@@ -16,7 +17,7 @@ pub mod routes;
 pub mod services;
 pub mod types;
 mod url_tester;
-mod utils;
+pub mod utils;
 
 pub use types::{ErrorCode, ResultCode};
 
@@ -25,5 +26,7 @@ pub struct AppState {
     pub active_requests: Arc<AtomicUsize>,
     pub storage_provider_repo: Arc<repository::StorageProviderRepository>,
     pub url_repo: Arc<repository::UrlResultRepository>,
+    pub bms_repo: Arc<repository::BmsBandwidthResultRepository>,
+    pub provider_service: Arc<services::provider_service::ProviderService>,
     pub config: Arc<config::Config>,
 }

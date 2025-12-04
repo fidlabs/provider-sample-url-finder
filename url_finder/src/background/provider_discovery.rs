@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info};
 
 use crate::repository::{DealRepository, StorageProviderRepository};
@@ -11,6 +12,7 @@ const DMOB_QUERY_TIMEOUT: Duration = Duration::from_secs(1200); // 20 minutes
 pub async fn run_provider_discovery(
     sp_repo: Arc<StorageProviderRepository>,
     deal_repo: Arc<DealRepository>,
+    shutdown: CancellationToken,
 ) {
     info!("Starting provider discovery loop");
 
@@ -20,8 +22,16 @@ pub async fn run_provider_discovery(
             Err(e) => error!("Provider discovery failed: {:?}", e),
         }
 
-        sleep(DISCOVERY_INTERVAL).await;
+        tokio::select! {
+            _ = sleep(DISCOVERY_INTERVAL) => {}
+            _ = shutdown.cancelled() => {
+                info!("Provider discovery received shutdown signal");
+                break;
+            }
+        }
     }
+
+    info!("Provider discovery stopped");
 }
 
 async fn discover_and_sync_providers(
