@@ -60,8 +60,16 @@ pub fn multiaddrs_empty() -> Vec<String> {
 // Provider API test constants
 pub const TEST_PROVIDER_3_DB: &str = "88883000";
 pub const TEST_PROVIDER_3_API: &str = "f088883000";
-pub const TEST_CLIENT_2_DB: &str = "2000";
-pub const TEST_CLIENT_2_API: &str = "f02000";
+pub const TEST_CLIENT_2_ID_DB: &str = "2000";
+pub const TEST_CLIENT_2_ID_API: &str = "f02000";
+
+pub fn test_client_2_id() -> ClientId {
+    ClientId::new(TEST_CLIENT_2_ID_DB).unwrap()
+}
+
+pub fn test_client_2_address() -> ClientAddress {
+    ClientAddress::new(TEST_CLIENT_2_ID_API).unwrap()
+}
 
 pub const TEST_WORKING_URL: &str = "http://example.com/piece";
 pub const TEST_WORKING_URL_2: &str = "http://example2.com/piece";
