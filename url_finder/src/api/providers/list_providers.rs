@@ -10,7 +10,9 @@ use utoipa::{IntoParams, ToSchema};
 
 use crate::{
     AppState,
-    api_response::{ApiResponse, ErrorCode, ErrorResponse, internal_server_error_with_code, ok_response},
+    api_response::{
+        ApiResponse, ErrorCode, ErrorResponse, internal_server_error_with_code, ok_response,
+    },
 };
 
 use super::types::{ProviderResponse, ProvidersListResponse};

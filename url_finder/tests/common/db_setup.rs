@@ -145,3 +145,43 @@ pub async fn seed_url_result(
     .await
     .expect("Failed to insert url_result");
 }
+
+pub async fn seed_bms_bandwidth_result(
+    app_pool: &PgPool,
+    provider_id: &str,
+    url_tested: &str,
+    status: &str,
+    ping_avg_ms: Option<f64>,
+    head_avg_ms: Option<f64>,
+    ttfb_ms: Option<f64>,
+    download_speed_mbps: Option<f64>,
+) {
+    sqlx::query(
+        r#"INSERT INTO
+                bms_bandwidth_results (
+                    provider_id,
+                    bms_job_id,
+                    url_tested,
+                    routing_key,
+                    worker_count,
+                    status,
+                    ping_avg_ms,
+                    head_avg_ms,
+                    ttfb_ms,
+                    download_speed_mbps,
+                    completed_at
+                )
+           VALUES
+                ($1, gen_random_uuid(), $2, 'test-region', 1, $3, $4, $5, $6, $7, NOW())"#,
+    )
+    .bind(provider_id)
+    .bind(url_tested)
+    .bind(status)
+    .bind(ping_avg_ms)
+    .bind(head_avg_ms)
+    .bind(ttfb_ms)
+    .bind(download_speed_mbps)
+    .execute(app_pool)
+    .await
+    .expect("Failed to insert bms_bandwidth_result");
+}

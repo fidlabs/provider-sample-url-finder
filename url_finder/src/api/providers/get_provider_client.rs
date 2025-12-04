@@ -12,8 +12,8 @@ use utoipa::{IntoParams, ToSchema};
 use crate::{
     AppState,
     api_response::{
-        ApiResponse, ErrorCode, ErrorResponse, bad_request_with_code, internal_server_error_with_code,
-        not_found_with_code, ok_response,
+        ApiResponse, ErrorCode, ErrorResponse, bad_request_with_code,
+        internal_server_error_with_code, not_found_with_code, ok_response,
     },
     types::{ClientAddress, ProviderAddress},
 };
@@ -49,10 +49,16 @@ pub async fn handle_get_provider_client(
     debug!("GET /providers/{}/clients/{}", &path.id, &path.client_id);
 
     let provider_address = ProviderAddress::new(&path.id).map_err(|e| {
-        bad_request_with_code(ErrorCode::InvalidAddress, format!("Invalid provider address: {e}"))
+        bad_request_with_code(
+            ErrorCode::InvalidAddress,
+            format!("Invalid provider address: {e}"),
+        )
     })?;
     let client_address = ClientAddress::new(&path.client_id).map_err(|e| {
-        bad_request_with_code(ErrorCode::InvalidAddress, format!("Invalid client address: {e}"))
+        bad_request_with_code(
+            ErrorCode::InvalidAddress,
+            format!("Invalid client address: {e}"),
+        )
     })?;
 
     let provider_id = provider_address.into();
