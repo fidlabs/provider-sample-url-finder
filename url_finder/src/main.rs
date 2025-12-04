@@ -79,11 +79,20 @@ async fn main() -> Result<()> {
         config.bms_url.clone(),
     ));
 
+    let provider_service = Arc::new(
+        url_finder::services::provider_service::ProviderService::new(
+            url_repo.clone(),
+            bms_result_repo.clone(),
+        ),
+    );
+
     let app_state = Arc::new(AppState {
         deal_repo: deal_repo.clone(),
         active_requests: active_requests.clone(),
         storage_provider_repo: sp_repo.clone(),
         url_repo: url_repo.clone(),
+        bms_repo: bms_result_repo.clone(),
+        provider_service,
         config: config.clone(),
     });
 

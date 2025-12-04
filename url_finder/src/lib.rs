@@ -26,5 +26,7 @@ pub struct AppState {
     pub active_requests: Arc<AtomicUsize>,
     pub storage_provider_repo: Arc<repository::StorageProviderRepository>,
     pub url_repo: Arc<repository::UrlResultRepository>,
+    pub bms_repo: Arc<repository::BmsBandwidthResultRepository>,
+    pub provider_service: Arc<services::provider_service::ProviderService>,
     pub config: Arc<config::Config>,
 }

@@ -10,7 +10,9 @@ use std::{
     net::SocketAddr,
     sync::{Arc, atomic::AtomicUsize},
 };
-use url_finder::{AppState, config::Config, repository::*};
+use url_finder::{
+    AppState, config::Config, repository::*, services::provider_service::ProviderService,
+};
 
 use super::{TestDatabases, mock_servers::MockExternalServices};
 
@@ -30,11 +32,17 @@ pub async fn create_test_app(dbs: &TestDatabases, mocks: &MockExternalServices) 
         mocks.cid_contact_url(),
     ));
 
+    let url_repo = Arc::new(UrlResultRepository::new(dbs.app_pool.clone()));
+    let bms_repo = Arc::new(BmsBandwidthResultRepository::new(dbs.app_pool.clone()));
+    let provider_service = Arc::new(ProviderService::new(url_repo.clone(), bms_repo.clone()));
+
     let app_state = Arc::new(AppState {
         deal_repo: Arc::new(DealRepository::new(dbs.app_pool.clone())),
         active_requests,
         storage_provider_repo: Arc::new(StorageProviderRepository::new(dbs.app_pool.clone())),
-        url_repo: Arc::new(UrlResultRepository::new(dbs.app_pool.clone())),
+        url_repo,
+        bms_repo,
+        provider_service,
         config,
     });
 

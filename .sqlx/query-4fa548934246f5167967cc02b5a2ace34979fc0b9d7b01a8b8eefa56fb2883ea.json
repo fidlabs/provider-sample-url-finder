@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                    COUNT(DISTINCT provider_id) AS \"count!\"\n               FROM\n                    url_results\n               WHERE\n                    result_type = 'Provider'\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "4fa548934246f5167967cc02b5a2ace34979fc0b9d7b01a8b8eefa56fb2883ea"
+}

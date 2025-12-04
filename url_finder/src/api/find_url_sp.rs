@@ -12,8 +12,7 @@ use tracing::debug;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::{
-    AppState, ResultCode,
-    types::{ProviderAddress, ProviderId},
+    AppState, ResultCode, services::provider_service::ProviderData, types::ProviderAddress,
 };
 
 #[derive(Deserialize, ToSchema, IntoParams)]
@@ -30,11 +29,30 @@ pub struct FindUrlSpResponse {
     pub message: Option<String>,
 }
 
-/// Find a working url for a given SP address
+impl From<ProviderData> for FindUrlSpResponse {
+    fn from(data: ProviderData) -> Self {
+        Self {
+            result: data.result_code.clone(),
+            url: data.working_url,
+            message: data.result_code.message().map(String::from),
+        }
+    }
+}
+
+impl FindUrlSpResponse {
+    fn not_indexed() -> Self {
+        Self {
+            result: ResultCode::Error,
+            url: None,
+            message: Some("Provider has not been indexed yet. Please try again later.".to_string()),
+        }
+    }
+}
+
 #[utoipa::path(
     get,
     path = "/url/find/{provider}",
-    params (FindUrlSpPath),
+    params(FindUrlSpPath),
     description = r#"
 **Find a working url for a given SP address**
     "#,
@@ -52,31 +70,22 @@ pub async fn handle_find_url_sp(
 ) -> Result<ApiResponse<FindUrlSpResponse>, ApiResponse<()>> {
     debug!("find url input address: {:?}", &path.provider);
 
-    // Parse and validate provider address
-    let provider_address = ProviderAddress::new(path.provider)
+    let provider_address = ProviderAddress::new(&path.provider)
         .map_err(|e| bad_request(format!("Invalid provider address: {e}")))?;
 
-    let provider_id: ProviderId = provider_address.into();
+    let provider_id = provider_address.into();
 
     let result = state
-        .url_repo
-        .get_latest_for_provider(&provider_id)
+        .provider_service
+        .get_provider(&provider_id)
         .await
         .map_err(|e| {
-            debug!("Failed to query url_results: {:?}", e);
-            internal_server_error("Failed to query url results")
+            debug!("Failed to query provider: {:?}", e);
+            internal_server_error("Failed to query provider")
         })?;
 
-    match result {
-        Some(url_result) => Ok(ok_response(FindUrlSpResponse {
-            result: url_result.result_code.clone(),
-            url: url_result.working_url,
-            message: url_result.result_code.message().map(String::from),
-        })),
-        None => Ok(ok_response(FindUrlSpResponse {
-            result: ResultCode::Error,
-            url: None,
-            message: Some("Provider has not been indexed yet. Please try again later.".to_string()),
-        })),
-    }
+    Ok(ok_response(match result {
+        Some(data) => data.into(),
+        None => FindUrlSpResponse::not_indexed(),
+    }))
 }

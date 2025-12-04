@@ -257,6 +257,80 @@ impl BmsBandwidthResultRepository {
         .await?)
     }
 
+    pub async fn get_latest_completed_for_provider(
+        &self,
+        provider_id: &ProviderId,
+    ) -> Result<Option<BmsBandwidthResult>> {
+        Ok(sqlx::query_as!(
+            BmsBandwidthResult,
+            r#"SELECT
+                    id,
+                    provider_id,
+                    bms_job_id,
+                    url_tested,
+                    routing_key,
+                    worker_count,
+                    status,
+                    ping_avg_ms,
+                    head_avg_ms,
+                    ttfb_ms,
+                    download_speed_mbps,
+                    created_at,
+                    completed_at
+               FROM
+                    bms_bandwidth_results
+               WHERE
+                    provider_id = $1
+                    AND status != 'Pending'
+               ORDER BY
+                    completed_at DESC NULLS LAST
+               LIMIT 1
+            "#,
+            provider_id.as_str()
+        )
+        .fetch_optional(&self.pool)
+        .await?)
+    }
+
+    pub async fn get_latest_completed_for_providers(
+        &self,
+        provider_ids: &[String],
+    ) -> Result<Vec<BmsBandwidthResult>> {
+        if provider_ids.is_empty() {
+            return Ok(vec![]);
+        }
+
+        Ok(sqlx::query_as!(
+            BmsBandwidthResult,
+            r#"SELECT DISTINCT ON (provider_id)
+                    id,
+                    provider_id,
+                    bms_job_id,
+                    url_tested,
+                    routing_key,
+                    worker_count,
+                    status,
+                    ping_avg_ms,
+                    head_avg_ms,
+                    ttfb_ms,
+                    download_speed_mbps,
+                    created_at,
+                    completed_at
+               FROM
+                    bms_bandwidth_results
+               WHERE
+                    provider_id = ANY($1)
+                    AND status != 'Pending'
+               ORDER BY
+                    provider_id,
+                    completed_at DESC NULLS LAST
+            "#,
+            provider_ids
+        )
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
     pub async fn get_history_for_provider(
         &self,
         provider_id: &ProviderId,
