@@ -2,7 +2,7 @@
 include .env
 export
 
-.PHONY: check format lint build run stop logs prepare
+.PHONY: check format lint build run stop logs prepare test
 .PHONY: run-db stop-db clean-db clear-db logs-db exec-db
 .PHONY: migration migrate-up migrate-down migrate-status init-dev init-dev-db
 
@@ -15,6 +15,9 @@ format:
 
 lint:
 	@cargo clippy
+
+test:
+	@SQLX_OFFLINE=true cargo test --workspace
 
 # Docker app commands
 build:

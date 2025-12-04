@@ -1,22 +1,19 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
+use crate::api_response::*;
 use axum::{
     debug_handler,
     extract::{Path, State},
 };
 use axum_extra::extract::WithRejection;
 use color_eyre::Result;
-use common::api_response::*;
 use serde::{Deserialize, Serialize};
-use tokio::time::timeout;
 use tracing::debug;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::{
-    AppState, provider_endpoints,
-    services::deal_service,
-    types::{ClientAddress, ClientId, ProviderId},
-    url_tester,
+    AppState,
+    types::{ClientAddress, ClientId, ProviderAddress},
 };
 
 use super::ResultCode;
@@ -28,7 +25,7 @@ pub struct FindByClientPath {
 
 #[derive(Serialize, ToSchema)]
 pub struct ProviderResult {
-    pub provider: String,
+    pub provider: ProviderAddress,
     pub result: ResultCode,
     pub working_url: Option<String>,
     pub retrievability_percent: f64,
@@ -39,9 +36,9 @@ pub struct FindByClientResponse {
     pub client: String,
     pub result: ResultCode,
     pub providers: Vec<ProviderResult>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
 }
-
-const RETRIEVABILITY_TIMEOUT_SEC: u64 = 60; // 1 min for each provider
 
 /// Find retrivabiliy of urls for a given SP and Client address
 #[utoipa::path(
@@ -70,132 +67,45 @@ pub async fn handle_find_client(
 
     // Parse and validate client address
     let client_address = ClientAddress::new(path.client.clone())
-        .map_err(|e| bad_request(format!("Invalid client address: {}", e)))?;
+        .map_err(|e| bad_request(format!("Invalid client address: {e}")))?;
 
-    let providers =
-        match deal_service::get_distinct_providers_by_client(&state.deal_repo, &client_address)
-            .await
-        {
-            Ok(providers) => providers,
-            Err(e) => {
-                debug!(
-                    "Failed to get providers for client {}: {:?}",
-                    &path.client, e
-                );
+    let client_id: ClientId = client_address.into();
 
-                return Err(internal_server_error(format!(
-                    "Failed to get providers for client {0}",
-                    path.client
-                )));
-            }
-        };
+    let url_results = state
+        .url_repo
+        .get_latest_for_client_all_providers(&client_id)
+        .await
+        .map_err(|e| {
+            debug!("Failed to query url_results: {:?}", e);
+            internal_server_error("Failed to query url results")
+        })?;
 
-    if providers.is_empty() {
-        debug!("No providers found for client {}", &path.client);
-
+    if url_results.is_empty() {
         return Ok(ok_response(FindByClientResponse {
             result: ResultCode::Error,
             client: path.client.clone(),
             providers: Vec::new(),
+            message: Some(
+                "No providers found for this client or client has not been indexed yet."
+                    .to_string(),
+            ),
         }));
     }
 
-    let mut results = Vec::new();
-
-    for provider in providers {
-        let (result_code, endpoints) =
-            match provider_endpoints::get_provider_endpoints(&provider).await {
-                Ok(endpoints) => endpoints,
-                Err(e) => return Err(internal_server_error(e.to_string())),
-            };
-
-        if endpoints.is_none() {
-            debug!("No endpoints found for provider {}", &provider);
-
-            results.push(ProviderResult {
-                provider: provider.to_string(),
-                result: result_code,
-                working_url: None,
-                retrievability_percent: 0.0,
-            });
-            continue;
-        }
-        let endpoints = endpoints.unwrap();
-
-        let provider_id: ProviderId = provider.clone().into();
-        let client_id: ClientId = client_address.clone().into();
-
-        let piece_ids = deal_service::get_random_piece_ids_by_provider_and_client(
-            &state.deal_repo,
-            &provider_id,
-            &client_id,
-        )
-        .await
-        .map_err(|e| {
-            debug!("Failed to get piece ids: {:?}", e);
-
-            internal_server_error("Failed to get piece ids")
-        })?;
-
-        if piece_ids.is_empty() {
-            debug!("No deals found for provider {}", &provider);
-
-            results.push(ProviderResult {
-                provider: provider.to_string(),
-                result: ResultCode::NoDealsFound,
-                working_url: None,
-                retrievability_percent: 0.0,
-            });
-            continue;
-        }
-
-        let urls = deal_service::get_piece_url(endpoints, piece_ids).await;
-        let first_url = if !urls.is_empty() {
-            if urls[0].is_empty() {
-                None
-            } else {
-                Some(urls[0].clone())
-            }
-        } else {
-            None
-        };
-
-        // Get retrievability percent
-        // Make sure that the task is not running for too long
-        let (_, retrievability_percent) = match timeout(
-            Duration::from_secs(RETRIEVABILITY_TIMEOUT_SEC),
-            url_tester::check_retrievability_with_get(urls, true),
-        )
-        .await
-        {
-            Ok(result) => result,
-            Err(_) => {
-                debug!(
-                    "Timeout while checking retrievability for provider {}",
-                    &provider
-                );
-                // In case of timeout
-                results.push(ProviderResult {
-                    provider: provider.to_string(),
-                    result: ResultCode::TimedOut,
-                    working_url: first_url,
-                    retrievability_percent: 0.0,
-                });
-                continue;
-            }
-        };
-
-        results.push(ProviderResult {
-            provider: provider.to_string(),
-            result: ResultCode::Success,
-            working_url: first_url,
-            retrievability_percent: retrievability_percent.unwrap_or(0.0),
-        });
-    }
+    let providers: Vec<ProviderResult> = url_results
+        .into_iter()
+        .map(|r| ProviderResult {
+            provider: r.provider_id.into(),
+            result: r.result_code,
+            working_url: r.working_url,
+            retrievability_percent: r.retrievability_percent,
+        })
+        .collect();
 
     Ok(ok_response(FindByClientResponse {
         result: ResultCode::Success,
         client: path.client.clone(),
-        providers: results,
+        providers,
+        message: None,
     }))
 }

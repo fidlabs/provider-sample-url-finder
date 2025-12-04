@@ -1,4 +1,4 @@
-use common::api_response::ErrorResponse;
+use crate::api_response::ErrorResponse;
 use utoipa::OpenApi;
 
 use crate::api::*;
@@ -15,16 +15,14 @@ The Url Finder service is responsible for finding the URL of a miner given its a
 
 The service is using [CID Contact](https://cid.contact) as source of HTTP entry point for any given miner address.
 
-### Result Codes 
+### Result Codes
  - **NoCidContactData** - No entry in cid contact
  - **MissingAddrFromCidContact** - No entry point found in cid contact
  - **MissingHttpAddrFromCidContact** - No HTTP entry point in cid contact (taken from ExtendedProviders)
  - **FailedToGetWorkingUrl** - None of tested URLs is working and can be downloaded
  - **NoDealsFound** - No deals found for given miner (should not happen, unless miner address is invalid)
- - **TimedOut** - Searching for working URL is taking too long - probably there is no working URL
- - **JobCreated** - Asynchronous job was created
  - **Success** - Found working URL
- - **Error** - (async only) Error occurred, check error field
+ - **Error** - Provider not indexed yet or error occurred
         "#,
         version = "1.0.0"
     ),
@@ -35,10 +33,6 @@ The service is using [CID Contact](https://cid.contact) as source of HTTP entry 
         handle_find_retri_by_client_and_sp,
         handle_find_retri_by_sp,
         handle_find_client,
-
-        handle_create_job,
-        handle_get_job,
-
         handle_healthcheck,
     ),
     components(
@@ -57,12 +51,6 @@ The service is using [CID Contact](https://cid.contact) as source of HTTP entry 
             FindByClientPath,
             FindByClientResponse,
 
-            // Job
-            CreateJobPayload,
-            CreateJobResponse,
-            GetJobPath,
-            GetJobResponse,
-
             // misc
             HealthcheckResponse,
 
@@ -73,7 +61,6 @@ The service is using [CID Contact](https://cid.contact) as source of HTTP entry 
       ),
     tags(
         // API Categories
-        (name = "JOB", description = "Async Url Finder APIs"),
         (name = "URL", description = "Url Finder APIs"),
         (name = "Healthcheck", description = "Url Finder Misc APIs"),
     )

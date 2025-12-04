@@ -1,22 +1,19 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
+use crate::api_response::*;
 use axum::{
     debug_handler,
     extract::{Path, State},
 };
 use axum_extra::extract::WithRejection;
 use color_eyre::Result;
-use common::api_response::*;
 use serde::{Deserialize, Serialize};
-use tokio::time::timeout;
 use tracing::debug;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::{
-    AppState, provider_endpoints,
-    services::deal_service,
+    AppState,
     types::{ProviderAddress, ProviderId},
-    url_tester,
 };
 
 use super::ResultCode;
@@ -30,9 +27,9 @@ pub struct FindRetriBySpPath {
 pub struct FindRetriBySpResponse {
     pub result: ResultCode,
     pub retrievability_percent: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
 }
-
-const RETRIEVABILITY_TIMEOUT_SEC: u64 = 2 * 60; // 2 min
 
 /// Find retrivabiliy of urls for a given SP address
 #[utoipa::path(
@@ -61,63 +58,29 @@ pub async fn handle_find_retri_by_sp(
 
     // Parse and validate provider address
     let provider_address = ProviderAddress::new(path.provider)
-        .map_err(|e| bad_request(format!("Invalid provider address: {}", e)))?;
-
-    let (result_code, endpoints) =
-        match provider_endpoints::get_provider_endpoints(&provider_address).await {
-            Ok(endpoints) => endpoints,
-            Err(e) => return Err(internal_server_error(e.to_string())),
-        };
-
-    if endpoints.is_none() {
-        debug!("No endpoints found");
-
-        return Ok(ok_response(FindRetriBySpResponse {
-            result: result_code,
-            retrievability_percent: 0.0,
-        }));
-    }
-    let endpoints = endpoints.unwrap();
+        .map_err(|e| bad_request(format!("Invalid provider address: {e}")))?;
 
     let provider_id: ProviderId = provider_address.into();
 
-    let piece_ids = deal_service::get_random_piece_ids_by_provider(&state.deal_repo, &provider_id)
+    let result = state
+        .url_repo
+        .get_latest_for_provider(&provider_id)
         .await
         .map_err(|e| {
-            debug!("Failed to get piece ids: {:?}", e);
-            internal_server_error("Failed to get piece ids")
+            debug!("Failed to query url_results: {:?}", e);
+            internal_server_error("Failed to query url results")
         })?;
 
-    if piece_ids.is_empty() {
-        debug!("No deals found");
-        return Ok(ok_response(FindRetriBySpResponse {
-            result: ResultCode::NoDealsFound,
+    match result {
+        Some(url_result) => Ok(ok_response(FindRetriBySpResponse {
+            result: url_result.result_code,
+            retrievability_percent: url_result.retrievability_percent,
+            message: None,
+        })),
+        None => Ok(ok_response(FindRetriBySpResponse {
+            result: ResultCode::Error,
             retrievability_percent: 0.0,
-        }));
+            message: Some("Provider has not been indexed yet. Please try again later.".to_string()),
+        })),
     }
-
-    let urls = deal_service::get_piece_url(endpoints, piece_ids).await;
-
-    // Get retrievability percent
-    // Make sure that the task is not running for too long
-    let (_, retrievability_percent) = match timeout(
-        Duration::from_secs(RETRIEVABILITY_TIMEOUT_SEC),
-        url_tester::check_retrievability_with_get(urls, true),
-    )
-    .await
-    {
-        Ok(result) => result,
-        Err(_) => {
-            // In case of timeout
-            return Ok(ok_response(FindRetriBySpResponse {
-                result: ResultCode::TimedOut,
-                retrievability_percent: 0.0,
-            }));
-        }
-    };
-
-    Ok(ok_response(FindRetriBySpResponse {
-        result: ResultCode::Success,
-        retrievability_percent: retrievability_percent.unwrap_or(0.0),
-    }))
 }
