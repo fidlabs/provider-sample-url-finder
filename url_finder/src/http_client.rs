@@ -10,6 +10,11 @@ static ATOMIC_PROXY_PORT: AtomicU32 = AtomicU32::new(8001);
 static ATOMIC_PROXY_LAST_CHANGE: AtomicU64 = AtomicU64::new(0);
 
 fn get_sticky_port_atomic(ip_count: u32) -> u16 {
+    // if no proxy ip count configured, return default port
+    if ip_count == 0 {
+        return 8000;
+    }
+
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
