@@ -7,10 +7,10 @@ use futures::{StreamExt, stream};
 use reqwest::Client;
 use tracing::{debug, info};
 
+use crate::{config::Config, http_client::build_client};
+
 const FILTER_CONCURENCY_LIMIT: usize = 5;
 const RETRI_CONCURENCY_LIMIT: usize = 20;
-
-use crate::http_client::build_client;
 
 /// return first working url through head requests
 /// let's keep both head and get versions for now
@@ -62,8 +62,11 @@ pub async fn filter_working_with_head(urls: Vec<String>) -> Option<String> {
 /// return retrivable percent of the urls
 /// let's keep both head and get versions for now
 #[allow(dead_code)]
-pub async fn get_retrivability_with_head(urls: Vec<String>) -> (Option<String>, f64) {
-    let client: Client = build_client().unwrap();
+pub async fn get_retrivability_with_head(
+    config: &Config,
+    urls: Vec<String>,
+) -> (Option<String>, f64) {
+    let client: Client = build_client(config).unwrap();
     let success_counter = Arc::new(AtomicUsize::new(0));
     let total_counter = Arc::new(AtomicUsize::new(0));
 
@@ -119,10 +122,11 @@ pub async fn get_retrivability_with_head(urls: Vec<String>) -> (Option<String>, 
 }
 
 pub async fn check_retrievability_with_get(
+    config: &Config,
     urls: Vec<String>,
     with_stats: bool,
 ) -> (Option<String>, Option<f64>) {
-    let client = build_client().unwrap();
+    let client = build_client(config).unwrap();
 
     let success_counter = Arc::new(AtomicUsize::new(0));
     let total_counter = Arc::new(AtomicUsize::new(0));

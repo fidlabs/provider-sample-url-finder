@@ -119,7 +119,7 @@ pub async fn discover_url(
     );
     debug!("Testing URLs: {:?}", urls);
     let (working_url, retrievability_percent) =
-        url_tester::check_retrievability_with_get(urls, true).await;
+        url_tester::check_retrievability_with_get(config, urls, true).await;
     debug!(
         "URL test result - working_url: {:?}, retrievability: {:?}",
         working_url, retrievability_percent
