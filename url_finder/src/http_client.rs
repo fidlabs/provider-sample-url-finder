@@ -4,6 +4,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use crate::config::Config;
 use rand::Rng;
 use reqwest::{Client, Proxy};
+use tracing::info;
 
 const RETRI_TIMEOUT_SEC: u64 = 15;
 static ATOMIC_PROXY_PORT: AtomicU32 = AtomicU32::new(8001);
@@ -54,7 +55,7 @@ pub fn build_client(config: &Config) -> Result<Client, reqwest::Error> {
         let port = get_sticky_port_atomic(ip_count);
         let proxy_url_result = format!("{}:{}", proxy_url, port);
 
-        println!("Using proxy: {}", proxy_url_result);
+        info!("Using proxy: {}", proxy_url_result);
 
         let proxy = (Proxy::http(proxy_url_result))?.basic_auth(proxy_user, proxy_password);
         builder = builder
