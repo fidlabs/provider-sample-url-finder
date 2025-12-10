@@ -7,6 +7,7 @@ pub mod api_response;
 pub mod background;
 mod cid_contact;
 pub mod config;
+mod http_client;
 mod lotus_rpc;
 mod multiaddr_parser;
 mod pix_filspark;
