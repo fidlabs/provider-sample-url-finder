@@ -14,7 +14,8 @@ pub struct Config {
     pub proxy_url: Option<String>,
     pub proxy_user: Option<String>,
     pub proxy_password: Option<String>,
-    pub proxy_ip_count: Option<usize>,
+    pub proxy_ip_count: Option<u32>,
+    pub proxy_default_port: Option<u32>,
 }
 
 impl Config {
@@ -39,6 +40,9 @@ impl Config {
             proxy_url: env::var("PROXY_URL").unwrap_or("US".to_string()).into(),
             proxy_user: env::var("PROXY_USER").ok(),
             proxy_password: env::var("PROXY_PASSWORD").ok(),
+            proxy_default_port: env::var("PROXY_DEFAULT_PORT")
+                .ok()
+                .and_then(|s| s.parse().ok()),
             proxy_ip_count: env::var("PROXY_IP_COUNT").ok().and_then(|s| s.parse().ok()),
         })
     }
@@ -55,6 +59,7 @@ impl Config {
             proxy_url: None,
             proxy_user: None,
             proxy_ip_count: None,
+            proxy_default_port: None,
         }
     }
 }
