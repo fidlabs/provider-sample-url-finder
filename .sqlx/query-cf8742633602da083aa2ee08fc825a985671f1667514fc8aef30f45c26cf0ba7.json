@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE\n                    bms_bandwidth_results\n               SET\n                    status = $2,\n                    ping_avg_ms = $3,\n                    head_avg_ms = $4,\n                    ttfb_ms = $5,\n                    download_speed_mbps = $6,\n                    completed_at = NOW()\n               WHERE\n                    bms_job_id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Varchar",
+        "Numeric",
+        "Numeric",
+        "Numeric",
+        "Numeric"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cf8742633602da083aa2ee08fc825a985671f1667514fc8aef30f45c26cf0ba7"
+}

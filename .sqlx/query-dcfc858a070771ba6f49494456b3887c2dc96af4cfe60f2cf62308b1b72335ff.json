@@ -1,0 +1,95 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                    id,\n                    provider_id,\n                    bms_job_id,\n                    url_tested,\n                    routing_key,\n                    worker_count,\n                    status,\n                    ping_avg_ms,\n                    head_avg_ms,\n                    ttfb_ms,\n                    download_speed_mbps,\n                    created_at,\n                    completed_at\n               FROM\n                    bms_bandwidth_results\n               WHERE\n                    provider_id = $1\n               ORDER BY\n                    created_at DESC\n               LIMIT $2\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "provider_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "bms_job_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "url_tested",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "routing_key",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "worker_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "status",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 7,
+        "name": "ping_avg_ms",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 8,
+        "name": "head_avg_ms",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 9,
+        "name": "ttfb_ms",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 10,
+        "name": "download_speed_mbps",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 11,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 12,
+        "name": "completed_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "dcfc858a070771ba6f49494456b3887c2dc96af4cfe60f2cf62308b1b72335ff"
+}

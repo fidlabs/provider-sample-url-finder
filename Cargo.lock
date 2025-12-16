@@ -5903,6 +5903,7 @@ dependencies = [
  "testcontainers-modules",
  "tokio",
  "tokio-test",
+ "tokio-util",
  "tower",
  "tower-http",
  "tower_governor",

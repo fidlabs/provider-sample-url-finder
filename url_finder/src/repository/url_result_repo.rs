@@ -32,7 +32,7 @@ impl From<UrlDiscoveryResult> for UrlResult {
             retrievability_percent: result.retrievability_percent,
             result_code: result.result_code,
             error_code: result.error_code,
-            tested_at: Utc::now(),
+            tested_at: result.tested_at,
         }
     }
 }
@@ -142,6 +142,95 @@ impl UrlResultRepository {
                     tested_at DESC
             "#,
             client_id.as_str()
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(results)
+    }
+
+    pub async fn get_all_providers_paginated(
+        &self,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<UrlResult>> {
+        let results = sqlx::query_as!(
+            UrlResult,
+            r#"SELECT DISTINCT ON (provider_id)
+                    id,
+                    provider_id AS "provider_id: ProviderId",
+                    client_id AS "client_id: ClientId",
+                    result_type AS "result_type: DiscoveryType",
+                    working_url,
+                    retrievability_percent::float8 AS "retrievability_percent!",
+                    result_code AS "result_code: ResultCode",
+                    error_code AS "error_code: ErrorCode",
+                    tested_at
+               FROM
+                    url_results
+               WHERE
+                    result_type = 'Provider'
+               ORDER BY
+                    provider_id,
+                    tested_at DESC
+               LIMIT $1
+               OFFSET $2
+            "#,
+            limit,
+            offset
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(results)
+    }
+
+    pub async fn count_all_providers(&self) -> Result<i64> {
+        let result = sqlx::query_scalar!(
+            r#"SELECT
+                    COUNT(DISTINCT provider_id) AS "count!"
+               FROM
+                    url_results
+               WHERE
+                    result_type = 'Provider'
+            "#
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(result)
+    }
+
+    pub async fn get_latest_for_providers(
+        &self,
+        provider_ids: &[String],
+    ) -> Result<Vec<UrlResult>> {
+        if provider_ids.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let results = sqlx::query_as!(
+            UrlResult,
+            r#"SELECT DISTINCT ON (provider_id)
+                    id,
+                    provider_id AS "provider_id: ProviderId",
+                    client_id AS "client_id: ClientId",
+                    result_type AS "result_type: DiscoveryType",
+                    working_url,
+                    retrievability_percent::float8 AS "retrievability_percent!",
+                    result_code AS "result_code: ResultCode",
+                    error_code AS "error_code: ErrorCode",
+                    tested_at
+               FROM
+                    url_results
+               WHERE
+                    provider_id = ANY($1)
+                    AND result_type = 'Provider'
+               ORDER BY
+                    provider_id,
+                    tested_at DESC
+            "#,
+            provider_ids
         )
         .fetch_all(&self.pool)
         .await?;
