@@ -8,6 +8,7 @@ pub mod background;
 pub mod bms_client;
 mod cid_contact;
 pub mod config;
+mod http_client;
 mod lotus_rpc;
 mod multiaddr_parser;
 mod pix_filspark;
