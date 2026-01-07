@@ -10,6 +10,7 @@ pub mod providers_bulk;
 pub mod providers_client;
 pub mod providers_get;
 pub mod providers_list;
+pub mod providers_reset;
 pub mod rate_limiting;
 pub mod url_discovery_service;
 pub mod url_validation;

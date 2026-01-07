@@ -46,6 +46,7 @@ The `/url/*` endpoints remain fully backward compatible.
         handle_get_client_providers,
         handle_list_providers,
         handle_bulk_providers,
+        handle_reset_provider,
     ),
     components(
         schemas(
@@ -77,6 +78,9 @@ The `/url/*` endpoints remain fully backward compatible.
             PerformanceResponse,
             BandwidthTestResponse,
             GeolocationTestResponse,
+            ResetProviderPath,
+            ResetProviderQuery,
+            ScheduleType,
 
             // Misc
             HealthcheckResponse,

@@ -1,0 +1,100 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE\n                    storage_providers\n               SET\n                    next_url_discovery_at = NOW(),\n                    next_bms_test_at = NOW(),\n                    updated_at = NOW()\n               WHERE\n                    provider_id = $1\n               RETURNING\n                    id,\n                    provider_id AS \"provider_id: ProviderId\",\n                    next_url_discovery_at,\n                    url_discovery_status,\n                    url_discovery_pending_since,\n                    last_working_url,\n                    next_bms_test_at,\n                    bms_test_status,\n                    bms_routing_key,\n                    last_bms_region_discovery_at,\n                    is_consistent,\n                    url_metadata,\n                    created_at,\n                    updated_at\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "provider_id: ProviderId",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "next_url_discovery_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 3,
+        "name": "url_discovery_status",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "url_discovery_pending_since",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 5,
+        "name": "last_working_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "next_bms_test_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "bms_test_status",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 8,
+        "name": "bms_routing_key",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 9,
+        "name": "last_bms_region_discovery_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 10,
+        "name": "is_consistent",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 11,
+        "name": "url_metadata",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 12,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 13,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "2dde733e77313f0a83bc46565eea03a43a1c43d01c282733a5140272a2f3a220"
+}

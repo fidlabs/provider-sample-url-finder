@@ -82,6 +82,10 @@ pub fn create_routes() -> Router<Arc<AppState>> {
         .route("/providers/bulk", post(providers::handle_bulk_providers))
         .route("/providers/{id}", get(providers::handle_get_provider))
         .route(
+            "/providers/{id}/reset",
+            post(providers::handle_reset_provider),
+        )
+        .route(
             "/providers/{id}/clients/{client_id}",
             get(providers::handle_get_provider_client),
         )

@@ -15,3 +15,6 @@ pub use list_providers::*;
 
 mod bulk_providers;
 pub use bulk_providers::*;
+
+mod reset_provider;
+pub use reset_provider::*;
