@@ -6,7 +6,8 @@ use color_eyre::Result;
 use sqlx::types::BigDecimal;
 
 use crate::repository::{
-    BmsBandwidthResult, BmsBandwidthResultRepository, UrlResult, UrlResultRepository,
+    BmsBandwidthResult, BmsBandwidthResultRepository, ProviderFilters, UrlResult,
+    UrlResultRepository,
 };
 use crate::types::{ClientId, ProviderId, ResultCode};
 
@@ -131,11 +132,16 @@ impl ProviderService {
         self.enrich_batch(url_results).await
     }
 
-    pub async fn list_providers(&self, limit: i64, offset: i64) -> Result<PaginatedProviders> {
-        let total = self.url_repo.count_all_providers().await?;
+    pub async fn list_providers(
+        &self,
+        filters: &ProviderFilters,
+        limit: i64,
+        offset: i64,
+    ) -> Result<PaginatedProviders> {
+        let total = self.url_repo.count_all_providers(filters).await?;
         let url_results = self
             .url_repo
-            .get_all_providers_paginated(limit, offset)
+            .get_all_providers_paginated(filters, limit, offset)
             .await?;
         let providers = self.enrich_batch(url_results).await?;
 

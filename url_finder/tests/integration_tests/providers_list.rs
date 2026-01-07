@@ -83,3 +83,205 @@ async fn test_list_providers_empty() {
         })
     );
 }
+
+#[tokio::test]
+async fn test_list_providers_filter_has_working_url_true() {
+    let ctx = TestContext::new().await;
+
+    // Provider 1: has working URL, consistent
+    seed_provider_with_url_status(
+        &ctx.dbs.app_pool,
+        TEST_PROVIDER_1_DB,
+        Some("http://example.com/piece/123"),
+        true,
+    )
+    .await;
+    seed_url_result(
+        &ctx.dbs.app_pool,
+        TEST_PROVIDER_1_DB,
+        None,
+        Some("http://example.com/piece/123"),
+        80.0,
+        "Success",
+    )
+    .await;
+
+    // Provider 2: no working URL
+    seed_provider_with_url_status(&ctx.dbs.app_pool, TEST_PROVIDER_2_DB, None, true).await;
+    seed_url_result(
+        &ctx.dbs.app_pool,
+        TEST_PROVIDER_2_DB,
+        None,
+        None,
+        0.0,
+        "NoDealsFound",
+    )
+    .await;
+
+    // Filter for providers WITH working URL
+    let response = ctx.app.get("/providers?has_working_url=true").await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: serde_json::Value = response.json();
+
+    assert_eq!(body["total"].as_i64().unwrap(), 1);
+    assert_eq!(body["providers"].as_array().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn test_list_providers_filter_has_working_url_false() {
+    let ctx = TestContext::new().await;
+
+    // Provider 1: has working URL
+    seed_provider_with_url_status(
+        &ctx.dbs.app_pool,
+        TEST_PROVIDER_1_DB,
+        Some("http://example.com/piece/123"),
+        true,
+    )
+    .await;
+    seed_url_result(
+        &ctx.dbs.app_pool,
+        TEST_PROVIDER_1_DB,
+        None,
+        Some("http://example.com/piece/123"),
+        80.0,
+        "Success",
+    )
+    .await;
+
+    // Provider 2: no working URL
+    seed_provider_with_url_status(&ctx.dbs.app_pool, TEST_PROVIDER_2_DB, None, true).await;
+    seed_url_result(
+        &ctx.dbs.app_pool,
+        TEST_PROVIDER_2_DB,
+        None,
+        None,
+        0.0,
+        "NoDealsFound",
+    )
+    .await;
+
+    // Filter for providers WITHOUT working URL
+    let response = ctx.app.get("/providers?has_working_url=false").await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: serde_json::Value = response.json();
+
+    assert_eq!(body["total"].as_i64().unwrap(), 1);
+    assert_eq!(body["providers"].as_array().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn test_list_providers_filter_is_consistent() {
+    let ctx = TestContext::new().await;
+
+    // Provider 1: has working URL, consistent
+    seed_provider_with_url_status(
+        &ctx.dbs.app_pool,
+        TEST_PROVIDER_1_DB,
+        Some("http://example.com/piece/123"),
+        true,
+    )
+    .await;
+    seed_url_result(
+        &ctx.dbs.app_pool,
+        TEST_PROVIDER_1_DB,
+        None,
+        Some("http://example.com/piece/123"),
+        80.0,
+        "Success",
+    )
+    .await;
+
+    // Provider 2: has working URL, NOT consistent
+    seed_provider_with_url_status(
+        &ctx.dbs.app_pool,
+        TEST_PROVIDER_2_DB,
+        Some("http://example.com/piece/456"),
+        false,
+    )
+    .await;
+    seed_url_result(
+        &ctx.dbs.app_pool,
+        TEST_PROVIDER_2_DB,
+        None,
+        Some("http://example.com/piece/456"),
+        60.0,
+        "Success",
+    )
+    .await;
+
+    // Filter for consistent providers only
+    let response = ctx.app.get("/providers?is_consistent=true").await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: serde_json::Value = response.json();
+
+    assert_eq!(body["total"].as_i64().unwrap(), 1);
+}
+
+#[tokio::test]
+async fn test_list_providers_filter_combined() {
+    let ctx = TestContext::new().await;
+
+    // Provider 1: has URL, consistent (BMS ready)
+    seed_provider_with_url_status(
+        &ctx.dbs.app_pool,
+        TEST_PROVIDER_1_DB,
+        Some("http://example.com/piece/123"),
+        true,
+    )
+    .await;
+    seed_url_result(
+        &ctx.dbs.app_pool,
+        TEST_PROVIDER_1_DB,
+        None,
+        Some("http://example.com/piece/123"),
+        80.0,
+        "Success",
+    )
+    .await;
+
+    // Provider 2: has URL, NOT consistent
+    seed_provider_with_url_status(
+        &ctx.dbs.app_pool,
+        TEST_PROVIDER_2_DB,
+        Some("http://example.com/piece/456"),
+        false,
+    )
+    .await;
+    seed_url_result(
+        &ctx.dbs.app_pool,
+        TEST_PROVIDER_2_DB,
+        None,
+        Some("http://example.com/piece/456"),
+        60.0,
+        "Success",
+    )
+    .await;
+
+    // Provider 3: no URL
+    seed_provider_with_url_status(&ctx.dbs.app_pool, TEST_PROVIDER_3_DB, None, true).await;
+    seed_url_result(
+        &ctx.dbs.app_pool,
+        TEST_PROVIDER_3_DB,
+        None,
+        None,
+        0.0,
+        "NoDealsFound",
+    )
+    .await;
+
+    // Filter for BMS-ready providers (has_working_url=true AND is_consistent=true)
+    let response = ctx
+        .app
+        .get("/providers?has_working_url=true&is_consistent=true")
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: serde_json::Value = response.json();
+
+    assert_eq!(body["total"].as_i64().unwrap(), 1);
+    assert_eq!(body["providers"].as_array().unwrap().len(), 1);
+}

@@ -15,14 +15,22 @@ use crate::{
     },
 };
 
+use crate::repository::ProviderFilters;
+
 use super::types::{ProviderResponse, ProvidersListResponse};
 
 #[derive(Deserialize, ToSchema, IntoParams)]
 pub struct ListProvidersQuery {
+    /// Maximum number of providers to return (1-500)
     #[serde(default = "default_limit")]
     pub limit: i64,
+    /// Number of providers to skip
     #[serde(default)]
     pub offset: i64,
+    /// Filter by URL availability: true=has URL, false=no URL, omit=all
+    pub has_working_url: Option<bool>,
+    /// Filter by URL consistency: true=consistent, false=inconsistent, omit=all
+    pub is_consistent: Option<bool>,
 }
 
 fn default_limit() -> i64 {
@@ -47,11 +55,19 @@ pub async fn handle_list_providers(
     let limit = query.limit.clamp(1, 500);
     let offset = query.offset.max(0);
 
-    debug!("GET /providers?limit={limit}&offset={offset}");
+    let filters = ProviderFilters {
+        has_working_url: query.has_working_url,
+        is_consistent: query.is_consistent,
+    };
+
+    debug!(
+        "GET /providers?limit={limit}&offset={offset}&has_working_url={:?}&is_consistent={:?}",
+        filters.has_working_url, filters.is_consistent
+    );
 
     let paginated = state
         .provider_service
-        .list_providers(limit, offset)
+        .list_providers(&filters, limit, offset)
         .await
         .map_err(|e| {
             warn!("Failed to list providers: {:?}", e);

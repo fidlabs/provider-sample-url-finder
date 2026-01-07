@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                    COUNT(DISTINCT ur.provider_id) AS \"count!\"\n               FROM\n                    url_results ur\n               JOIN\n                    storage_providers sp ON ur.provider_id = sp.provider_id\n               WHERE\n                    ur.result_type = 'Provider'\n                    AND ($1::bool IS NULL OR (sp.last_working_url IS NOT NULL) = $1)\n                    AND ($2::bool IS NULL OR sp.is_consistent = $2)\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bool",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "afa1154b98b7dd8903668b2e3a791d1ee1f17cdf6ade455fa7d52a6b74d8ac5f"
+}

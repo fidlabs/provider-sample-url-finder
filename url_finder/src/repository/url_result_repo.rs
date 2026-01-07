@@ -8,6 +8,15 @@ use uuid::Uuid;
 use crate::services::url_discovery_service::UrlDiscoveryResult;
 use crate::types::{ClientId, DiscoveryType, ErrorCode, ProviderId, ResultCode};
 
+/// Filters for provider queries
+#[derive(Debug, Clone, Default)]
+pub struct ProviderFilters {
+    /// Filter by last_working_url IS [NOT] NULL in storage_providers
+    pub has_working_url: Option<bool>,
+    /// Filter by is_consistent in storage_providers
+    pub is_consistent: Option<bool>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
 pub struct UrlResult {
     pub id: Uuid,
@@ -151,33 +160,40 @@ impl UrlResultRepository {
 
     pub async fn get_all_providers_paginated(
         &self,
+        filters: &ProviderFilters,
         limit: i64,
         offset: i64,
     ) -> Result<Vec<UrlResult>> {
         let results = sqlx::query_as!(
             UrlResult,
-            r#"SELECT DISTINCT ON (provider_id)
-                    id,
-                    provider_id AS "provider_id: ProviderId",
-                    client_id AS "client_id: ClientId",
-                    result_type AS "result_type: DiscoveryType",
-                    working_url,
-                    retrievability_percent::float8 AS "retrievability_percent!",
-                    result_code AS "result_code: ResultCode",
-                    error_code AS "error_code: ErrorCode",
-                    tested_at
+            r#"SELECT DISTINCT ON (ur.provider_id)
+                    ur.id,
+                    ur.provider_id AS "provider_id: ProviderId",
+                    ur.client_id AS "client_id: ClientId",
+                    ur.result_type AS "result_type: DiscoveryType",
+                    ur.working_url,
+                    ur.retrievability_percent::float8 AS "retrievability_percent!",
+                    ur.result_code AS "result_code: ResultCode",
+                    ur.error_code AS "error_code: ErrorCode",
+                    ur.tested_at
                FROM
-                    url_results
+                    url_results ur
+               JOIN
+                    storage_providers sp ON ur.provider_id = sp.provider_id
                WHERE
-                    result_type = 'Provider'
+                    ur.result_type = 'Provider'
+                    AND ($3::bool IS NULL OR (sp.last_working_url IS NOT NULL) = $3)
+                    AND ($4::bool IS NULL OR sp.is_consistent = $4)
                ORDER BY
-                    provider_id,
-                    tested_at DESC
+                    ur.provider_id,
+                    ur.tested_at DESC
                LIMIT $1
                OFFSET $2
             "#,
             limit,
-            offset
+            offset,
+            filters.has_working_url,
+            filters.is_consistent
         )
         .fetch_all(&self.pool)
         .await?;
@@ -185,15 +201,21 @@ impl UrlResultRepository {
         Ok(results)
     }
 
-    pub async fn count_all_providers(&self) -> Result<i64> {
+    pub async fn count_all_providers(&self, filters: &ProviderFilters) -> Result<i64> {
         let result = sqlx::query_scalar!(
             r#"SELECT
-                    COUNT(DISTINCT provider_id) AS "count!"
+                    COUNT(DISTINCT ur.provider_id) AS "count!"
                FROM
-                    url_results
+                    url_results ur
+               JOIN
+                    storage_providers sp ON ur.provider_id = sp.provider_id
                WHERE
-                    result_type = 'Provider'
-            "#
+                    ur.result_type = 'Provider'
+                    AND ($1::bool IS NULL OR (sp.last_working_url IS NOT NULL) = $1)
+                    AND ($2::bool IS NULL OR sp.is_consistent = $2)
+            "#,
+            filters.has_working_url,
+            filters.is_consistent
         )
         .fetch_one(&self.pool)
         .await?;

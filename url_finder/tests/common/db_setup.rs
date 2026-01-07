@@ -146,6 +146,33 @@ pub async fn seed_url_result(
     .expect("Failed to insert url_result");
 }
 
+pub async fn seed_provider_with_url_status(
+    app_pool: &PgPool,
+    provider_id: &str,
+    last_working_url: Option<&str>,
+    is_consistent: bool,
+) {
+    sqlx::query(
+        r#"INSERT INTO
+                storage_providers (
+                    provider_id,
+                    last_working_url,
+                    is_consistent
+                )
+           VALUES
+                ($1, $2, $3)
+           ON CONFLICT (provider_id) DO UPDATE SET
+                last_working_url = $2,
+                is_consistent = $3"#,
+    )
+    .bind(provider_id)
+    .bind(last_working_url)
+    .bind(is_consistent)
+    .execute(app_pool)
+    .await
+    .expect("Failed to insert provider with url status");
+}
+
 pub async fn seed_bms_bandwidth_result(
     app_pool: &PgPool,
     provider_id: &str,
