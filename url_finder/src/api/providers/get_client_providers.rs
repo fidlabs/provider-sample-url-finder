@@ -6,7 +6,7 @@ use axum::{
 };
 use axum_extra::extract::WithRejection;
 use serde::Deserialize;
-use tracing::debug;
+use tracing::{debug, error};
 use utoipa::{IntoParams, ToSchema};
 
 use crate::{
@@ -61,7 +61,10 @@ pub async fn handle_get_client_providers(
         .get_providers_for_client(&client_id)
         .await
         .map_err(|e| {
-            debug!("Failed to query client providers: {:?}", e);
+            error!(
+                "Failed to query client providers for {}: {:?}",
+                client_id, e
+            );
             internal_server_error_with_code(ErrorCode::InternalError, "Failed to query providers")
         })?;
 
@@ -73,7 +76,7 @@ pub async fn handle_get_client_providers(
     }
 
     let providers: Vec<ProviderResponse> = providers_data.into_iter().map(|p| p.into()).collect();
-    let total = providers.len();
+    let total = providers.len() as i64;
 
     Ok(ok_response(ClientProvidersResponse {
         client_id: client_address.to_string(),

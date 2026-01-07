@@ -92,12 +92,19 @@ async fn schedule_url_discoveries(
         let results =
             test_provider_with_clients(config, &provider.provider_id, clients, deal_repo).await;
 
-        let url_results: Vec<UrlResult> = results.into_iter().map(|r| r.into()).collect();
+        // Extract provider-only result for storage_providers update
+        let provider_discovery = results.iter().find(|r| r.client_id.is_none());
 
-        let last_working_url = url_results
-            .iter()
-            .find(|r| r.client_id.is_none())
-            .and_then(|r| r.working_url.clone());
+        let (last_working_url, is_consistent, url_metadata) = match provider_discovery {
+            Some(r) => (
+                r.working_url.clone(),
+                r.is_consistent,
+                r.url_metadata.clone(),
+            ),
+            None => (None, true, None),
+        };
+
+        let url_results: Vec<UrlResult> = results.into_iter().map(|r| r.into()).collect();
 
         match url_repo.insert_batch(&url_results).await {
             Ok(count) => debug!(
@@ -108,7 +115,12 @@ async fn schedule_url_discoveries(
         }
 
         sp_repo
-            .update_after_url_discovery(&provider.provider_id, last_working_url)
+            .update_after_url_discovery(
+                &provider.provider_id,
+                last_working_url,
+                is_consistent,
+                url_metadata,
+            )
             .await?;
 
         total_tested += 1;

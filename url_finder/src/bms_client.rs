@@ -4,9 +4,16 @@ use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 use uuid::Uuid;
 
-use crate::utils::build_reqwest_retry_client;
+use crate::utils::build_reqwest_retry_client_with_config;
 
 const BMS_ROUTING_KEY: &str = "us_east";
+
+// BMS client timeouts - aggressive to fail fast on gateway timeouts
+const BMS_MIN_RETRY_INTERVAL_MS: u64 = 1_000;
+const BMS_MAX_RETRY_INTERVAL_MS: u64 = 5_000;
+const BMS_MAX_RETRIES: u32 = 1; // Reduced from 3 - 504s indicate BMS is struggling
+const BMS_CONNECT_TIMEOUT_MS: u64 = 5_000; // 5s connect timeout
+const BMS_REQUEST_TIMEOUT_MS: u64 = 30_000; // 30s request timeout (less than typical gateway 60s)
 
 #[derive(Debug, Clone, Serialize)]
 pub struct CreateJobRequest {
@@ -86,7 +93,13 @@ pub struct BmsClient {
 impl BmsClient {
     pub fn new(base_url: String) -> Self {
         Self {
-            client: build_reqwest_retry_client(1000, 5000),
+            client: build_reqwest_retry_client_with_config(
+                BMS_MIN_RETRY_INTERVAL_MS,
+                BMS_MAX_RETRY_INTERVAL_MS,
+                BMS_MAX_RETRIES,
+                Some(BMS_CONNECT_TIMEOUT_MS),
+                Some(BMS_REQUEST_TIMEOUT_MS),
+            ),
             base_url,
         }
     }
@@ -97,6 +110,12 @@ impl BmsClient {
         worker_count: i64,
         entity: Option<String>,
     ) -> Result<BmsJob> {
+        if worker_count < 0 {
+            return Err(eyre!(
+                "worker_count must be non-negative, got {worker_count}"
+            ));
+        }
+
         let request = CreateJobRequest {
             url,
             routing_key: BMS_ROUTING_KEY.to_string(),

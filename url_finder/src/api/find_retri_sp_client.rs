@@ -97,7 +97,7 @@ pub async fn handle_find_retri_by_client_and_sp(
         .await
         .map_err(|e| {
             debug!("Failed to query provider+client: {:?}", e);
-            internal_server_error("Failed to query url results")
+            internal_server_error("Failed to query provider data")
         })?;
 
     Ok(ok_response(match result {

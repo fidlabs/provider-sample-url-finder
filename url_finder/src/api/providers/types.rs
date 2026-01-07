@@ -73,7 +73,7 @@ pub struct ProviderClientResponse {
 pub struct ClientProvidersResponse {
     pub client_id: String,
     pub providers: Vec<ProviderResponse>,
-    pub total: usize,
+    pub total: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]

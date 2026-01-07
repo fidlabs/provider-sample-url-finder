@@ -448,6 +448,57 @@ impl PgHasArrayType for ErrorCode {
     }
 }
 
+/// Result of URL validation including Content-Length check
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UrlValidationResult {
+    pub is_valid: bool,
+    pub is_consistent: bool,
+    pub content_length: Option<u64>,
+    pub metadata: serde_json::Value,
+}
+
+impl UrlValidationResult {
+    pub fn valid(content_length: u64, metadata: serde_json::Value) -> Self {
+        Self {
+            is_valid: true,
+            is_consistent: true,
+            content_length: Some(content_length),
+            metadata,
+        }
+    }
+
+    pub fn invalid(content_length: Option<u64>, metadata: serde_json::Value) -> Self {
+        Self {
+            is_valid: false,
+            is_consistent: true,
+            content_length,
+            metadata,
+        }
+    }
+
+    pub fn inconsistent(
+        is_valid: bool,
+        content_length: Option<u64>,
+        metadata: serde_json::Value,
+    ) -> Self {
+        Self {
+            is_valid,
+            is_consistent: false,
+            content_length,
+            metadata,
+        }
+    }
+}
+
+/// Details of consistency check when Content-Length varies
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConsistencyCheck {
+    pub checked: bool,
+    pub samples: Vec<u64>,
+    pub retries: u32,
+    pub failure_reason: Option<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

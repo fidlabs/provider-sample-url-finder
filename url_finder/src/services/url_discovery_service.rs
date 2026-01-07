@@ -8,7 +8,7 @@ use crate::{
     types::{
         ClientAddress, ClientId, DiscoveryType, ErrorCode, ProviderAddress, ProviderId, ResultCode,
     },
-    url_tester,
+    url_tester::{self, validate_url_with_metadata},
 };
 use tracing::{debug, error};
 use uuid::Uuid;
@@ -24,6 +24,8 @@ pub struct UrlDiscoveryResult {
     pub result_code: ResultCode,
     pub error_code: Option<ErrorCode>,
     pub tested_at: DateTime<Utc>,
+    pub is_consistent: bool,
+    pub url_metadata: Option<serde_json::Value>,
 }
 
 impl UrlDiscoveryResult {
@@ -38,6 +40,8 @@ impl UrlDiscoveryResult {
             result_code: ResultCode::Error,
             error_code: None,
             tested_at: Utc::now(),
+            is_consistent: true,
+            url_metadata: None,
         }
     }
 
@@ -52,6 +56,8 @@ impl UrlDiscoveryResult {
             result_code: ResultCode::Error,
             error_code: None,
             tested_at: Utc::now(),
+            is_consistent: true,
+            url_metadata: None,
         }
     }
 }
@@ -130,9 +136,29 @@ pub async fn discover_url(
         working_url, retrievability_percent
     );
 
-    result.working_url = working_url.clone();
+    // Validate the working URL if found
+    let (validated_url, is_consistent, url_metadata) = match working_url {
+        Some(url) => {
+            let validation = validate_url_with_metadata(config, &url).await;
+            debug!(
+                "URL validation result - is_valid: {}, is_consistent: {}, content_length: {:?}",
+                validation.is_valid, validation.is_consistent, validation.content_length
+            );
+            (
+                if validation.is_valid { Some(url) } else { None },
+                validation.is_consistent,
+                Some(validation.metadata),
+            )
+        }
+        None => (None, true, None),
+    };
+
+    result.working_url = validated_url.clone();
     result.retrievability_percent = retrievability_percent.unwrap_or(0.0);
-    result.result_code = if working_url.is_some() {
+    result.is_consistent = is_consistent;
+    result.url_metadata = url_metadata;
+    // Success if validated, FailedToGetWorkingUrl otherwise (no URL found or validation failed)
+    result.result_code = if validated_url.is_some() {
         ResultCode::Success
     } else {
         ResultCode::FailedToGetWorkingUrl

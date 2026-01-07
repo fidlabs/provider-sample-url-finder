@@ -123,11 +123,23 @@ pub async fn get_provider_endpoints(
     }
 
     // parse addresses to http endpoints
-    let endpoints = multiaddr_parser::parse(addrs);
+    let mut endpoints = multiaddr_parser::parse(addrs);
     if endpoints.is_empty() {
         debug!("Missing http addr from cid contact, No endpoints found");
 
         return Ok((ResultCode::MissingHttpAddrFromCidContact, None));
+    }
+
+    // Deduplicate endpoints
+    let original_count = endpoints.len();
+    endpoints.sort();
+    endpoints.dedup();
+    if endpoints.len() < original_count {
+        debug!(
+            "Deduplicated endpoints: {} -> {} unique",
+            original_count,
+            endpoints.len()
+        );
     }
 
     Ok((ResultCode::Success, Some(endpoints)))

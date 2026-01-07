@@ -21,6 +21,7 @@ use super::types::{BulkProvidersRequest, BulkProvidersResponse, ProviderResponse
     request_body = BulkProvidersRequest,
     responses(
         (status = 200, description = "Bulk providers result", body = BulkProvidersResponse),
+        (status = 400, description = "Bad Request", body = crate::api_response::ErrorResponse),
         (status = 500, description = "Internal error", body = crate::api_response::ErrorResponse),
     ),
     tags = ["Providers"],

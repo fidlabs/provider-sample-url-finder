@@ -13,7 +13,8 @@ VALUES
 (52701111, 19334805, 0, 'deal', '1880196', '1518369', '0', 'baga6ea4seaqpkzvgyguwodcetsrh2uxak2efh62bf6vyxbdel23l73jmmjq5ypi', 34359738368, 3951512, NULL, 2438141, 0, 0, false, '2024-10-23 14:49:28.360997', '2024-10-23 14:49:28.360997', NULL),
 (61696685, 29547763, 0, 'deal', '1901107', '1518369', '643628', 'baga6ea4seaqivqjo2bg2gmjqo2d6phwgyzil2hrwihhcn7kzm2gbl42ffa2nchy', 34359738368, 4220461, NULL, 2708334, 0, 0, false, '2024-10-23 16:21:16.512869', '2024-10-23 16:21:16.512869', NULL),
 (110031315, 83028807, 0, 'deal', '1924648', '1518369', '722558', 'baga6ea4seaqjuhxvn33zkqvuzmjsggla35un3pohav2awpcerxefijlf4pazimi', 34359738368, 7626855, NULL, 3980991, 0, 0, false, '2024-10-23 19:58:37.739883', '2024-10-23 19:58:37.739883', NULL),
-(109627694, 82129856, 0, 'deal', '1924649', '1518369', '711737', 'baga6ea4seaqmy5sfbbcye7jfchyrlkpztbfsuhhkcxir4niz33oklr2lbcfnkii', 34359738368, 7604226, NULL, 3951000, 0, 0, false, '2024-10-23 19:57:57.51002', '2024-10-23 19:57:57.51002', NULL);
+(109627694, 82129856, 0, 'deal', '1924649', '1518369', '711737', 'baga6ea4seaqmy5sfbbcye7jfchyrlkpztbfsuhhkcxir4niz33oklr2lbcfnkii', 34359738368, 7604226, NULL, 3951000, 0, 0, false, '2024-10-23 19:57:57.51002', '2024-10-23 19:57:57.51002', NULL)
+ON CONFLICT (id) DO NOTHING;
 
 -- Setting next_bms_test_at in the past so they're immediately eligible
 INSERT INTO storage_providers (provider_id, next_bms_test_at, next_url_discovery_at)

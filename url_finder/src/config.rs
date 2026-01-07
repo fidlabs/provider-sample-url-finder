@@ -6,6 +6,7 @@ use tracing::warn;
 use crate::types::DbConnectParams;
 
 fn parse_positive_i64_or_default(env_var: &str, default: i64) -> i64 {
+    assert!(default > 0, "default must be positive");
     match env::var(env_var) {
         Ok(s) => match s.parse::<i64>() {
             Ok(v) if v > 0 => v,

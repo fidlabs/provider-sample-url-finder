@@ -5,7 +5,7 @@ use axum::{
     extract::{Query, State},
 };
 use serde::Deserialize;
-use tracing::debug;
+use tracing::{debug, warn};
 use utoipa::{IntoParams, ToSchema};
 
 use crate::{
@@ -54,7 +54,7 @@ pub async fn handle_list_providers(
         .list_providers(limit, offset)
         .await
         .map_err(|e| {
-            debug!("Failed to list providers: {:?}", e);
+            warn!("Failed to list providers: {:?}", e);
             internal_server_error_with_code(ErrorCode::InternalError, "Failed to query providers")
         })?;
 

@@ -6,7 +6,7 @@ use axum::{
 };
 use axum_extra::extract::WithRejection;
 use serde::Deserialize;
-use tracing::debug;
+use tracing::{debug, error};
 use utoipa::{IntoParams, ToSchema};
 
 use crate::{
@@ -45,10 +45,8 @@ pub async fn handle_get_provider(
     debug!("GET /providers/{}", &path.id);
 
     let provider_address = ProviderAddress::new(&path.id).map_err(|e| {
-        bad_request_with_code(
-            ErrorCode::InvalidAddress,
-            format!("Invalid provider address: {e}"),
-        )
+        error!("Invalid provider address '{}': {}", &path.id, e);
+        bad_request_with_code(ErrorCode::InvalidAddress, "Invalid provider address")
     })?;
 
     let provider_id = provider_address.into();
@@ -58,7 +56,7 @@ pub async fn handle_get_provider(
         .get_provider(&provider_id)
         .await
         .map_err(|e| {
-            debug!("Failed to query provider: {:?}", e);
+            error!("Failed to query provider_id={}: {e:?}", provider_id);
             internal_server_error_with_code(ErrorCode::InternalError, "Failed to query provider")
         })?
         .ok_or_else(|| {

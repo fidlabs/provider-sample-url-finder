@@ -1,3 +1,5 @@
+pub mod bms_client;
+pub mod bms_result_repo;
 pub mod clients_providers;
 pub mod find_client;
 pub mod find_retri_sp;
@@ -10,3 +12,4 @@ pub mod providers_get;
 pub mod providers_list;
 pub mod rate_limiting;
 pub mod url_discovery_service;
+pub mod url_validation;

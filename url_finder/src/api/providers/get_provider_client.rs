@@ -70,7 +70,10 @@ pub async fn handle_get_provider_client(
         .await
         .map_err(|e| {
             debug!("Failed to query provider+client: {:?}", e);
-            internal_server_error_with_code(ErrorCode::InternalError, "Failed to query provider")
+            internal_server_error_with_code(
+                ErrorCode::InternalError,
+                "Failed to query provider+client",
+            )
         })?
         .ok_or_else(|| {
             not_found_with_code(

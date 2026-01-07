@@ -8,7 +8,7 @@ use axum::{
 use axum_extra::extract::WithRejection;
 use color_eyre::Result;
 use serde::{Deserialize, Serialize};
-use tracing::debug;
+use tracing::{debug, warn};
 use utoipa::{IntoParams, ToSchema};
 
 use crate::{AppState, services::provider_service::ProviderData, types::ProviderAddress};
@@ -82,7 +82,7 @@ pub async fn handle_find_retri_by_sp(
         .get_provider(&provider_id)
         .await
         .map_err(|e| {
-            debug!("Failed to query provider: {:?}", e);
+            warn!("Failed to query provider: {:?}", e);
             internal_server_error("Failed to query provider")
         })?;
 

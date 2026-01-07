@@ -7,6 +7,7 @@ pub mod api_response;
 pub mod background;
 pub mod bms_client;
 mod cid_contact;
+pub mod circuit_breaker;
 pub mod config;
 mod http_client;
 mod lotus_rpc;
@@ -17,7 +18,7 @@ pub mod repository;
 pub mod routes;
 pub mod services;
 pub mod types;
-mod url_tester;
+pub mod url_tester;
 pub mod utils;
 
 pub use types::{ErrorCode, ResultCode};

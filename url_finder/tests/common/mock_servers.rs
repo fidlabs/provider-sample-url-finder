@@ -86,14 +86,18 @@ impl MockExternalServices {
 
     pub async fn setup_piece_retrieval_mock(&self, piece_cid: &str, should_succeed: bool) {
         if should_succeed {
+            // Content-Length must be >= 100MB to pass URL validation
+            // We create an actual body that exceeds MIN_VALID_CONTENT_LENGTH (100MB)
+            // wiremock auto-sets Content-Length based on body size
+            let body = vec![0u8; 100 * 1024 * 1024 + 1000]; // Just over 100MB
+
             for http_method in ["GET", "HEAD"] {
                 Mock::given(method(http_method))
                     .and(path(format!("/piece/{piece_cid}")))
                     .respond_with(
                         ResponseTemplate::new(200)
-                            .insert_header("content-type", "application/piece")
                             .insert_header("etag", "\"mock-etag-12345\"")
-                            .set_body_raw(vec![0u8; 100], "application/piece"),
+                            .set_body_raw(body.clone(), "application/piece"),
                     )
                     .mount(&self.piece_server)
                     .await;

@@ -25,7 +25,7 @@ The `/url/*` endpoints remain fully backward compatible.
  - **NoCidContactData** - No entry in cid contact
  - **MissingAddrFromCidContact** - No entry point found in cid contact
  - **MissingHttpAddrFromCidContact** - No HTTP entry point in cid contact
- - **FailedToGetWorkingUrl** - None of tested URLs is working
+ - **FailedToGetWorkingUrl** - None of the tested URLs are working
  - **NoDealsFound** - No deals found for given miner
  - **Success** - Found working URL
  - **Error** - Provider not indexed yet or error occurred

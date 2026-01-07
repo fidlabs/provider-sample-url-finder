@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT\n                    id,\n                    provider_id,\n                    bms_job_id,\n                    url_tested,\n                    routing_key,\n                    worker_count,\n                    status,\n                    ping_avg_ms,\n                    head_avg_ms,\n                    ttfb_ms,\n                    download_speed_mbps,\n                    created_at,\n                    completed_at\n               FROM\n                    bms_bandwidth_results\n               WHERE\n                    status = 'Pending'\n            ",
+  "query": "SELECT\n                    id,\n                    provider_id,\n                    bms_job_id,\n                    url_tested,\n                    routing_key,\n                    worker_count,\n                    status,\n                    ping_avg_ms,\n                    head_avg_ms,\n                    ttfb_ms,\n                    download_speed_mbps,\n                    created_at,\n                    completed_at\n               FROM\n                    bms_bandwidth_results\n               WHERE\n                    status = 'Pending'\n               ORDER BY\n                    created_at ASC,\n                    id ASC\n            ",
   "describe": {
     "columns": [
       {
@@ -88,5 +88,5 @@
       true
     ]
   },
-  "hash": "f735f1d3ddc5526f4bb7e471260bf60483c643356e1c5c232f579ff5e18de986"
+  "hash": "f03de544aa939f9096ea57c39db78ff3019ebfef7bfa65e7821b46b70b1cceca"
 }

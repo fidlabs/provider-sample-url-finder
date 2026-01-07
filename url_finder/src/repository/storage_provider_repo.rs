@@ -19,6 +19,8 @@ pub struct StorageProvider {
     pub bms_test_status: Option<String>,
     pub bms_routing_key: Option<String>,
     pub last_bms_region_discovery_at: Option<DateTime<Utc>>,
+    pub is_consistent: bool,
+    pub url_metadata: Option<serde_json::Value>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -75,6 +77,8 @@ impl StorageProviderRepository {
                     bms_test_status,
                     bms_routing_key,
                     last_bms_region_discovery_at,
+                    is_consistent,
+                    url_metadata,
                     created_at,
                     updated_at
                FROM
@@ -102,6 +106,8 @@ impl StorageProviderRepository {
                     bms_test_status,
                     bms_routing_key,
                     last_bms_region_discovery_at,
+                    is_consistent,
+                    url_metadata,
                     created_at,
                     updated_at
                FROM
@@ -147,6 +153,8 @@ impl StorageProviderRepository {
         &self,
         provider_id: &ProviderId,
         last_working_url: Option<String>,
+        is_consistent: bool,
+        url_metadata: Option<serde_json::Value>,
     ) -> Result<()> {
         sqlx::query!(
             r#"UPDATE
@@ -156,12 +164,16 @@ impl StorageProviderRepository {
                     url_discovery_status = NULL,
                     url_discovery_pending_since = NULL,
                     last_working_url = $2,
+                    is_consistent = $3,
+                    url_metadata = $4,
                     updated_at = NOW()
                WHERE
                     provider_id = $1
             "#,
             provider_id as &ProviderId,
-            last_working_url
+            last_working_url,
+            is_consistent,
+            url_metadata
         )
         .execute(&self.pool)
         .await?;
@@ -182,12 +194,15 @@ impl StorageProviderRepository {
                     bms_test_status,
                     bms_routing_key,
                     last_bms_region_discovery_at,
+                    is_consistent,
+                    url_metadata,
                     created_at,
                     updated_at
                FROM
                     storage_providers
                WHERE
                     last_working_url IS NOT NULL
+                    AND is_consistent = true
                     AND next_bms_test_at <= NOW()
                ORDER BY
                     next_bms_test_at ASC

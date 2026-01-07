@@ -87,7 +87,7 @@ pub async fn handle_find_client(
         .await
         .map_err(|e| {
             debug!("Failed to query client providers: {:?}", e);
-            internal_server_error("Failed to query url results")
+            internal_server_error("Failed to query client providers")
         })?;
 
     if providers_data.is_empty() {

@@ -173,6 +173,9 @@ impl BmsBandwidthResultRepository {
                     bms_bandwidth_results
                WHERE
                     status = 'Pending'
+               ORDER BY
+                    created_at ASC,
+                    id ASC
             "#
         )
         .fetch_all(&self.pool)

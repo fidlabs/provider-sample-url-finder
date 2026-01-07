@@ -77,7 +77,10 @@ pub async fn handle_find_url_sp_client(
         ApiResponse<ErrorResponse>,
     >,
 ) -> Result<ApiResponse<FindUrlSpClientResponse>, ApiResponse<()>> {
-    debug!("find url input address: {:?}", &path.provider);
+    debug!(
+        "find url input addresses - provider: {:?}, client: {:?}",
+        &path.provider, &path.client
+    );
 
     let provider_address = ProviderAddress::new(&path.provider)
         .map_err(|e| bad_request(format!("Invalid provider address: {e}")))?;

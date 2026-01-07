@@ -120,15 +120,24 @@ async fn main() -> Result<()> {
     });
 
     // Start the BMS scheduler in the background
+    let bms_circuit_breaker = Arc::new(background::create_bms_circuit_breaker());
     let bms_scheduler_handle: JoinHandle<()> = tokio::spawn({
         let config = config.clone();
         let sp_repo = sp_repo.clone();
         let bms_result_repo = bms_result_repo.clone();
         let bms_client = bms_client.clone();
+        let bms_circuit_breaker = bms_circuit_breaker.clone();
         let shutdown = shutdown_token.clone();
         async move {
-            background::run_bms_scheduler(config, bms_client, sp_repo, bms_result_repo, shutdown)
-                .await;
+            background::run_bms_scheduler(
+                config,
+                bms_client,
+                bms_circuit_breaker,
+                sp_repo,
+                bms_result_repo,
+                shutdown,
+            )
+            .await;
         }
     });
 
