@@ -127,10 +127,14 @@ impl CircuitBreaker {
 
     /// Record a failed request, potentially opening the circuit.
     pub fn record_failure(&self) {
-        // Check if we were in half-open state (probe failed)
-        // Don't increment failure count for probe failures - we're already at threshold
-        if self.in_half_open.load(Ordering::SeqCst) > 0 {
-            self.in_half_open.store(0, Ordering::SeqCst);
+        // Atomically check if we were the probe request (state 2 = probe in progress)
+        // Only treat as probe failure if we successfully consume the probe-in-progress state
+        if self
+            .in_half_open
+            .compare_exchange(2, 0, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok()
+        {
+            // We were the probe request and it failed - reopen the circuit
             *self.opened_at.lock().unwrap() = Some(Utc::now());
             let current_failures = self.failure_count.load(Ordering::SeqCst);
             warn!(

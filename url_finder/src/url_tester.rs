@@ -12,8 +12,8 @@ use tracing::{debug, info};
 
 use crate::{config::Config, http_client::build_client, types::UrlValidationResult};
 
-const FILTER_CONCURENCY_LIMIT: usize = 5;
-const RETRI_CONCURENCY_LIMIT: usize = 20;
+const FILTER_CONCURRENCY_LIMIT: usize = 5;
+const RETRI_CONCURRENCY_LIMIT: usize = 20;
 
 /// Minimum Content-Length for a URL to be considered "working" (100 MB)
 pub const MIN_VALID_CONTENT_LENGTH: u64 = 100 * 1024 * 1024;
@@ -57,7 +57,7 @@ pub async fn filter_working_with_head(urls: Vec<String>) -> Option<String> {
                 }
             }
         })
-        .buffer_unordered(FILTER_CONCURENCY_LIMIT);
+        .buffer_unordered(FILTER_CONCURRENCY_LIMIT);
 
     while let Some(result) = stream.next().await {
         if let Some(url) = result {
@@ -103,7 +103,7 @@ pub async fn get_retrivability_with_head(
                 }
             }
         })
-        .buffer_unordered(RETRI_CONCURENCY_LIMIT);
+        .buffer_unordered(RETRI_CONCURRENCY_LIMIT);
 
     let mut sample_url: Option<String> = None;
 
@@ -192,7 +192,7 @@ pub async fn check_retrievability_with_get(
                 }
             }
         })
-        .buffer_unordered(RETRI_CONCURENCY_LIMIT);
+        .buffer_unordered(RETRI_CONCURRENCY_LIMIT);
 
     let mut sample_url: Option<String> = None;
 
@@ -295,7 +295,7 @@ struct GetResult {
 
 /// Maximum Content-Length we're willing to drain for connection reuse.
 /// Error responses are typically small; large bodies aren't worth draining.
-const MAX_DRAIN_CONTENT_LENGTH: u64 = 8192;
+pub const MAX_DRAIN_CONTENT_LENGTH: u64 = 8192;
 
 /// Drains the response body to allow HTTP connection reuse.
 /// Only drains if Content-Length is present and small (typical for error responses).

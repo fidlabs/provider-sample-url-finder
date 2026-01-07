@@ -2,7 +2,8 @@ use std::time::{Duration, Instant};
 use url_finder::{
     config::Config,
     url_tester::{
-        MIN_VALID_CONTENT_LENGTH, SUSPICIOUS_SMALL_THRESHOLD, validate_url_with_metadata,
+        MAX_DRAIN_CONTENT_LENGTH, MIN_VALID_CONTENT_LENGTH, SUSPICIOUS_SMALL_THRESHOLD,
+        validate_url_with_metadata,
     },
 };
 use wiremock::{
@@ -248,7 +249,7 @@ async fn test_large_response_does_not_block() {
     // We're verifying the behavior by checking content_length is available
     // before we would call drain (as our code does)
     assert!(content_length.is_some());
-    assert!(content_length.unwrap() > 8192); // Larger than MAX_DRAIN_CONTENT_LENGTH
+    assert!(content_length.unwrap() > MAX_DRAIN_CONTENT_LENGTH);
 
     // Just drop the response without reading body
     // This simulates what our drain_response_body does for large responses
