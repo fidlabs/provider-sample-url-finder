@@ -448,55 +448,65 @@ impl PgHasArrayType for ErrorCode {
     }
 }
 
-/// Result of URL validation including Content-Length check
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UrlValidationResult {
-    pub is_valid: bool,
-    pub is_consistent: bool,
+/// Error types for URL testing operations
+#[derive(Debug, Clone, PartialEq)]
+pub enum UrlTestError {
+    Timeout,
+    ConnectionRefused,
+    ConnectionReset,
+    DnsFailure,
+    TlsError,
+    HttpError(u16),
+    Other(String),
+}
+
+impl std::fmt::Display for UrlTestError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Timeout => write!(f, "timeout"),
+            Self::ConnectionRefused => write!(f, "connection_refused"),
+            Self::ConnectionReset => write!(f, "connection_reset"),
+            Self::DnsFailure => write!(f, "dns_failure"),
+            Self::TlsError => write!(f, "tls_error"),
+            Self::HttpError(code) => write!(f, "http_{code}"),
+            Self::Other(msg) => write!(f, "other: {msg}"),
+        }
+    }
+}
+
+/// Result of a double-tap URL test
+#[derive(Debug, Clone)]
+pub struct UrlTestResult {
+    pub url: String,
+    pub success: bool,
+    pub consistent: bool,
     pub content_length: Option<u64>,
-    pub metadata: serde_json::Value,
+    pub response_time_ms: u64,
+    pub error: Option<UrlTestError>,
 }
 
-impl UrlValidationResult {
-    pub fn valid(content_length: u64, metadata: serde_json::Value) -> Self {
-        Self {
-            is_valid: true,
-            is_consistent: true,
-            content_length: Some(content_length),
-            metadata,
-        }
-    }
-
-    pub fn invalid(content_length: Option<u64>, metadata: serde_json::Value) -> Self {
-        Self {
-            is_valid: false,
-            is_consistent: true,
-            content_length,
-            metadata,
-        }
-    }
-
-    pub fn inconsistent(
-        is_valid: bool,
-        content_length: Option<u64>,
-        metadata: serde_json::Value,
-    ) -> Self {
-        Self {
-            is_valid,
-            is_consistent: false,
-            content_length,
-            metadata,
-        }
-    }
+/// Analysis of URL test results for a provider
+#[derive(Debug, Clone)]
+pub struct ProviderAnalysis {
+    pub retrievability_percent: f64,
+    pub is_consistent: bool,
+    pub is_reliable: bool,
+    pub sample_count: usize,
+    pub success_count: usize,
+    pub timeout_count: usize,
 }
 
-/// Details of consistency check when Content-Length varies
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ConsistencyCheck {
-    pub checked: bool,
-    pub samples: Vec<u64>,
-    pub retries: u32,
-    pub failure_reason: Option<String>,
+impl ProviderAnalysis {
+    pub fn empty() -> Self {
+        Self {
+            retrievability_percent: 0.0,
+            is_consistent: false, // No samples analyzed yet
+            is_reliable: false,   // No samples analyzed yet
+            sample_count: 0,
+            success_count: 0,
+            timeout_count: 0,
+        }
+    }
 }
 
 #[cfg(test)]

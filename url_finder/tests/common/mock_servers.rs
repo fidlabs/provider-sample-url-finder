@@ -86,30 +86,30 @@ impl MockExternalServices {
 
     pub async fn setup_piece_retrieval_mock(&self, piece_cid: &str, should_succeed: bool) {
         if should_succeed {
-            // Content-Length must be >= 100MB to pass URL validation
-            // We create an actual body that exceeds MIN_VALID_CONTENT_LENGTH (100MB)
-            // wiremock auto-sets Content-Length based on body size
-            let body = vec![0u8; 100 * 1024 * 1024 + 1000]; // Just over 100MB
+            // Total file size must be >= 8GB (MIN_VALID_CONTENT_LENGTH) to pass URL validation
+            // Using 16GB to be safely above the threshold
+            let total_file_size: u64 = 16_000_000_000;
 
-            for http_method in ["GET", "HEAD"] {
-                Mock::given(method(http_method))
-                    .and(path(format!("/piece/{piece_cid}")))
-                    .respond_with(
-                        ResponseTemplate::new(200)
-                            .insert_header("etag", "\"mock-etag-12345\"")
-                            .set_body_raw(body.clone(), "application/piece"),
-                    )
-                    .mount(&self.piece_server)
-                    .await;
-            }
+            // For GET requests WITH Range header (double-tap testing)
+            // Returns 206 Partial Content with Content-Range header indicating total file size
+            let range_body = vec![0u8; 4096]; // Just the requested range bytes
+            Mock::given(method("GET"))
+                .and(path(format!("/piece/{piece_cid}")))
+                .and(wiremock::matchers::header("Range", "bytes=0-4095"))
+                .respond_with(
+                    ResponseTemplate::new(206) // Partial Content
+                        .insert_header("etag", "\"mock-etag-12345\"")
+                        .insert_header("Content-Range", format!("bytes 0-4095/{total_file_size}"))
+                        .set_body_raw(range_body, "application/piece"),
+                )
+                .mount(&self.piece_server)
+                .await;
         } else {
-            for http_method in ["GET", "HEAD"] {
-                Mock::given(method(http_method))
-                    .and(path(format!("/piece/{piece_cid}")))
-                    .respond_with(ResponseTemplate::new(404))
-                    .mount(&self.piece_server)
-                    .await;
-            }
+            Mock::given(method("GET"))
+                .and(path(format!("/piece/{piece_cid}")))
+                .respond_with(ResponseTemplate::new(404))
+                .mount(&self.piece_server)
+                .await;
         }
     }
 }

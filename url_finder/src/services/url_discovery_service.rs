@@ -1,16 +1,17 @@
 use chrono::{DateTime, Utc};
 
 use crate::{
-    config::Config,
+    config::{Config, MIN_VALID_CONTENT_LENGTH},
+    http_client::build_client,
     provider_endpoints,
     repository::DealRepository,
-    services::deal_service,
+    services::{consistency_analyzer::analyze_results, deal_service},
     types::{
         ClientAddress, ClientId, DiscoveryType, ErrorCode, ProviderAddress, ProviderId, ResultCode,
     },
-    url_tester::{self, validate_url_with_metadata},
+    url_tester::test_urls_double_tap,
 };
-use tracing::{debug, error};
+use tracing::{debug, error, info};
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -25,6 +26,7 @@ pub struct UrlDiscoveryResult {
     pub error_code: Option<ErrorCode>,
     pub tested_at: DateTime<Utc>,
     pub is_consistent: bool,
+    pub is_reliable: bool,
     pub url_metadata: Option<serde_json::Value>,
 }
 
@@ -40,7 +42,8 @@ impl UrlDiscoveryResult {
             result_code: ResultCode::Error,
             error_code: None,
             tested_at: Utc::now(),
-            is_consistent: true,
+            is_consistent: false, // No verification performed yet
+            is_reliable: false,   // No verification performed yet
             url_metadata: None,
         }
     }
@@ -56,7 +59,8 @@ impl UrlDiscoveryResult {
             result_code: ResultCode::Error,
             error_code: None,
             tested_at: Utc::now(),
-            is_consistent: true,
+            is_consistent: false, // No verification performed yet
+            is_reliable: false,   // No verification performed yet
             url_metadata: None,
         }
     }
@@ -128,37 +132,61 @@ pub async fn discover_url(
         urls.len(),
         endpoints
     );
-    debug!("Testing URLs: {:?}", urls);
-    let (working_url, retrievability_percent) =
-        url_tester::check_retrievability_with_get(config, urls, true).await;
-    debug!(
-        "URL test result - working_url: {:?}, retrievability: {:?}",
-        working_url, retrievability_percent
-    );
 
-    // Validate the working URL if found
-    let (validated_url, is_consistent, url_metadata) = match working_url {
-        Some(url) => {
-            let validation = validate_url_with_metadata(config, &url).await;
-            debug!(
-                "URL validation result - is_valid: {}, is_consistent: {}, content_length: {:?}",
-                validation.is_valid, validation.is_consistent, validation.content_length
-            );
-            (
-                if validation.is_valid { Some(url) } else { None },
-                validation.is_consistent,
-                Some(validation.metadata),
-            )
+    // Build HTTP client for double-tap testing
+    let client = match build_client(config) {
+        Ok(c) => c,
+        Err(e) => {
+            error!("Failed to build HTTP client: {:?}", e);
+            result.result_code = ResultCode::Error;
+            return result;
         }
-        None => (None, true, None),
     };
 
-    result.working_url = validated_url.clone();
-    result.retrievability_percent = retrievability_percent.unwrap_or(0.0);
-    result.is_consistent = is_consistent;
-    result.url_metadata = url_metadata;
-    // Success if validated, FailedToGetWorkingUrl otherwise (no URL found or validation failed)
-    result.result_code = if validated_url.is_some() {
+    // Double-tap test all URLs
+    let test_results = test_urls_double_tap(&client, urls).await;
+    debug!("Double-tap tested {} URLs", test_results.len());
+
+    // Analyze results for provider-level metrics
+    let analysis = analyze_results(&test_results);
+    info!(
+        "Provider {} analysis: retrievability={:.1}%, consistent={}, reliable={}, samples={}",
+        provider_address,
+        analysis.retrievability_percent,
+        analysis.is_consistent,
+        analysis.is_reliable,
+        analysis.sample_count
+    );
+
+    // Select best working URL: success && consistent && content_length >= 8GB
+    let working_url = test_results
+        .iter()
+        .filter(|r| r.success && r.consistent)
+        .filter(|r| r.content_length.unwrap_or(0) >= MIN_VALID_CONTENT_LENGTH)
+        .max_by_key(|r| r.content_length)
+        .map(|r| r.url.clone());
+
+    // Build metadata with analysis details
+    let url_metadata = serde_json::json!({
+        "analysis": {
+            "sample_count": analysis.sample_count,
+            "success_count": analysis.success_count,
+            "timeout_count": analysis.timeout_count,
+            "retrievability_percent": analysis.retrievability_percent,
+            "is_consistent": analysis.is_consistent,
+            "is_reliable": analysis.is_reliable,
+        },
+        "validated_at": Utc::now().to_rfc3339(),
+    });
+
+    result.working_url = working_url.clone();
+    result.retrievability_percent = analysis.retrievability_percent;
+    result.is_consistent = analysis.is_consistent;
+    result.is_reliable = analysis.is_reliable;
+    result.url_metadata = Some(url_metadata);
+
+    // Success if we found a valid working URL
+    result.result_code = if working_url.is_some() {
         ResultCode::Success
     } else {
         ResultCode::FailedToGetWorkingUrl

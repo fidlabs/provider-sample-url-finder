@@ -95,13 +95,15 @@ async fn schedule_url_discoveries(
         // Extract provider-only result for storage_providers update
         let provider_discovery = results.iter().find(|r| r.client_id.is_none());
 
-        let (last_working_url, is_consistent, url_metadata) = match provider_discovery {
+        let (last_working_url, is_consistent, is_reliable, url_metadata) = match provider_discovery
+        {
             Some(r) => (
                 r.working_url.clone(),
                 r.is_consistent,
+                r.is_reliable,
                 r.url_metadata.clone(),
             ),
-            None => (None, true, None),
+            None => (None, true, true, None),
         };
 
         let url_results: Vec<UrlResult> = results.into_iter().map(|r| r.into()).collect();
@@ -119,6 +121,7 @@ async fn schedule_url_discoveries(
                 &provider.provider_id,
                 last_working_url,
                 is_consistent,
+                is_reliable,
                 url_metadata,
             )
             .await?;

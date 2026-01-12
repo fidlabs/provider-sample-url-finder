@@ -4,25 +4,255 @@ use std::sync::{
 };
 use std::time::Duration;
 
-use chrono::Utc;
 use futures::{StreamExt, stream};
 use reqwest::Client;
-use serde_json::json;
+use tokio::sync::Semaphore;
 use tracing::{debug, info};
 
-use crate::{config::Config, http_client::build_client, types::UrlValidationResult};
+use crate::config::{
+    Config, DOUBLE_TAP_DELAY_MS, MAX_CONCURRENT_URL_TESTS, MIN_VALID_CONTENT_LENGTH,
+    RANGE_REQUEST_BYTES,
+};
+use crate::http_client::build_client;
+use crate::types::{UrlTestError, UrlTestResult};
 
 const FILTER_CONCURRENCY_LIMIT: usize = 5;
 const RETRI_CONCURRENCY_LIMIT: usize = 20;
 
-/// Minimum Content-Length for a URL to be considered "working" (100 MB)
-pub const MIN_VALID_CONTENT_LENGTH: u64 = 100 * 1024 * 1024;
-/// Below this threshold, retry to check for warm-up behavior (10 MB)
-pub const SUSPICIOUS_SMALL_THRESHOLD: u64 = 10 * 1024 * 1024;
-/// Number of retries when response is suspiciously small
-pub const CONSISTENCY_CHECK_RETRIES: u32 = 2;
-/// Delay between consistency check retries (ms)
-pub const CONSISTENCY_CHECK_DELAY_MS: u64 = 500;
+/// Response from a range request, containing the total file size from Content-Range header
+#[derive(Debug)]
+#[allow(dead_code)]
+struct RangeResponse {
+    content_length: Option<u64>,
+    response_time_ms: u64,
+}
+
+/// Classification of a single tap result for consistency checking.
+#[derive(Debug, Clone)]
+enum TapResult {
+    /// HTTP success with Content-Length >= MIN_VALID_CONTENT_LENGTH (8GB)
+    Valid {
+        content_length: u64,
+        response_time_ms: u64,
+    },
+    /// HTTP success but Content-Length < MIN_VALID_CONTENT_LENGTH (likely error page)
+    Small {
+        content_length: u64,
+        response_time_ms: u64,
+    },
+    /// Request failed (timeout, connection error, HTTP error status)
+    Failed { error: UrlTestError },
+}
+
+impl TapResult {
+    /// Classify a range request result into Valid/Small/Failed
+    fn from_range_result(result: Result<RangeResponse, UrlTestError>) -> Self {
+        match result {
+            Ok(r) => {
+                let content_length = r.content_length.unwrap_or(0);
+                if content_length >= MIN_VALID_CONTENT_LENGTH {
+                    TapResult::Valid {
+                        content_length,
+                        response_time_ms: r.response_time_ms,
+                    }
+                } else {
+                    TapResult::Small {
+                        content_length,
+                        response_time_ms: r.response_time_ms,
+                    }
+                }
+            }
+            Err(e) => TapResult::Failed { error: e },
+        }
+    }
+
+    fn is_valid(&self) -> bool {
+        matches!(self, TapResult::Valid { .. })
+    }
+
+    fn content_length(&self) -> Option<u64> {
+        match self {
+            TapResult::Valid { content_length, .. } => Some(*content_length),
+            TapResult::Small { content_length, .. } => Some(*content_length),
+            TapResult::Failed { .. } => None,
+        }
+    }
+
+    fn response_time_ms(&self) -> u64 {
+        match self {
+            TapResult::Valid {
+                response_time_ms, ..
+            } => *response_time_ms,
+            TapResult::Small {
+                response_time_ms, ..
+            } => *response_time_ms,
+            TapResult::Failed { .. } => 0,
+        }
+    }
+
+    fn error(&self) -> Option<UrlTestError> {
+        match self {
+            TapResult::Failed { error } => Some(error.clone()),
+            _ => None,
+        }
+    }
+}
+
+/// Determines if two tap results indicate a consistent provider.
+/// Everything else (Small responses, failures, mismatched sizes) = inconsistent.
+fn is_consistent_pair(tap1: &TapResult, tap2: &TapResult) -> bool {
+    match (tap1, tap2) {
+        (
+            TapResult::Valid {
+                content_length: a, ..
+            },
+            TapResult::Valid {
+                content_length: b, ..
+            },
+        ) => a == b,
+        // All other combinations are inconsistent:
+        // - VALID + SMALL: real piece vs error page
+        // - SMALL + VALID: error page vs real piece
+        // - SMALL + SMALL: both returned garbage
+        // - VALID + FAILED: gaming pattern (timeout then respond)
+        // - FAILED + VALID: gaming pattern (timeout then respond)
+        // - SMALL + FAILED: got garbage
+        // - FAILED + SMALL: got garbage
+        // - FAILED + FAILED: cannot verify, assume bad
+        _ => false,
+    }
+}
+
+/// Makes a range request (bytes=0-4095) and extracts total file size from Content-Range header.
+/// Used for double-tap consistency testing to verify Content-Length without downloading full file.
+#[allow(dead_code)]
+async fn range_request(client: &Client, url: &str) -> Result<RangeResponse, UrlTestError> {
+    let start = std::time::Instant::now();
+
+    let resp = client
+        .get(url)
+        .header("Range", format!("bytes=0-{}", RANGE_REQUEST_BYTES - 1))
+        .send()
+        .await
+        .map_err(|e| classify_request_error(&e))?;
+
+    let status = resp.status();
+    if !status.is_success() && status != reqwest::StatusCode::PARTIAL_CONTENT {
+        return Err(UrlTestError::HttpError(status.as_u16()));
+    }
+
+    let content_length = extract_total_length(&resp);
+
+    Ok(RangeResponse {
+        content_length,
+        response_time_ms: start.elapsed().as_millis() as u64,
+    })
+}
+
+/// Extracts total file size from Content-Range header (e.g., "bytes 0-4095/19327352832" -> 19327352832)
+/// Falls back to Content-Length header if Content-Range is not present.
+#[allow(dead_code)]
+fn extract_total_length(resp: &reqwest::Response) -> Option<u64> {
+    // Try Content-Range first: "bytes 0-4095/19327352832"
+    if let Some(range) = resp.headers().get("content-range")
+        && let Ok(s) = range.to_str()
+        && let Some(total) = s.split('/').nth(1)
+        && total != "*"
+    {
+        return total.parse().ok();
+    }
+    // Fall back to Content-Length
+    resp.content_length()
+}
+
+/// Classifies a reqwest error into a more specific UrlTestError type
+#[allow(dead_code)]
+fn classify_request_error(e: &reqwest::Error) -> UrlTestError {
+    if e.is_timeout() {
+        UrlTestError::Timeout
+    } else if e.is_connect() {
+        if e.to_string().contains("dns") {
+            UrlTestError::DnsFailure
+        } else {
+            UrlTestError::ConnectionRefused
+        }
+    } else if e.to_string().contains("reset") {
+        UrlTestError::ConnectionReset
+    } else if e.to_string().contains("tls") || e.to_string().contains("ssl") {
+        UrlTestError::TlsError
+    } else {
+        UrlTestError::Other(e.to_string())
+    }
+}
+
+/// Performs a double-tap URL test: two range requests with a delay between them.
+///
+/// STRICT CONSISTENCY RULES
+/// - success: true if either request succeeded (HTTP 2xx)
+/// - consistent: true ONLY if both requests return VALID responses (>= 8GB) with identical Content-Length
+/// - Everything else is inconsistent: failures, small responses (error pages), mismatched sizes
+///
+/// This strict approach prevents gaming patterns where providers timeout on first request
+/// to avoid bandwidth costs, then respond on retries.
+pub async fn test_url_double_tap(client: &Client, url: &str) -> UrlTestResult {
+    let r1 = range_request(client, url).await;
+    tokio::time::sleep(Duration::from_millis(DOUBLE_TAP_DELAY_MS)).await;
+    let r2 = range_request(client, url).await;
+
+    // Classify each tap result
+    let tap1 = TapResult::from_range_result(r1);
+    let tap2 = TapResult::from_range_result(r2);
+
+    // Success if either tap got a response (even if small/error page)
+    let success = tap1.is_valid()
+        || tap2.is_valid()
+        || tap1.content_length().is_some()
+        || tap2.content_length().is_some();
+
+    // STRICT: Only VALID+VALID with same size is consistent
+    let consistent = is_consistent_pair(&tap1, &tap2);
+
+    // Prefer tap2 (most recent), fall back to tap1
+    let best_content_length = tap2.content_length().or(tap1.content_length());
+    let best_response_time = if tap2.content_length().is_some() {
+        tap2.response_time_ms()
+    } else {
+        tap1.response_time_ms()
+    };
+
+    // Collect any error (prefer most recent)
+    let error = tap2.error().or(tap1.error());
+
+    UrlTestResult {
+        url: url.to_string(),
+        success,
+        consistent,
+        content_length: best_content_length,
+        response_time_ms: best_response_time,
+        error,
+    }
+}
+
+/// Tests multiple URLs in parallel using double-tap consistency checks.
+/// Limits concurrency to MAX_CONCURRENT_URL_TESTS to avoid overwhelming targets.
+pub async fn test_urls_double_tap(client: &Client, urls: Vec<String>) -> Vec<UrlTestResult> {
+    let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_URL_TESTS));
+
+    let futures: Vec<_> = urls
+        .into_iter()
+        .map(|url| {
+            let client = client.clone();
+            let permit = semaphore.clone();
+
+            async move {
+                let _permit = permit.acquire().await.unwrap();
+                test_url_double_tap(&client, &url).await
+            }
+        })
+        .collect();
+
+    futures::future::join_all(futures).await
+}
 
 /// return first working url through head requests
 /// let's keep both head and get versions for now
@@ -227,72 +457,6 @@ fn round_to_two_decimals(number: f64) -> f64 {
     (number * 100.0).round() / 100.0
 }
 
-/// Validates a working URL and collects metadata.
-/// Uses GET request (not HEAD) for Curio compatibility.
-/// If response is suspiciously small (< 10MB), retries to detect inconsistency.
-pub async fn validate_url_with_metadata(config: &Config, url: &str) -> UrlValidationResult {
-    let client = match build_client(config) {
-        Ok(c) => c,
-        Err(e) => {
-            return UrlValidationResult::invalid(
-                None,
-                json!({
-                    "validated_at": Utc::now(),
-                    "error": format!("Failed to build HTTP client: {e}"),
-                }),
-            );
-        }
-    };
-
-    // First GET request - extract Content-Length from headers
-    let first_result = get_content_length(&client, url).await;
-
-    let Some(first_length) = first_result.content_length else {
-        return UrlValidationResult::invalid(
-            None,
-            json!({
-                "validated_at": Utc::now(),
-                "error": first_result.error.unwrap_or_else(|| "Missing Content-Length".to_string()),
-            }),
-        );
-    };
-
-    // If large enough, it's valid
-    if first_length >= MIN_VALID_CONTENT_LENGTH {
-        return UrlValidationResult::valid(
-            first_length,
-            json!({
-                "validated_at": Utc::now(),
-                "content_length": first_length,
-                "content_type": first_result.content_type,
-                "response_time_ms": first_result.response_time_ms,
-            }),
-        );
-    }
-
-    // If suspiciously small, check for inconsistency (warm-up behavior)
-    if first_length < SUSPICIOUS_SMALL_THRESHOLD {
-        return check_consistency(&client, url, first_length).await;
-    }
-
-    // Between suspicious and valid threshold - just invalid, not worth retrying
-    UrlValidationResult::invalid(
-        Some(first_length),
-        json!({
-            "validated_at": Utc::now(),
-            "content_length": first_length,
-            "failure_reason": "Content-Length below minimum threshold",
-        }),
-    )
-}
-
-struct GetResult {
-    content_length: Option<u64>,
-    content_type: Option<String>,
-    response_time_ms: u128,
-    error: Option<String>,
-}
-
 /// Maximum Content-Length we're willing to drain for connection reuse.
 /// Error responses are typically small; large bodies aren't worth draining.
 pub const MAX_DRAIN_CONTENT_LENGTH: u64 = 8192;
@@ -321,131 +485,6 @@ async fn drain_response_body(resp: reqwest::Response) {
     }
     // For unknown/large bodies, dropping resp closes the connection
     // This is acceptable since large file responses are less frequent
-}
-
-async fn get_content_length(client: &Client, url: &str) -> GetResult {
-    let start = std::time::Instant::now();
-
-    match client.get(url).send().await {
-        Ok(resp) => {
-            let response_time_ms = start.elapsed().as_millis();
-            let status = resp.status();
-
-            debug!("Response status={}, headers={:?}", status, resp.headers());
-
-            if !status.is_success() {
-                // Drain body to allow connection reuse
-                drain_response_body(resp).await;
-                return GetResult {
-                    content_length: None,
-                    content_type: None,
-                    response_time_ms,
-                    error: Some(format!("HTTP status {status}")),
-                };
-            }
-
-            let content_type = resp
-                .headers()
-                .get("content-type")
-                .and_then(|v| v.to_str().ok())
-                .map(|s| s.to_string());
-
-            // Read Content-Length from header directly
-            // resp.content_length() may not work correctly with empty bodies
-            let content_length = resp
-                .headers()
-                .get("content-length")
-                .and_then(|v| v.to_str().ok())
-                .and_then(|s| s.parse::<u64>().ok());
-
-            debug!(
-                "Parsed content_length={:?}, content_type={:?}",
-                content_length, content_type
-            );
-
-            // Drain body to allow connection reuse
-            drain_response_body(resp).await;
-
-            GetResult {
-                content_length,
-                content_type,
-                response_time_ms,
-                error: None,
-            }
-        }
-        Err(e) => GetResult {
-            content_length: None,
-            content_type: None,
-            response_time_ms: start.elapsed().as_millis(),
-            error: Some(format!("Request failed: {e}")),
-        },
-    }
-}
-
-async fn check_consistency(client: &Client, url: &str, first_length: u64) -> UrlValidationResult {
-    let mut samples = vec![first_length];
-    let mut max_length = first_length;
-    let mut failed_attempts: u32 = 0;
-
-    for _ in 0..CONSISTENCY_CHECK_RETRIES {
-        tokio::time::sleep(Duration::from_millis(CONSISTENCY_CHECK_DELAY_MS)).await;
-
-        let result = get_content_length(client, url).await;
-        match result.content_length {
-            Some(length) => {
-                samples.push(length);
-                max_length = max_length.max(length);
-            }
-            None => {
-                failed_attempts += 1;
-                debug!(
-                    "Consistency check failed for {}: {}",
-                    url,
-                    result.error.as_deref().unwrap_or("unknown error")
-                );
-            }
-        }
-    }
-
-    // Consistent only if all successful samples match AND no failures occurred
-    let samples_all_equal = samples.iter().all(|&len| len == first_length);
-    let is_consistent = samples_all_equal && failed_attempts == 0;
-    let warmed_up = max_length >= MIN_VALID_CONTENT_LENGTH;
-
-    let failure_reason = if failed_attempts > 0 {
-        Some(format!(
-            "Transient failures during consistency check: {failed_attempts} failed attempts"
-        ))
-    } else if !samples_all_equal {
-        Some(format!("Content-Length variance: {:?}", samples))
-    } else {
-        None::<String>
-    };
-
-    let consistency_metadata = json!({
-        "checked": true,
-        "samples": samples,
-        "retries": CONSISTENCY_CHECK_RETRIES,
-        "failed_attempts": failed_attempts,
-        "failure_reason": failure_reason,
-    });
-
-    let metadata = json!({
-        "validated_at": Utc::now(),
-        "content_length": max_length,
-        "consistency": consistency_metadata,
-    });
-
-    match (is_consistent, warmed_up) {
-        // All same, large enough, no failures = valid & consistent
-        (true, true) => UrlValidationResult::valid(max_length, metadata),
-        // All same, too small, no failures = invalid but consistent
-        (true, false) => UrlValidationResult::invalid(Some(first_length), metadata),
-        // Varied or had failures, eventually large = valid but INCONSISTENT
-        (false, true) => UrlValidationResult::inconsistent(true, Some(max_length), metadata),
-        // Varied or had failures, never large = invalid & inconsistent
-        (false, false) => UrlValidationResult::inconsistent(false, Some(max_length), metadata),
-    }
 }
 
 #[cfg(test)]
@@ -534,52 +573,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_content_length_extracts_headers_before_drain() {
-        let mock_server = MockServer::start().await;
-        let body = vec![0u8; 1000];
-
-        Mock::given(method("GET"))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .insert_header("content-type", "application/octet-stream")
-                    .set_body_raw(body.clone(), "application/octet-stream"),
-            )
-            .mount(&mock_server)
-            .await;
-
-        let client = Client::new();
-        let result = get_content_length(&client, &mock_server.uri()).await;
-
-        assert!(result.error.is_none(), "Should succeed: {:?}", result.error);
-        assert_eq!(result.content_length, Some(1000));
-        assert_eq!(
-            result.content_type,
-            Some("application/octet-stream".to_string())
-        );
-    }
-
-    #[tokio::test]
-    async fn test_get_content_length_captures_error_status() {
-        let mock_server = MockServer::start().await;
-
-        Mock::given(method("GET"))
-            .respond_with(ResponseTemplate::new(503).set_body_string("Service Unavailable"))
-            .mount(&mock_server)
-            .await;
-
-        let client = Client::new();
-        let result = get_content_length(&client, &mock_server.uri()).await;
-
-        assert!(result.content_length.is_none());
-        assert!(result.error.is_some());
-        assert!(
-            result.error.as_ref().unwrap().contains("503"),
-            "Error should contain status code: {:?}",
-            result.error
-        );
-    }
-
-    #[tokio::test]
     async fn test_drain_chunked_response_skipped() {
         let mock_server = MockServer::start().await;
         // Small body but with chunked transfer-encoding should NOT be drained
@@ -627,108 +620,258 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_check_consistency_tracks_failures() {
-        use wiremock::matchers::path;
+    async fn test_range_request_extracts_content_length_from_content_range() {
+        use wiremock::matchers::header;
 
         let mock_server = MockServer::start().await;
 
-        // Mock returns 503 for all consistency check requests
-        // (the first_length is passed to check_consistency, so we only mock the retry requests)
         Mock::given(method("GET"))
-            .and(path("/test"))
-            .respond_with(ResponseTemplate::new(503).set_body_string("Service Unavailable"))
-            .mount(&mock_server)
-            .await;
-
-        let client = Client::new();
-        let url = format!("{}/test", mock_server.uri());
-        let first_length = 1000u64; // Simulated first successful request value
-
-        let result = check_consistency(&client, &url, first_length).await;
-
-        // Should be marked as inconsistent due to failures
-        assert!(
-            !result.is_consistent,
-            "Should be inconsistent due to failures"
-        );
-
-        // Verify metadata contains failure information
-        let consistency = result
-            .metadata
-            .get("consistency")
-            .expect("Missing consistency");
-        let failed_attempts = consistency
-            .get("failed_attempts")
-            .expect("Missing failed_attempts")
-            .as_u64()
-            .unwrap();
-        assert!(
-            failed_attempts > 0,
-            "Should have recorded failed attempts, got: {failed_attempts}"
-        );
-
-        // Verify failure_reason mentions transient failures
-        let failure_reason = consistency
-            .get("failure_reason")
-            .expect("Missing failure_reason")
-            .as_str()
-            .unwrap();
-        assert!(
-            failure_reason.contains("Transient failures"),
-            "failure_reason should mention transient failures: {failure_reason}"
-        );
-
-        // Samples should only contain the initial value (failures don't add samples)
-        let samples = consistency.get("samples").expect("Missing samples");
-        let samples_arr = samples.as_array().expect("samples should be array");
-        assert_eq!(
-            samples_arr.len(),
-            1,
-            "Only initial sample should be recorded"
-        );
-        assert_eq!(samples_arr[0].as_u64().unwrap(), first_length);
-    }
-
-    #[tokio::test]
-    async fn test_check_consistency_all_successful_same_values() {
-        use wiremock::matchers::path;
-
-        let mock_server = MockServer::start().await;
-
-        // All requests return same small content-length
-        Mock::given(method("GET"))
-            .and(path("/test"))
+            .and(header("Range", "bytes=0-4095"))
             .respond_with(
-                ResponseTemplate::new(200)
-                    .insert_header("content-length", "5000")
-                    .set_body_raw(vec![0u8; 5000], "application/octet-stream"),
+                ResponseTemplate::new(206)
+                    .insert_header("Content-Range", "bytes 0-4095/19327352832")
+                    .insert_header("Content-Length", "4096"),
             )
             .mount(&mock_server)
             .await;
 
-        let client = Client::new();
-        let url = format!("{}/test", mock_server.uri());
-        let first_length = 5000u64;
-
-        let result = check_consistency(&client, &url, first_length).await;
-
-        // Should be consistent (all same, no failures) but invalid (too small)
-        assert!(
-            result.is_consistent,
-            "Should be consistent - all same values"
-        );
-        assert!(!result.is_valid, "Should be invalid - content too small");
-
-        // Verify no failures
-        let consistency = result
-            .metadata
-            .get("consistency")
-            .expect("Missing consistency");
-        let failed_attempts = consistency
-            .get("failed_attempts")
-            .expect("Missing failed_attempts")
-            .as_u64()
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
             .unwrap();
-        assert_eq!(failed_attempts, 0, "Should have no failed attempts");
+
+        let result = range_request(&client, &mock_server.uri()).await;
+
+        assert!(result.is_ok());
+        let response = result.unwrap();
+        assert_eq!(response.content_length, Some(19327352832));
+    }
+
+    #[tokio::test]
+    async fn test_double_tap_both_success_consistent() {
+        use wiremock::matchers::header;
+
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(header("Range", "bytes=0-4095"))
+            .respond_with(
+                ResponseTemplate::new(206)
+                    .insert_header("Content-Range", "bytes 0-4095/16000000000"),
+            )
+            .expect(2)
+            .mount(&mock_server)
+            .await;
+
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
+            .unwrap();
+
+        let result = test_url_double_tap(&client, &mock_server.uri()).await;
+
+        assert!(result.success);
+        assert!(result.consistent);
+        assert_eq!(result.content_length, Some(16000000000));
+    }
+
+    #[tokio::test]
+    async fn test_double_tap_inconsistent_content_length() {
+        use wiremock::matchers::header;
+
+        let mock_server = MockServer::start().await;
+
+        // First request returns small file
+        Mock::given(method("GET"))
+            .and(header("Range", "bytes=0-4095"))
+            .respond_with(
+                ResponseTemplate::new(206).insert_header("Content-Range", "bytes 0-252/252"),
+            )
+            .up_to_n_times(1)
+            .mount(&mock_server)
+            .await;
+
+        // Second request returns large file
+        Mock::given(method("GET"))
+            .and(header("Range", "bytes=0-4095"))
+            .respond_with(
+                ResponseTemplate::new(206)
+                    .insert_header("Content-Range", "bytes 0-4095/16000000000"),
+            )
+            .mount(&mock_server)
+            .await;
+
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
+            .unwrap();
+
+        let result = test_url_double_tap(&client, &mock_server.uri()).await;
+
+        assert!(result.success);
+        assert!(!result.consistent); // Different Content-Length = inconsistent
+    }
+
+    /// FAIL + VALID = inconsistent (gaming pattern detection)
+    /// Previously this was marked consistent because "can't detect variance with one failure"
+    /// Now we treat this as a gaming pattern where provider times out first, responds second
+    #[tokio::test]
+    async fn test_double_tap_gaming_pattern_fail_then_valid() {
+        use wiremock::matchers::header;
+
+        let mock_server = MockServer::start().await;
+
+        // First request fails (simulates timeout/gaming)
+        Mock::given(method("GET"))
+            .and(header("Range", "bytes=0-4095"))
+            .respond_with(ResponseTemplate::new(500))
+            .up_to_n_times(1)
+            .mount(&mock_server)
+            .await;
+
+        // Second request succeeds with valid large file
+        Mock::given(method("GET"))
+            .and(header("Range", "bytes=0-4095"))
+            .respond_with(
+                ResponseTemplate::new(206)
+                    .insert_header("Content-Range", "bytes 0-4095/16000000000"),
+            )
+            .mount(&mock_server)
+            .await;
+
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
+            .unwrap();
+
+        let result = test_url_double_tap(&client, &mock_server.uri()).await;
+
+        assert!(result.success); // Second request succeeded
+        assert!(!result.consistent); // STRICT: FAIL + VALID = inconsistent (gaming pattern)
+        assert_eq!(result.content_length, Some(16000000000));
+    }
+
+    /// VALID + FAIL = inconsistent (gaming pattern, reverse order)
+    #[tokio::test]
+    async fn test_double_tap_gaming_pattern_valid_then_fail() {
+        use wiremock::matchers::header;
+
+        let mock_server = MockServer::start().await;
+
+        // First request succeeds
+        Mock::given(method("GET"))
+            .and(header("Range", "bytes=0-4095"))
+            .respond_with(
+                ResponseTemplate::new(206)
+                    .insert_header("Content-Range", "bytes 0-4095/16000000000"),
+            )
+            .up_to_n_times(1)
+            .mount(&mock_server)
+            .await;
+
+        // Second request fails
+        Mock::given(method("GET"))
+            .and(header("Range", "bytes=0-4095"))
+            .respond_with(ResponseTemplate::new(500))
+            .mount(&mock_server)
+            .await;
+
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
+            .unwrap();
+
+        let result = test_url_double_tap(&client, &mock_server.uri()).await;
+
+        assert!(result.success); // First request succeeded
+        assert!(!result.consistent); // STRICT: VALID + FAIL = inconsistent
+        assert_eq!(result.content_length, Some(16000000000));
+    }
+
+    /// SMALL + SMALL = inconsistent (both returned error pages)
+    #[tokio::test]
+    async fn test_double_tap_both_small_responses() {
+        use wiremock::matchers::header;
+
+        let mock_server = MockServer::start().await;
+
+        // Both requests return small "error page" responses
+        Mock::given(method("GET"))
+            .and(header("Range", "bytes=0-4095"))
+            .respond_with(
+                ResponseTemplate::new(206).insert_header("Content-Range", "bytes 0-500/500"),
+            )
+            .expect(2)
+            .mount(&mock_server)
+            .await;
+
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
+            .unwrap();
+
+        let result = test_url_double_tap(&client, &mock_server.uri()).await;
+
+        assert!(result.success); // Got HTTP 200
+        assert!(!result.consistent); // STRICT: SMALL + SMALL = inconsistent (both garbage)
+    }
+
+    /// FAIL + FAIL = inconsistent (cannot verify, assume bad)
+    #[tokio::test]
+    async fn test_double_tap_both_fail() {
+        use wiremock::matchers::header;
+
+        let mock_server = MockServer::start().await;
+
+        // Both requests fail
+        Mock::given(method("GET"))
+            .and(header("Range", "bytes=0-4095"))
+            .respond_with(ResponseTemplate::new(500))
+            .expect(2)
+            .mount(&mock_server)
+            .await;
+
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
+            .unwrap();
+
+        let result = test_url_double_tap(&client, &mock_server.uri()).await;
+
+        assert!(!result.success); // Both failed
+        assert!(!result.consistent); // STRICT: FAIL + FAIL = inconsistent
+    }
+
+    #[tokio::test]
+    async fn test_batch_url_testing() {
+        use wiremock::matchers::header;
+
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(header("Range", "bytes=0-4095"))
+            .respond_with(
+                ResponseTemplate::new(206)
+                    .insert_header("Content-Range", "bytes 0-4095/16000000000"),
+            )
+            .mount(&mock_server)
+            .await;
+
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
+            .unwrap();
+
+        let urls = vec![
+            format!("{}/piece/a", mock_server.uri()),
+            format!("{}/piece/b", mock_server.uri()),
+            format!("{}/piece/c", mock_server.uri()),
+        ];
+
+        let results = test_urls_double_tap(&client, urls).await;
+
+        assert_eq!(results.len(), 3);
+        assert!(results.iter().all(|r| r.success));
+        assert!(results.iter().all(|r| r.consistent));
     }
 }

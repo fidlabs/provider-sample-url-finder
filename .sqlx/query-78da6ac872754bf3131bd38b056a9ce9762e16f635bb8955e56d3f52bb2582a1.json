@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "UPDATE\n                    storage_providers\n               SET\n                    next_bms_test_at = NOW(),\n                    updated_at = NOW()\n               WHERE\n                    provider_id = $1\n               RETURNING\n                    id,\n                    provider_id AS \"provider_id: ProviderId\",\n                    next_url_discovery_at,\n                    url_discovery_status,\n                    url_discovery_pending_since,\n                    last_working_url,\n                    next_bms_test_at,\n                    bms_test_status,\n                    bms_routing_key,\n                    last_bms_region_discovery_at,\n                    is_consistent,\n                    url_metadata,\n                    created_at,\n                    updated_at\n            ",
+  "query": "SELECT\n                    id,\n                    provider_id AS \"provider_id: ProviderId\",\n                    next_url_discovery_at,\n                    url_discovery_status,\n                    url_discovery_pending_since,\n                    last_working_url,\n                    next_bms_test_at,\n                    bms_test_status,\n                    bms_routing_key,\n                    last_bms_region_discovery_at,\n                    is_consistent,\n                    is_reliable,\n                    url_metadata,\n                    created_at,\n                    updated_at\n               FROM\n                    storage_providers\n               WHERE\n                    (\n                        next_url_discovery_at <= NOW()\n                        AND url_discovery_status IS DISTINCT FROM 'pending'\n                    )\n                    OR\n                    (\n                        url_discovery_status = 'pending'\n                        AND url_discovery_pending_since < NOW() - INTERVAL '60 minutes'\n                    )\n               ORDER BY\n                    next_url_discovery_at ASC\n               LIMIT $1\n            ",
   "describe": {
     "columns": [
       {
@@ -60,23 +60,28 @@
       },
       {
         "ordinal": 11,
+        "name": "is_reliable",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 12,
         "name": "url_metadata",
         "type_info": "Jsonb"
       },
       {
-        "ordinal": 12,
+        "ordinal": 13,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 13,
+        "ordinal": 14,
         "name": "updated_at",
         "type_info": "Timestamptz"
       }
     ],
     "parameters": {
       "Left": [
-        "Text"
+        "Int8"
       ]
     },
     "nullable": [
@@ -91,10 +96,11 @@
       true,
       true,
       false,
+      false,
       true,
       false,
       false
     ]
   },
-  "hash": "895fd383e6af4e69faa4318722af8ffe4cc26cdffd9a47f4a4e681ea715da176"
+  "hash": "78da6ac872754bf3131bd38b056a9ce9762e16f635bb8955e56d3f52bb2582a1"
 }

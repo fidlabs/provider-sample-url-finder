@@ -5,6 +5,15 @@ use tracing::warn;
 
 use crate::types::DbConnectParams;
 
+// Double-tap consistency testing settings
+pub const DOUBLE_TAP_DELAY_MS: u64 = 500;
+pub const RANGE_REQUEST_BYTES: u64 = 4096;
+pub const MAX_CONCURRENT_URL_TESTS: usize = 20;
+
+// Thresholds
+pub const RELIABILITY_TIMEOUT_THRESHOLD: f64 = 0.30;
+pub const MIN_VALID_CONTENT_LENGTH: u64 = 8 * 1024 * 1024 * 1024; // 8GB
+
 fn parse_positive_i64_or_default(env_var: &str, default: i64) -> i64 {
     assert!(default > 0, "default must be positive");
     match env::var(env_var) {

@@ -20,6 +20,7 @@ pub struct StorageProvider {
     pub bms_routing_key: Option<String>,
     pub last_bms_region_discovery_at: Option<DateTime<Utc>>,
     pub is_consistent: bool,
+    pub is_reliable: bool,
     pub url_metadata: Option<serde_json::Value>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -78,6 +79,7 @@ impl StorageProviderRepository {
                     bms_routing_key,
                     last_bms_region_discovery_at,
                     is_consistent,
+                    is_reliable,
                     url_metadata,
                     created_at,
                     updated_at
@@ -107,6 +109,7 @@ impl StorageProviderRepository {
                     bms_routing_key,
                     last_bms_region_discovery_at,
                     is_consistent,
+                    is_reliable,
                     url_metadata,
                     created_at,
                     updated_at
@@ -154,6 +157,7 @@ impl StorageProviderRepository {
         provider_id: &ProviderId,
         last_working_url: Option<String>,
         is_consistent: bool,
+        is_reliable: bool,
         url_metadata: Option<serde_json::Value>,
     ) -> Result<()> {
         sqlx::query!(
@@ -165,7 +169,8 @@ impl StorageProviderRepository {
                     url_discovery_pending_since = NULL,
                     last_working_url = $2,
                     is_consistent = $3,
-                    url_metadata = $4,
+                    is_reliable = $4,
+                    url_metadata = $5,
                     updated_at = NOW()
                WHERE
                     provider_id = $1
@@ -173,6 +178,7 @@ impl StorageProviderRepository {
             provider_id as &ProviderId,
             last_working_url,
             is_consistent,
+            is_reliable,
             url_metadata
         )
         .execute(&self.pool)
@@ -195,6 +201,7 @@ impl StorageProviderRepository {
                     bms_routing_key,
                     last_bms_region_discovery_at,
                     is_consistent,
+                    is_reliable,
                     url_metadata,
                     created_at,
                     updated_at
@@ -261,6 +268,7 @@ impl StorageProviderRepository {
                     bms_routing_key,
                     last_bms_region_discovery_at,
                     is_consistent,
+                    is_reliable,
                     url_metadata,
                     created_at,
                     updated_at
@@ -296,6 +304,7 @@ impl StorageProviderRepository {
                     bms_routing_key,
                     last_bms_region_discovery_at,
                     is_consistent,
+                    is_reliable,
                     url_metadata,
                     created_at,
                     updated_at
@@ -332,6 +341,7 @@ impl StorageProviderRepository {
                     bms_routing_key,
                     last_bms_region_discovery_at,
                     is_consistent,
+                    is_reliable,
                     url_metadata,
                     created_at,
                     updated_at

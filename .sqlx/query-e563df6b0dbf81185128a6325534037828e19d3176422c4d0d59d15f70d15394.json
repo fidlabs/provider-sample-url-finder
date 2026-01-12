@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT\n                    id,\n                    provider_id AS \"provider_id: ProviderId\",\n                    next_url_discovery_at,\n                    url_discovery_status,\n                    url_discovery_pending_since,\n                    last_working_url,\n                    next_bms_test_at,\n                    bms_test_status,\n                    bms_routing_key,\n                    last_bms_region_discovery_at,\n                    is_consistent,\n                    url_metadata,\n                    created_at,\n                    updated_at\n               FROM\n                    storage_providers\n               WHERE\n                    (\n                        next_url_discovery_at <= NOW()\n                        AND url_discovery_status IS DISTINCT FROM 'pending'\n                    )\n                    OR\n                    (\n                        url_discovery_status = 'pending'\n                        AND url_discovery_pending_since < NOW() - INTERVAL '60 minutes'\n                    )\n               ORDER BY\n                    next_url_discovery_at ASC\n               LIMIT $1\n            ",
+  "query": "SELECT\n                    id,\n                    provider_id AS \"provider_id: ProviderId\",\n                    next_url_discovery_at,\n                    url_discovery_status,\n                    url_discovery_pending_since,\n                    last_working_url,\n                    next_bms_test_at,\n                    bms_test_status,\n                    bms_routing_key,\n                    last_bms_region_discovery_at,\n                    is_consistent,\n                    is_reliable,\n                    url_metadata,\n                    created_at,\n                    updated_at\n               FROM\n                    storage_providers\n               WHERE\n                    provider_id = $1\n            ",
   "describe": {
     "columns": [
       {
@@ -60,23 +60,28 @@
       },
       {
         "ordinal": 11,
+        "name": "is_reliable",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 12,
         "name": "url_metadata",
         "type_info": "Jsonb"
       },
       {
-        "ordinal": 12,
+        "ordinal": 13,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 13,
+        "ordinal": 14,
         "name": "updated_at",
         "type_info": "Timestamptz"
       }
     ],
     "parameters": {
       "Left": [
-        "Int8"
+        "Text"
       ]
     },
     "nullable": [
@@ -91,10 +96,11 @@
       true,
       true,
       false,
+      false,
       true,
       false,
       false
     ]
   },
-  "hash": "ba2ffdeaf1828f3c0e8a36751f9a210b2c57e2580229ff9c02e556a5b54d5254"
+  "hash": "e563df6b0dbf81185128a6325534037828e19d3176422c4d0d59d15f70d15394"
 }
