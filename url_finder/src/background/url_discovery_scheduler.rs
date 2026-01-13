@@ -93,6 +93,8 @@ async fn schedule_url_discoveries(
             test_provider_with_clients(config, &provider.provider_id, clients, deal_repo).await;
 
         // Extract provider-only result for storage_providers update
+        // None case: provider-only discovery missing (panic, filtering, etc.) - default is_consistent
+        // to false since consistency was not verified
         let provider_discovery = results.iter().find(|r| r.client_id.is_none());
 
         let (last_working_url, is_consistent, is_reliable, url_metadata) = match provider_discovery
@@ -103,7 +105,7 @@ async fn schedule_url_discoveries(
                 r.is_reliable,
                 r.url_metadata.clone(),
             ),
-            None => (None, true, false, None),
+            None => (None, false, false, None),
         };
 
         let url_results: Vec<UrlResult> = results.into_iter().map(|r| r.into()).collect();

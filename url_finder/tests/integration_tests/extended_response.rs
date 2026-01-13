@@ -191,18 +191,19 @@ async fn test_get_provider_extended_response_has_scheduling() {
     );
 
     // scheduling should be present when SP record exists
-    let scheduling = body.get("scheduling");
-    if let Some(sched) = scheduling {
-        // Verify scheduling structure
-        assert!(
-            sched.get("url_discovery").is_some(),
-            "scheduling.url_discovery should exist"
-        );
-        assert!(
-            sched.get("bms_test").is_some(),
-            "scheduling.bms_test should exist"
-        );
-    }
+    let scheduling = body
+        .get("scheduling")
+        .expect("scheduling should be present in extended response");
+
+    // Verify scheduling structure
+    assert!(
+        scheduling.get("url_discovery").is_some(),
+        "scheduling.url_discovery should exist"
+    );
+    assert!(
+        scheduling.get("bms_test").is_some(),
+        "scheduling.bms_test should exist"
+    );
 }
 
 #[tokio::test]

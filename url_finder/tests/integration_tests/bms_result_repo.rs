@@ -307,7 +307,7 @@ async fn test_get_history_for_provider() {
 
     let provider = provider_id(TEST_PROVIDER_1_DB);
 
-    // Insert 3 results
+    // Insert 3 results with small delays to ensure unique timestamps
     for i in 0..3 {
         let job_id = Uuid::new_v4();
         repo.insert_pending(&provider, job_id, TEST_WORKING_URL, "us_east", 3)
@@ -316,6 +316,11 @@ async fn test_get_history_for_provider() {
         repo.update_completed(job_id, "Completed", Some(10.0 + i as f64), None, None, None)
             .await
             .unwrap();
+        // Sleep between iterations to ensure unique created_at timestamps
+        // so the ordering assertion is meaningfully validated
+        if i < 2 {
+            tokio::time::sleep(tokio::time::Duration::from_millis(2)).await;
+        }
     }
 
     // Get history with limit 2
@@ -323,9 +328,10 @@ async fn test_get_history_for_provider() {
 
     assert_eq!(history.len(), 2);
     // Verify ordered by created_at DESC (most recent first)
+    // Use strict inequality to confirm timestamps are actually different
     assert!(
-        history[0].created_at >= history[1].created_at,
-        "History should be ordered by created_at DESC: first={:?}, second={:?}",
+        history[0].created_at > history[1].created_at,
+        "History should be ordered by created_at DESC with distinct timestamps: first={:?}, second={:?}",
         history[0].created_at,
         history[1].created_at
     );
