@@ -7,7 +7,7 @@ use std::time::Duration;
 use futures::{StreamExt, stream};
 use reqwest::Client;
 use tokio::sync::Semaphore;
-use tracing::{debug, info};
+use tracing::debug;
 
 use crate::config::{
     Config, DOUBLE_TAP_DELAY_MS, MAX_CONCURRENT_URL_TESTS, MIN_VALID_CONTENT_LENGTH,
@@ -355,12 +355,12 @@ pub async fn filter_working_with_head(urls: Vec<String>) -> Option<String> {
 
     while let Some(result) = stream.next().await {
         if let Some(url) = result {
-            tracing::info!("number of requests: {:?}", counter.load(Ordering::SeqCst));
+            tracing::debug!("number of requests: {:?}", counter.load(Ordering::SeqCst));
             return Some(url);
         }
     }
 
-    tracing::info!("number of requests: {:?}", counter.load(Ordering::SeqCst));
+    tracing::debug!("number of requests: {:?}", counter.load(Ordering::SeqCst));
 
     None
 }
@@ -419,7 +419,7 @@ pub async fn get_retrivability_with_head(
         0.0
     };
 
-    info!(
+    debug!(
         "Successfully retrieved URLs: {} out of {} ({:.2}%)",
         success, total, retri_percentage
     );
@@ -427,6 +427,7 @@ pub async fn get_retrivability_with_head(
     (sample_url, round_to_two_decimals(retri_percentage))
 }
 
+#[allow(dead_code)]
 pub async fn check_retrievability_with_get(
     config: &Config,
     urls: Vec<String>,
@@ -509,7 +510,7 @@ pub async fn check_retrievability_with_get(
         0.0
     };
 
-    info!(
+    debug!(
         "Successfully retrieved URLs: {} out of {} ({:.2}%)",
         success, total, retri_percentage
     );

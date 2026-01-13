@@ -175,7 +175,7 @@ async fn create_bms_jobs(
                     continue;
                 }
 
-                info!(
+                debug!(
                     "Created BMS job {} for provider {} (routing_key: {})",
                     job.id, provider.provider_id, job.routing_key
                 );
@@ -318,7 +318,7 @@ async fn process_completed_job(
     job_response: &BmsJobResponse,
     result_repo: &BmsBandwidthResultRepository,
 ) -> Result<()> {
-    info!(
+    debug!(
         "BMS job {} completed for provider {} with status: {}",
         job_response.id, result.provider_id, job_response.status
     );

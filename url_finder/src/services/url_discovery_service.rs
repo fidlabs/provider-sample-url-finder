@@ -11,7 +11,7 @@ use crate::{
     },
     url_tester::test_urls_double_tap,
 };
-use tracing::{debug, error, info};
+use tracing::{debug, error, trace};
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -75,10 +75,9 @@ pub async fn discover_url(
     let provider_id: ProviderId = provider_address.clone().into();
     let client_id: Option<ClientId> = client_address.clone().map(|c| c.into());
 
-    tracing::info!(
-        "discover_url called for provider={}, client={:?}",
-        provider_address,
-        client_address
+    trace!(
+        "discover_url: provider={}, client={:?}",
+        provider_address, client_address
     );
 
     let mut result = match &client_id {
@@ -149,7 +148,7 @@ pub async fn discover_url(
 
     // Analyze results for provider-level metrics
     let analysis = analyze_results(&test_results);
-    info!(
+    debug!(
         "Provider {} analysis: retrievability={:.1}%, consistent={}, reliable={}, samples={}",
         provider_address,
         analysis.retrievability_percent,

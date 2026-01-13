@@ -65,7 +65,7 @@ pub async fn valid_curio_provider(
                 break;
             }
             Err(e) => {
-                info!("Attempt {attempt}/3 failed: {e} for address: {address}");
+                debug!("Attempt {attempt}/3 failed: {e} for address: {address}");
                 sleep(Duration::from_secs(1)).await;
             }
         }
