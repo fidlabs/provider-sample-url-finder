@@ -14,6 +14,9 @@ pub enum ErrorCode {
     InvalidAddress,
     InvalidRequest,
     NotFound,
+    InvalidDateRange,
+    DateRangeExceeded,
+    InvalidDateFormat,
 }
 
 impl ErrorCode {
@@ -23,6 +26,9 @@ impl ErrorCode {
             Self::InvalidAddress => "INVALID_ADDRESS",
             Self::InvalidRequest => "INVALID_REQUEST",
             Self::NotFound => "NOT_FOUND",
+            Self::InvalidDateRange => "INVALID_DATE_RANGE",
+            Self::DateRangeExceeded => "DATE_RANGE_EXCEEDED",
+            Self::InvalidDateFormat => "INVALID_DATE_FORMAT",
         }
     }
 }

@@ -34,12 +34,17 @@ pub async fn create_test_app(dbs: &TestDatabases, mocks: &MockExternalServices) 
 
     let url_repo = Arc::new(UrlResultRepository::new(dbs.app_pool.clone()));
     let bms_repo = Arc::new(BmsBandwidthResultRepository::new(dbs.app_pool.clone()));
-    let provider_service = Arc::new(ProviderService::new(url_repo.clone(), bms_repo.clone()));
+    let storage_provider_repo = Arc::new(StorageProviderRepository::new(dbs.app_pool.clone()));
+    let provider_service = Arc::new(ProviderService::new(
+        url_repo.clone(),
+        bms_repo.clone(),
+        storage_provider_repo.clone(),
+    ));
 
     let app_state = Arc::new(AppState {
         deal_repo: Arc::new(DealRepository::new(dbs.app_pool.clone())),
         active_requests,
-        storage_provider_repo: Arc::new(StorageProviderRepository::new(dbs.app_pool.clone())),
+        storage_provider_repo,
         url_repo,
         bms_repo,
         provider_service,

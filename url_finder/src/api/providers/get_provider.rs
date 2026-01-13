@@ -2,12 +2,14 @@ use std::sync::Arc;
 
 use axum::{
     debug_handler,
-    extract::{Path, State},
+    extract::{Path, Query, State},
 };
 use axum_extra::extract::WithRejection;
 use serde::Deserialize;
 use tracing::{debug, error};
 use utoipa::{IntoParams, ToSchema};
+
+use super::ExtendedQuery;
 
 use crate::{
     AppState,
@@ -28,7 +30,7 @@ pub struct GetProviderPath {
 #[utoipa::path(
     get,
     path = "/providers/{id}",
-    params(GetProviderPath),
+    params(GetProviderPath, ExtendedQuery),
     responses(
         (status = 200, description = "Provider found", body = ProviderResponse),
         (status = 400, description = "Invalid provider address", body = ErrorResponse),
@@ -41,8 +43,9 @@ pub struct GetProviderPath {
 pub async fn handle_get_provider(
     State(state): State<Arc<AppState>>,
     WithRejection(Path(path), _): WithRejection<Path<GetProviderPath>, ApiResponse<ErrorResponse>>,
+    Query(query): Query<ExtendedQuery>,
 ) -> Result<ApiResponse<ProviderResponse>, ApiResponse<()>> {
-    debug!("GET /providers/{}", &path.id);
+    debug!("GET /providers/{}?extended={}", &path.id, query.extended);
 
     let provider_address = ProviderAddress::new(&path.id).map_err(|e| {
         error!("Invalid provider address '{}': {}", &path.id, e);
@@ -66,5 +69,20 @@ pub async fn handle_get_provider(
             )
         })?;
 
-    Ok(ok_response(data.into()))
+    let scheduling = if query.extended {
+        state
+            .provider_service
+            .get_scheduling_data(&provider_id)
+            .await
+            .ok()
+            .flatten()
+    } else {
+        None
+    };
+
+    Ok(ok_response(ProviderResponse::from_data_with_scheduling(
+        data,
+        scheduling,
+        query.extended,
+    )))
 }

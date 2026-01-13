@@ -1,5 +1,5 @@
 use crate::config::RELIABILITY_TIMEOUT_THRESHOLD;
-use crate::types::{ProviderAnalysis, UrlTestError, UrlTestResult};
+use crate::types::{InconsistencyType, ProviderAnalysis, UrlTestError, UrlTestResult};
 
 pub fn analyze_results(results: &[UrlTestResult]) -> ProviderAnalysis {
     if results.is_empty() {
@@ -8,11 +8,28 @@ pub fn analyze_results(results: &[UrlTestResult]) -> ProviderAnalysis {
 
     let total = results.len();
     let success_count = results.iter().filter(|r| r.success).count();
-    let inconsistent_count = results.iter().filter(|r| !r.consistent).count();
     let timeout_count = results
         .iter()
         .filter(|r| matches!(r.error, Some(UrlTestError::Timeout)))
         .count();
+
+    // Count inconsistent results by type
+    let mut inconsistent_count = 0;
+    let mut gaming = 0;
+    let mut both_failed = 0;
+    let mut error_pages = 0;
+    let mut size_mismatch = 0;
+
+    for r in results.iter().filter(|r| !r.consistent) {
+        inconsistent_count += 1;
+        match r.inconsistency_type {
+            Some(InconsistencyType::Gaming) => gaming += 1,
+            Some(InconsistencyType::BothFailed) => both_failed += 1,
+            Some(InconsistencyType::ErrorPages) => error_pages += 1,
+            Some(InconsistencyType::SizeMismatch) => size_mismatch += 1,
+            None => {} // Shouldn't happen if !consistent, but handle gracefully
+        }
+    }
 
     // Total requests = 2 per URL (double-tap)
     let total_requests = total * 2;
@@ -20,26 +37,49 @@ pub fn analyze_results(results: &[UrlTestResult]) -> ProviderAnalysis {
 
     ProviderAnalysis {
         retrievability_percent: (success_count as f64 / total as f64) * 100.0,
-        is_consistent: inconsistent_count == 0, // Consider false positive and very small treshold for flaky connections
+        is_consistent: inconsistent_count == 0,
         is_reliable: timeout_rate < RELIABILITY_TIMEOUT_THRESHOLD,
         sample_count: total,
         success_count,
         timeout_count,
+        inconsistent_count,
+        inconsistent_gaming: gaming,
+        inconsistent_both_failed: both_failed,
+        inconsistent_error_pages: error_pages,
+        inconsistent_size_mismatch: size_mismatch,
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::InconsistencyType;
 
     fn make_result(success: bool, consistent: bool, error: Option<UrlTestError>) -> UrlTestResult {
         UrlTestResult {
             url: "http://test".to_string(),
             success,
             consistent,
+            inconsistency_type: if consistent {
+                None
+            } else {
+                Some(InconsistencyType::Gaming)
+            },
             content_length: Some(16_000_000_000),
             response_time_ms: 100,
             error,
+        }
+    }
+
+    fn make_inconsistent(inconsistency_type: InconsistencyType) -> UrlTestResult {
+        UrlTestResult {
+            url: "http://test".to_string(),
+            success: true,
+            consistent: false,
+            inconsistency_type: Some(inconsistency_type),
+            content_length: Some(16_000_000_000),
+            response_time_ms: 100,
+            error: None,
         }
     }
 
@@ -97,5 +137,41 @@ mod tests {
         // since no verification was performed
         assert!(!analysis.is_consistent);
         assert!(!analysis.is_reliable);
+    }
+
+    #[test]
+    fn test_analyze_inconsistent_breakdown() {
+        let results = vec![
+            make_result(true, true, None), // consistent
+            make_inconsistent(InconsistencyType::Gaming),
+            make_inconsistent(InconsistencyType::Gaming),
+            make_inconsistent(InconsistencyType::BothFailed),
+            make_inconsistent(InconsistencyType::ErrorPages),
+            make_inconsistent(InconsistencyType::SizeMismatch),
+        ];
+
+        let analysis = analyze_results(&results);
+
+        assert_eq!(analysis.sample_count, 6);
+        assert_eq!(analysis.inconsistent_count, 5);
+        assert_eq!(analysis.inconsistent_gaming, 2);
+        assert_eq!(analysis.inconsistent_both_failed, 1);
+        assert_eq!(analysis.inconsistent_error_pages, 1);
+        assert_eq!(analysis.inconsistent_size_mismatch, 1);
+        assert!(!analysis.is_consistent);
+    }
+
+    #[test]
+    fn test_analyze_all_consistent_has_zero_breakdown() {
+        let results = vec![make_result(true, true, None), make_result(true, true, None)];
+
+        let analysis = analyze_results(&results);
+
+        assert_eq!(analysis.inconsistent_count, 0);
+        assert_eq!(analysis.inconsistent_gaming, 0);
+        assert_eq!(analysis.inconsistent_both_failed, 0);
+        assert_eq!(analysis.inconsistent_error_pages, 0);
+        assert_eq!(analysis.inconsistent_size_mismatch, 0);
+        assert!(analysis.is_consistent);
     }
 }

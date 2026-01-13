@@ -2,12 +2,14 @@ use std::sync::Arc;
 
 use axum::{
     debug_handler,
-    extract::{Path, State},
+    extract::{Path, Query, State},
 };
 use axum_extra::extract::WithRejection;
 use serde::Deserialize;
 use tracing::{debug, error};
 use utoipa::{IntoParams, ToSchema};
+
+use super::ExtendedQuery;
 
 use crate::{
     AppState,
@@ -28,7 +30,7 @@ pub struct GetClientProvidersPath {
 #[utoipa::path(
     get,
     path = "/clients/{id}/providers",
-    params(GetClientProvidersPath),
+    params(GetClientProvidersPath, ExtendedQuery),
     responses(
         (status = 200, description = "Client providers found", body = ClientProvidersResponse),
         (status = 400, description = "Invalid client address", body = ErrorResponse),
@@ -44,8 +46,12 @@ pub async fn handle_get_client_providers(
         Path<GetClientProvidersPath>,
         ApiResponse<ErrorResponse>,
     >,
+    Query(query): Query<ExtendedQuery>,
 ) -> Result<ApiResponse<ClientProvidersResponse>, ApiResponse<()>> {
-    debug!("GET /clients/{}/providers", &path.id);
+    debug!(
+        "GET /clients/{}/providers?extended={}",
+        &path.id, query.extended
+    );
 
     let client_address = ClientAddress::new(&path.id).map_err(|e| {
         bad_request_with_code(
@@ -75,7 +81,10 @@ pub async fn handle_get_client_providers(
         ));
     }
 
-    let providers: Vec<ProviderResponse> = providers_data.into_iter().map(|p| p.into()).collect();
+    let providers: Vec<ProviderResponse> = providers_data
+        .into_iter()
+        .map(|p| ProviderResponse::from_data(p, query.extended))
+        .collect();
     let total = providers.len() as i64;
 
     Ok(ok_response(ClientProvidersResponse {

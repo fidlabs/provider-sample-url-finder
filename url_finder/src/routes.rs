@@ -90,6 +90,14 @@ pub fn create_routes() -> Router<Arc<AppState>> {
             get(providers::handle_get_provider_client),
         )
         .route(
+            "/providers/{id}/history/retrievability",
+            get(providers::handle_history_retrievability),
+        )
+        .route(
+            "/providers/{id}/clients/{client_id}/history/retrievability",
+            get(providers::handle_history_retrievability_client),
+        )
+        .route(
             "/clients/{id}/providers",
             get(providers::handle_get_client_providers),
         )

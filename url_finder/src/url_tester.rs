@@ -14,7 +14,7 @@ use crate::config::{
     RANGE_REQUEST_BYTES,
 };
 use crate::http_client::build_client;
-use crate::types::{UrlTestError, UrlTestResult};
+use crate::types::{InconsistencyType, UrlTestError, UrlTestResult};
 
 const FILTER_CONCURRENCY_LIMIT: usize = 5;
 const RETRI_CONCURRENCY_LIMIT: usize = 20;
@@ -123,6 +123,32 @@ fn is_consistent_pair(tap1: &TapResult, tap2: &TapResult) -> bool {
     }
 }
 
+/// Classifies WHY a pair of tap results is inconsistent.
+/// Only call this when `is_consistent_pair` returns false.
+fn classify_inconsistency(tap1: &TapResult, tap2: &TapResult) -> InconsistencyType {
+    match (tap1, tap2) {
+        // Gaming: one valid, one failed (strategic timeout)
+        (TapResult::Valid { .. }, TapResult::Failed { .. })
+        | (TapResult::Failed { .. }, TapResult::Valid { .. }) => InconsistencyType::Gaming,
+
+        // Both failed: cannot verify
+        (TapResult::Failed { .. }, TapResult::Failed { .. }) => InconsistencyType::BothFailed,
+
+        // Size mismatch: both valid but different Content-Length
+        (
+            TapResult::Valid {
+                content_length: a, ..
+            },
+            TapResult::Valid {
+                content_length: b, ..
+            },
+        ) if a != b => InconsistencyType::SizeMismatch,
+
+        // Everything else involves SMALL responses = error pages
+        _ => InconsistencyType::ErrorPages,
+    }
+}
+
 /// Makes a range request (bytes=0-4095) and extracts total file size from Content-Range header.
 /// Used for double-tap consistency testing to verify Content-Length without downloading full file.
 #[allow(dead_code)]
@@ -212,21 +238,59 @@ pub async fn test_url_double_tap(client: &Client, url: &str) -> UrlTestResult {
     // STRICT: Only VALID+VALID with same size is consistent
     let consistent = is_consistent_pair(&tap1, &tap2);
 
-    // Prefer tap2 (most recent), fall back to tap1
-    let best_content_length = tap2.content_length().or(tap1.content_length());
-    let best_response_time = if tap2.content_length().is_some() {
-        tap2.response_time_ms()
-    } else {
-        tap1.response_time_ms()
+    // Use largest VALID content_length from either tap.
+    // This ensures we capture real file sizes even from unreliable providers
+    // that return valid data on only one tap (gaming/flaky patterns).
+    // Falls back to any available content_length for non-valid responses.
+    let best_content_length = match (&tap1, &tap2) {
+        // Both valid: use larger
+        (
+            TapResult::Valid {
+                content_length: a, ..
+            },
+            TapResult::Valid {
+                content_length: b, ..
+            },
+        ) => Some(std::cmp::max(*a, *b)),
+        // One valid: use the valid one (don't let SMALL overwrite VALID)
+        (TapResult::Valid { content_length, .. }, _) => Some(*content_length),
+        (_, TapResult::Valid { content_length, .. }) => Some(*content_length),
+        // Neither valid: fall back to tap2 preference (original behavior for error tracking)
+        _ => tap2.content_length().or(tap1.content_length()),
+    };
+
+    // Response time: prefer valid tap, then tap2, then tap1
+    let best_response_time = match (&tap1, &tap2) {
+        (
+            _,
+            TapResult::Valid {
+                response_time_ms, ..
+            },
+        ) => *response_time_ms,
+        (
+            TapResult::Valid {
+                response_time_ms, ..
+            },
+            _,
+        ) => *response_time_ms,
+        _ if tap2.content_length().is_some() => tap2.response_time_ms(),
+        _ => tap1.response_time_ms(),
     };
 
     // Collect any error (prefer most recent)
     let error = tap2.error().or(tap1.error());
 
+    let inconsistency_type = if consistent {
+        None
+    } else {
+        Some(classify_inconsistency(&tap1, &tap2))
+    };
+
     UrlTestResult {
         url: url.to_string(),
         success,
         consistent,
+        inconsistency_type,
         content_length: best_content_length,
         response_time_ms: best_response_time,
         error,
@@ -873,5 +937,168 @@ mod tests {
         assert_eq!(results.len(), 3);
         assert!(results.iter().all(|r| r.success));
         assert!(results.iter().all(|r| r.consistent));
+    }
+
+    #[tokio::test]
+    async fn test_classify_gaming_valid_then_fail() {
+        use wiremock::matchers::header;
+
+        let mock_server = MockServer::start().await;
+
+        // First request succeeds with valid size
+        Mock::given(method("GET"))
+            .and(header("Range", "bytes=0-4095"))
+            .respond_with(
+                ResponseTemplate::new(206)
+                    .insert_header("Content-Range", "bytes 0-4095/16000000000"),
+            )
+            .up_to_n_times(1)
+            .mount(&mock_server)
+            .await;
+
+        // Second request fails
+        Mock::given(method("GET"))
+            .and(header("Range", "bytes=0-4095"))
+            .respond_with(ResponseTemplate::new(500))
+            .mount(&mock_server)
+            .await;
+
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
+            .unwrap();
+
+        let result = test_url_double_tap(&client, &mock_server.uri()).await;
+
+        assert!(!result.consistent);
+        assert_eq!(
+            result.inconsistency_type,
+            Some(crate::types::InconsistencyType::Gaming)
+        );
+    }
+
+    #[tokio::test]
+    async fn test_classify_both_failed() {
+        use wiremock::matchers::header;
+
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(header("Range", "bytes=0-4095"))
+            .respond_with(ResponseTemplate::new(500))
+            .expect(2)
+            .mount(&mock_server)
+            .await;
+
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
+            .unwrap();
+
+        let result = test_url_double_tap(&client, &mock_server.uri()).await;
+
+        assert!(!result.consistent);
+        assert_eq!(
+            result.inconsistency_type,
+            Some(crate::types::InconsistencyType::BothFailed)
+        );
+    }
+
+    #[tokio::test]
+    async fn test_classify_error_pages() {
+        use wiremock::matchers::header;
+
+        let mock_server = MockServer::start().await;
+
+        // Both return small responses (error pages)
+        Mock::given(method("GET"))
+            .and(header("Range", "bytes=0-4095"))
+            .respond_with(
+                ResponseTemplate::new(206).insert_header("Content-Range", "bytes 0-500/500"),
+            )
+            .expect(2)
+            .mount(&mock_server)
+            .await;
+
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
+            .unwrap();
+
+        let result = test_url_double_tap(&client, &mock_server.uri()).await;
+
+        assert!(!result.consistent);
+        assert_eq!(
+            result.inconsistency_type,
+            Some(crate::types::InconsistencyType::ErrorPages)
+        );
+    }
+
+    #[tokio::test]
+    async fn test_classify_size_mismatch() {
+        use wiremock::matchers::header;
+
+        let mock_server = MockServer::start().await;
+
+        // First returns one size
+        Mock::given(method("GET"))
+            .and(header("Range", "bytes=0-4095"))
+            .respond_with(
+                ResponseTemplate::new(206)
+                    .insert_header("Content-Range", "bytes 0-4095/16000000000"),
+            )
+            .up_to_n_times(1)
+            .mount(&mock_server)
+            .await;
+
+        // Second returns different size
+        Mock::given(method("GET"))
+            .and(header("Range", "bytes=0-4095"))
+            .respond_with(
+                ResponseTemplate::new(206)
+                    .insert_header("Content-Range", "bytes 0-4095/20000000000"),
+            )
+            .mount(&mock_server)
+            .await;
+
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
+            .unwrap();
+
+        let result = test_url_double_tap(&client, &mock_server.uri()).await;
+
+        assert!(!result.consistent);
+        assert_eq!(
+            result.inconsistency_type,
+            Some(crate::types::InconsistencyType::SizeMismatch)
+        );
+    }
+
+    #[tokio::test]
+    async fn test_consistent_has_no_inconsistency_type() {
+        use wiremock::matchers::header;
+
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(header("Range", "bytes=0-4095"))
+            .respond_with(
+                ResponseTemplate::new(206)
+                    .insert_header("Content-Range", "bytes 0-4095/16000000000"),
+            )
+            .expect(2)
+            .mount(&mock_server)
+            .await;
+
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
+            .unwrap();
+
+        let result = test_url_double_tap(&client, &mock_server.uri()).await;
+
+        assert!(result.consistent);
+        assert_eq!(result.inconsistency_type, None);
     }
 }

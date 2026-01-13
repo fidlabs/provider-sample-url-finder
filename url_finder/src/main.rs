@@ -83,6 +83,7 @@ async fn main() -> Result<()> {
         url_finder::services::provider_service::ProviderService::new(
             url_repo.clone(),
             bms_result_repo.clone(),
+            sp_repo.clone(),
         ),
     );
 

@@ -18,3 +18,6 @@ pub use bulk_providers::*;
 
 mod reset_provider;
 pub use reset_provider::*;
+
+mod history_retrievability;
+pub use history_retrievability::*;

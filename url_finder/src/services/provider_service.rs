@@ -6,10 +6,10 @@ use color_eyre::Result;
 use sqlx::types::BigDecimal;
 
 use crate::repository::{
-    BmsBandwidthResult, BmsBandwidthResultRepository, ProviderFilters, UrlResult,
-    UrlResultRepository,
+    BmsBandwidthResult, BmsBandwidthResultRepository, ProviderFilters, StorageProviderRepository,
+    UrlResult, UrlResultRepository,
 };
-use crate::types::{ClientId, ProviderId, ResultCode};
+use crate::types::{ClientId, ErrorCode, ProviderId, ResultCode};
 
 // --- Domain Types ---
 
@@ -21,6 +21,10 @@ pub struct ProviderData {
     pub retrievability_percent: f64,
     pub tested_at: DateTime<Utc>,
     pub result_code: ResultCode,
+    pub error_code: Option<ErrorCode>,
+    pub is_consistent: Option<bool>,
+    pub is_reliable: Option<bool>,
+    pub url_metadata: Option<serde_json::Value>,
     pub performance: PerformanceData,
 }
 
@@ -28,6 +32,15 @@ pub struct ProviderData {
 pub struct PerformanceData {
     pub bandwidth: Option<BandwidthResult>,
     pub geolocation: Option<GeolocationResult>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct SchedulingData {
+    pub url_discovery_next_at: Option<DateTime<Utc>>,
+    pub url_discovery_status: Option<String>,
+    pub url_discovery_pending_since: Option<DateTime<Utc>>,
+    pub bms_test_next_at: Option<DateTime<Utc>>,
+    pub bms_test_status: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -38,6 +51,9 @@ pub struct BandwidthResult {
     pub head_avg_ms: Option<f64>,
     pub ttfb_ms: Option<f64>,
     pub download_speed_mbps: Option<f64>,
+    pub worker_count: Option<i32>,
+    pub routing_key: Option<String>,
+    pub url_tested: Option<String>,
 }
 
 impl From<BmsBandwidthResult> for BandwidthResult {
@@ -49,6 +65,9 @@ impl From<BmsBandwidthResult> for BandwidthResult {
             head_avg_ms: b.head_avg_ms.as_ref().and_then(bigdecimal_to_f64),
             ttfb_ms: b.ttfb_ms.as_ref().and_then(bigdecimal_to_f64),
             download_speed_mbps: b.download_speed_mbps.as_ref().and_then(bigdecimal_to_f64),
+            worker_count: Some(b.worker_count),
+            routing_key: Some(b.routing_key),
+            url_tested: Some(b.url_tested),
         }
     }
 }
@@ -80,14 +99,20 @@ pub struct BulkProviderResult {
 pub struct ProviderService {
     url_repo: Arc<UrlResultRepository>,
     bms_repo: Arc<BmsBandwidthResultRepository>,
+    sp_repo: Arc<StorageProviderRepository>,
 }
 
 impl ProviderService {
     pub fn new(
         url_repo: Arc<UrlResultRepository>,
         bms_repo: Arc<BmsBandwidthResultRepository>,
+        sp_repo: Arc<StorageProviderRepository>,
     ) -> Self {
-        Self { url_repo, bms_repo }
+        Self {
+            url_repo,
+            bms_repo,
+            sp_repo,
+        }
     }
 
     pub async fn get_provider(&self, id: &ProviderId) -> Result<Option<ProviderData>> {
@@ -177,6 +202,20 @@ impl ProviderService {
         })
     }
 
+    pub async fn get_scheduling_data(
+        &self,
+        provider_id: &ProviderId,
+    ) -> Result<Option<SchedulingData>> {
+        let sp = self.sp_repo.get_by_provider_id(provider_id).await?;
+        Ok(sp.map(|sp| SchedulingData {
+            url_discovery_next_at: Some(sp.next_url_discovery_at),
+            url_discovery_status: sp.url_discovery_status,
+            url_discovery_pending_since: sp.url_discovery_pending_since,
+            bms_test_next_at: Some(sp.next_bms_test_at),
+            bms_test_status: sp.bms_test_status,
+        }))
+    }
+
     // --- Private helpers ---
 
     fn enrich(
@@ -191,6 +230,10 @@ impl ProviderService {
             retrievability_percent: url_result.retrievability_percent,
             tested_at: url_result.tested_at,
             result_code: url_result.result_code,
+            error_code: url_result.error_code,
+            is_consistent: url_result.is_consistent,
+            is_reliable: url_result.is_reliable,
+            url_metadata: url_result.url_metadata,
             performance: Self::build_performance(bms_result),
         }
     }

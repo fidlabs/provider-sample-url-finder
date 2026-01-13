@@ -14,6 +14,9 @@ pub const MAX_CONCURRENT_URL_TESTS: usize = 20;
 pub const RELIABILITY_TIMEOUT_THRESHOLD: f64 = 0.30;
 pub const MIN_VALID_CONTENT_LENGTH: u64 = 8 * 1024 * 1024 * 1024; // 8GB
 
+// History endpoint settings
+pub const MAX_HISTORY_DAYS: i64 = 30;
+
 fn parse_positive_i64_or_default(env_var: &str, default: i64) -> i64 {
     assert!(default > 0, "default must be positive");
     match env::var(env_var) {

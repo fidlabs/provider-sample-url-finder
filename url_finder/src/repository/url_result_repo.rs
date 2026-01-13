@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use color_eyre::Result;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
@@ -28,6 +28,9 @@ pub struct UrlResult {
     pub result_code: ResultCode,
     pub error_code: Option<ErrorCode>,
     pub tested_at: DateTime<Utc>,
+    pub is_consistent: Option<bool>,
+    pub is_reliable: Option<bool>,
+    pub url_metadata: Option<serde_json::Value>,
 }
 
 impl From<UrlDiscoveryResult> for UrlResult {
@@ -42,8 +45,24 @@ impl From<UrlDiscoveryResult> for UrlResult {
             result_code: result.result_code,
             error_code: result.error_code,
             tested_at: result.tested_at,
+            is_consistent: Some(result.is_consistent),
+            is_reliable: Some(result.is_reliable),
+            url_metadata: result.url_metadata,
         }
     }
+}
+
+#[derive(Debug, sqlx::FromRow)]
+pub struct HistoryRow {
+    pub date: NaiveDate,
+    pub retrievability_percent: f64,
+    pub is_consistent: Option<bool>,
+    pub is_reliable: Option<bool>,
+    pub working_url: Option<String>,
+    pub result_code: ResultCode,
+    pub error_code: Option<ErrorCode>,
+    pub tested_at: DateTime<Utc>,
+    pub url_metadata: Option<serde_json::Value>,
 }
 
 #[derive(Clone)]
@@ -71,7 +90,10 @@ impl UrlResultRepository {
                     retrievability_percent::float8 AS "retrievability_percent!",
                     result_code AS "result_code: ResultCode",
                     error_code AS "error_code: ErrorCode",
-                    tested_at
+                    tested_at,
+                    is_consistent,
+                    is_reliable,
+                    url_metadata
                FROM
                     url_results
                WHERE
@@ -105,7 +127,10 @@ impl UrlResultRepository {
                     retrievability_percent::float8 AS "retrievability_percent!",
                     result_code AS "result_code: ResultCode",
                     error_code AS "error_code: ErrorCode",
-                    tested_at
+                    tested_at,
+                    is_consistent,
+                    is_reliable,
+                    url_metadata
                FROM
                     url_results
                WHERE
@@ -140,7 +165,10 @@ impl UrlResultRepository {
                     retrievability_percent::float8 AS "retrievability_percent!",
                     result_code AS "result_code: ResultCode",
                     error_code AS "error_code: ErrorCode",
-                    tested_at
+                    tested_at,
+                    is_consistent,
+                    is_reliable,
+                    url_metadata
                FROM
                     url_results
                WHERE
@@ -175,7 +203,10 @@ impl UrlResultRepository {
                     ur.retrievability_percent::float8 AS "retrievability_percent!",
                     ur.result_code AS "result_code: ResultCode",
                     ur.error_code AS "error_code: ErrorCode",
-                    ur.tested_at
+                    ur.tested_at,
+                    ur.is_consistent,
+                    ur.is_reliable,
+                    ur.url_metadata
                FROM
                     url_results ur
                JOIN
@@ -242,7 +273,10 @@ impl UrlResultRepository {
                     retrievability_percent::float8 AS "retrievability_percent!",
                     result_code AS "result_code: ResultCode",
                     error_code AS "error_code: ErrorCode",
-                    tested_at
+                    tested_at,
+                    is_consistent,
+                    is_reliable,
+                    url_metadata
                FROM
                     url_results
                WHERE
@@ -275,6 +309,9 @@ impl UrlResultRepository {
         let mut result_codes: Vec<ResultCode> = Vec::with_capacity(len);
         let mut error_codes: Vec<Option<ErrorCode>> = Vec::with_capacity(len);
         let mut tested_ats: Vec<DateTime<Utc>> = Vec::with_capacity(len);
+        let mut is_consistents: Vec<Option<bool>> = Vec::with_capacity(len);
+        let mut is_reliables: Vec<Option<bool>> = Vec::with_capacity(len);
+        let mut url_metadatas: Vec<Option<serde_json::Value>> = Vec::with_capacity(len);
 
         for result in results {
             ids.push(result.id);
@@ -286,13 +323,16 @@ impl UrlResultRepository {
             result_codes.push(result.result_code.clone());
             error_codes.push(result.error_code.clone());
             tested_ats.push(result.tested_at);
+            is_consistents.push(result.is_consistent);
+            is_reliables.push(result.is_reliable);
+            url_metadatas.push(result.url_metadata.clone());
         }
 
         let result = sqlx::query!(
             r#"INSERT INTO
-                    url_results (id, provider_id, client_id, result_type, working_url, retrievability_percent, result_code, error_code, tested_at)
+                    url_results (id, provider_id, client_id, result_type, working_url, retrievability_percent, result_code, error_code, tested_at, is_consistent, is_reliable, url_metadata)
                SELECT
-                    a1, a2, a3, a4, a5, a6, a7, a8, a9
+                    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12
                FROM UNNEST(
                     $1::uuid[],
                     $2::text[],
@@ -302,8 +342,11 @@ impl UrlResultRepository {
                     $6::double precision[],
                     $7::result_code[],
                     $8::error_code[],
-                    $9::timestamptz[]
-               ) AS t(a1, a2, a3, a4, a5, a6, a7, a8, a9)
+                    $9::timestamptz[],
+                    $10::bool[],
+                    $11::bool[],
+                    $12::jsonb[]
+               ) AS t(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12)
             "#,
             &ids as &[Uuid],
             &provider_ids as &[String],
@@ -313,11 +356,95 @@ impl UrlResultRepository {
             &retrievability_percents as &[f64],
             &result_codes as &[ResultCode],
             &error_codes as &[Option<ErrorCode>],
-            &tested_ats as &[DateTime<Utc>]
+            &tested_ats as &[DateTime<Utc>],
+            &is_consistents as &[Option<bool>],
+            &is_reliables as &[Option<bool>],
+            &url_metadatas as &[Option<serde_json::Value>]
         )
         .execute(&self.pool)
         .await?;
 
         Ok(result.rows_affected().try_into()?)
+    }
+
+    pub async fn get_history_for_provider(
+        &self,
+        provider_id: &ProviderId,
+        from: NaiveDate,
+        to: NaiveDate,
+    ) -> Result<Vec<HistoryRow>> {
+        let results = sqlx::query_as!(
+            HistoryRow,
+            r#"SELECT DISTINCT ON (DATE(tested_at))
+                    DATE(tested_at) AS "date!",
+                    retrievability_percent::float8 AS "retrievability_percent!",
+                    is_consistent,
+                    is_reliable,
+                    working_url,
+                    result_code AS "result_code: ResultCode",
+                    error_code AS "error_code: ErrorCode",
+                    tested_at,
+                    url_metadata
+               FROM
+                    url_results
+               WHERE
+                    provider_id = $1
+                    AND result_type = 'Provider'
+                    AND tested_at >= $2::date
+                    AND tested_at < ($3::date + INTERVAL '1 day')
+               ORDER BY
+                    DATE(tested_at),
+                    tested_at DESC
+            "#,
+            provider_id.as_str(),
+            from,
+            to
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(results)
+    }
+
+    pub async fn get_history_for_provider_client(
+        &self,
+        provider_id: &ProviderId,
+        client_id: &ClientId,
+        from: NaiveDate,
+        to: NaiveDate,
+    ) -> Result<Vec<HistoryRow>> {
+        let results = sqlx::query_as!(
+            HistoryRow,
+            r#"SELECT DISTINCT ON (DATE(tested_at))
+                    DATE(tested_at) AS "date!",
+                    retrievability_percent::float8 AS "retrievability_percent!",
+                    is_consistent,
+                    is_reliable,
+                    working_url,
+                    result_code AS "result_code: ResultCode",
+                    error_code AS "error_code: ErrorCode",
+                    tested_at,
+                    url_metadata
+               FROM
+                    url_results
+               WHERE
+                    provider_id = $1
+                    AND client_id = $2
+                    AND result_type = 'ProviderClient'
+                    AND tested_at >= $3::date
+                    AND tested_at < ($4::date + INTERVAL '1 day')
+               ORDER BY
+                    DATE(tested_at),
+                    tested_at DESC
+            "#,
+            provider_id.as_str(),
+            client_id.as_str(),
+            from,
+            to
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(results)
     }
 }

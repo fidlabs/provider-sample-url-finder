@@ -158,10 +158,14 @@ pub async fn discover_url(
         analysis.sample_count
     );
 
-    // Select best working URL: success && consistent && content_length >= 8GB
+    // Select best working URL: success && content_length >= 8GB
+    // Note: We intentionally do NOT require r.consistent here.
+    // Consistency is tracked as a provider-level quality metric (is_consistent),
+    // but an unreliable provider that returns valid data on at least one tap
+    // still has a working URL. The 8GB filter ensures we don't select error pages.
     let working_url = test_results
         .iter()
-        .filter(|r| r.success && r.consistent)
+        .filter(|r| r.success)
         .filter(|r| r.content_length.unwrap_or(0) >= MIN_VALID_CONTENT_LENGTH)
         .max_by_key(|r| r.content_length)
         .map(|r| r.url.clone());
@@ -172,6 +176,13 @@ pub async fn discover_url(
             "sample_count": analysis.sample_count,
             "success_count": analysis.success_count,
             "timeout_count": analysis.timeout_count,
+            "inconsistent_count": analysis.inconsistent_count,
+            "inconsistent_breakdown": {
+                "gaming": analysis.inconsistent_gaming,
+                "both_failed": analysis.inconsistent_both_failed,
+                "error_pages": analysis.inconsistent_error_pages,
+                "size_mismatch": analysis.inconsistent_size_mismatch,
+            },
             "retrievability_percent": analysis.retrievability_percent,
             "is_consistent": analysis.is_consistent,
             "is_reliable": analysis.is_reliable,

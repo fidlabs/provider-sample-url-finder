@@ -474,12 +474,27 @@ impl std::fmt::Display for UrlTestError {
     }
 }
 
+/// Classification of why a URL test was inconsistent
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InconsistencyType {
+    /// VALID+FAIL or FAIL+VALID - provider times out strategically
+    Gaming,
+    /// FAIL+FAIL - both taps failed, cannot verify
+    BothFailed,
+    /// SMALL+anything - error pages returned
+    ErrorPages,
+    /// VALID+VALID but different Content-Length
+    SizeMismatch,
+}
+
 /// Result of a double-tap URL test
 #[derive(Debug, Clone)]
 pub struct UrlTestResult {
     pub url: String,
     pub success: bool,
     pub consistent: bool,
+    pub inconsistency_type: Option<InconsistencyType>,
     pub content_length: Option<u64>,
     pub response_time_ms: u64,
     pub error: Option<UrlTestError>,
@@ -494,17 +509,27 @@ pub struct ProviderAnalysis {
     pub sample_count: usize,
     pub success_count: usize,
     pub timeout_count: usize,
+    pub inconsistent_count: usize,
+    pub inconsistent_gaming: usize,
+    pub inconsistent_both_failed: usize,
+    pub inconsistent_error_pages: usize,
+    pub inconsistent_size_mismatch: usize,
 }
 
 impl ProviderAnalysis {
     pub fn empty() -> Self {
         Self {
             retrievability_percent: 0.0,
-            is_consistent: false, // No samples analyzed yet
-            is_reliable: false,   // No samples analyzed yet
+            is_consistent: false,
+            is_reliable: false,
             sample_count: 0,
             success_count: 0,
             timeout_count: 0,
+            inconsistent_count: 0,
+            inconsistent_gaming: 0,
+            inconsistent_both_failed: 0,
+            inconsistent_error_pages: 0,
+            inconsistent_size_mismatch: 0,
         }
     }
 }

@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use axum::{Json, debug_handler, extract::State};
+use axum::{
+    Json, debug_handler,
+    extract::{Query, State},
+};
 use tracing::debug;
 
 use crate::{
@@ -11,6 +14,8 @@ use crate::{
     types::{ProviderAddress, ProviderId},
 };
 
+use super::ExtendedQuery;
+
 const MAX_PROVIDER_IDS: usize = 100;
 
 use super::types::{BulkProvidersRequest, BulkProvidersResponse, ProviderResponse};
@@ -18,6 +23,7 @@ use super::types::{BulkProvidersRequest, BulkProvidersResponse, ProviderResponse
 #[utoipa::path(
     post,
     path = "/providers/bulk",
+    params(ExtendedQuery),
     request_body = BulkProvidersRequest,
     responses(
         (status = 200, description = "Bulk providers result", body = BulkProvidersResponse),
@@ -29,10 +35,12 @@ use super::types::{BulkProvidersRequest, BulkProvidersResponse, ProviderResponse
 #[debug_handler]
 pub async fn handle_bulk_providers(
     State(state): State<Arc<AppState>>,
+    Query(query): Query<ExtendedQuery>,
     Json(request): Json<BulkProvidersRequest>,
 ) -> Result<ApiResponse<BulkProvidersResponse>, ApiResponse<()>> {
     debug!(
-        "POST /providers/bulk with {} ids",
+        "POST /providers/bulk?extended={} with {} ids",
+        query.extended,
         request.provider_ids.len()
     );
 
@@ -65,7 +73,11 @@ pub async fn handle_bulk_providers(
             internal_server_error_with_code(ErrorCode::InternalError, "Failed to query providers")
         })?;
 
-    let providers: Vec<ProviderResponse> = result.providers.into_iter().map(|p| p.into()).collect();
+    let providers: Vec<ProviderResponse> = result
+        .providers
+        .into_iter()
+        .map(|p| ProviderResponse::from_data(p, query.extended))
+        .collect();
 
     let mut not_found: Vec<String> = result
         .not_found

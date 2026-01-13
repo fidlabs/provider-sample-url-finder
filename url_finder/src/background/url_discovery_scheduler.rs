@@ -103,7 +103,7 @@ async fn schedule_url_discoveries(
                 r.is_reliable,
                 r.url_metadata.clone(),
             ),
-            None => (None, true, true, None),
+            None => (None, true, false, None),
         };
 
         let url_results: Vec<UrlResult> = results.into_iter().map(|r| r.into()).collect();

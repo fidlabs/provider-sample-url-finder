@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT DISTINCT ON (ur.provider_id)\n                    ur.id,\n                    ur.provider_id AS \"provider_id: ProviderId\",\n                    ur.client_id AS \"client_id: ClientId\",\n                    ur.result_type AS \"result_type: DiscoveryType\",\n                    ur.working_url,\n                    ur.retrievability_percent::float8 AS \"retrievability_percent!\",\n                    ur.result_code AS \"result_code: ResultCode\",\n                    ur.error_code AS \"error_code: ErrorCode\",\n                    ur.tested_at\n               FROM\n                    url_results ur\n               JOIN\n                    storage_providers sp ON ur.provider_id = sp.provider_id\n               WHERE\n                    ur.result_type = 'Provider'\n                    AND ($3::bool IS NULL OR (sp.last_working_url IS NOT NULL) = $3)\n                    AND ($4::bool IS NULL OR sp.is_consistent = $4)\n               ORDER BY\n                    ur.provider_id,\n                    ur.tested_at DESC\n               LIMIT $1\n               OFFSET $2\n            ",
+  "query": "SELECT DISTINCT ON (provider_id)\n                    id,\n                    provider_id AS \"provider_id: ProviderId\",\n                    client_id AS \"client_id: ClientId\",\n                    result_type AS \"result_type: DiscoveryType\",\n                    working_url,\n                    retrievability_percent::float8 AS \"retrievability_percent!\",\n                    result_code AS \"result_code: ResultCode\",\n                    error_code AS \"error_code: ErrorCode\",\n                    tested_at,\n                    is_consistent,\n                    is_reliable,\n                    url_metadata\n               FROM\n                    url_results\n               WHERE\n                    client_id = $1\n                    AND result_type = 'ProviderClient'\n               ORDER BY\n                    provider_id,\n                    tested_at DESC\n            ",
   "describe": {
     "columns": [
       {
@@ -87,14 +87,26 @@
         "ordinal": 8,
         "name": "tested_at",
         "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 9,
+        "name": "is_consistent",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 10,
+        "name": "is_reliable",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 11,
+        "name": "url_metadata",
+        "type_info": "Jsonb"
       }
     ],
     "parameters": {
       "Left": [
-        "Int8",
-        "Int8",
-        "Bool",
-        "Bool"
+        "Text"
       ]
     },
     "nullable": [
@@ -106,8 +118,11 @@
       null,
       false,
       true,
-      false
+      false,
+      true,
+      true,
+      true
     ]
   },
-  "hash": "657c4f8e2e7212646d2fe55d1f4b87fd4d35657a1223184ec147ebf10932e42d"
+  "hash": "e19c57a3d42a517317b156d9acee7ed4f94ec543f29ddc1f0cf389cf18756260"
 }

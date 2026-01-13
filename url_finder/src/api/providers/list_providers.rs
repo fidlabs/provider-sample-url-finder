@@ -31,6 +31,9 @@ pub struct ListProvidersQuery {
     pub has_working_url: Option<bool>,
     /// Filter by URL consistency: true=consistent, false=inconsistent, omit=all
     pub is_consistent: Option<bool>,
+    /// Include diagnostic and scheduling details
+    #[serde(default)]
+    pub extended: bool,
 }
 
 fn default_limit() -> i64 {
@@ -61,8 +64,8 @@ pub async fn handle_list_providers(
     };
 
     debug!(
-        "GET /providers?limit={limit}&offset={offset}&has_working_url={:?}&is_consistent={:?}",
-        filters.has_working_url, filters.is_consistent
+        "GET /providers?limit={limit}&offset={offset}&has_working_url={:?}&is_consistent={:?}&extended={}",
+        filters.has_working_url, filters.is_consistent, query.extended
     );
 
     let paginated = state
@@ -74,8 +77,11 @@ pub async fn handle_list_providers(
             internal_server_error_with_code(ErrorCode::InternalError, "Failed to query providers")
         })?;
 
-    let providers: Vec<ProviderResponse> =
-        paginated.providers.into_iter().map(|p| p.into()).collect();
+    let providers: Vec<ProviderResponse> = paginated
+        .providers
+        .into_iter()
+        .map(|p| ProviderResponse::from_data(p, query.extended))
+        .collect();
 
     Ok(ok_response(ProvidersListResponse {
         providers,

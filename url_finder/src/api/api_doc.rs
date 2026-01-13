@@ -47,6 +47,8 @@ The `/url/*` endpoints remain fully backward compatible.
         handle_list_providers,
         handle_bulk_providers,
         handle_reset_provider,
+        handle_history_retrievability,
+        handle_history_retrievability_client,
     ),
     components(
         schemas(
@@ -81,6 +83,17 @@ The `/url/*` endpoints remain fully backward compatible.
             ResetProviderPath,
             ResetProviderQuery,
             ScheduleType,
+            HistoryProviderPath,
+            HistoryProviderClientPath,
+            HistoryQuery,
+            RetrievabilityHistoryResponse,
+            RetrievabilityDataPoint,
+            // Extended response types
+            ExtendedQuery,
+            AnalysisResponse,
+            DiagnosticsResponse,
+            ScheduleStateResponse,
+            SchedulingResponse,
 
             // Misc
             HealthcheckResponse,
