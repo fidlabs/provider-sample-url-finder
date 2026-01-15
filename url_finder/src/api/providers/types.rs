@@ -63,13 +63,15 @@ pub struct PerformanceResponse {
 /// Breakdown of inconsistent URL tests by cause (extended only)
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct InconsistentBreakdown {
-    /// VALID+FAIL or FAIL+VALID - strategic timeout pattern
-    pub gaming: usize,
-    /// FAIL+FAIL - both taps failed
+    /// (Small|Failed, Valid) - Second tap returned valid data after warm-up
+    pub warm_up: usize,
+    /// (Valid, Small|Failed) - First tap valid, second degraded
+    pub flaky: usize,
+    /// (Small, Small|Failed) or (Failed, Small) - Neither returned valid
+    pub small_responses: usize,
+    /// (Failed, Failed) - Both taps failed completely
     pub both_failed: usize,
-    /// SMALL+anything - error pages returned
-    pub error_pages: usize,
-    /// VALID+VALID but different Content-Length
+    /// (Valid, Valid) but different Content-Length
     pub size_mismatch: usize,
 }
 
@@ -259,9 +261,10 @@ impl ProviderResponse {
 
         let breakdown = analysis.get("inconsistent_breakdown").and_then(|b| {
             Some(InconsistentBreakdown {
-                gaming: b.get("gaming")?.as_u64()? as usize,
+                warm_up: b.get("warm_up")?.as_u64()? as usize,
+                flaky: b.get("flaky")?.as_u64()? as usize,
+                small_responses: b.get("small_responses")?.as_u64()? as usize,
                 both_failed: b.get("both_failed")?.as_u64()? as usize,
-                error_pages: b.get("error_pages")?.as_u64()? as usize,
                 size_mismatch: b.get("size_mismatch")?.as_u64()? as usize,
             })
         });

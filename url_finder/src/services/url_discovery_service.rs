@@ -177,9 +177,10 @@ pub async fn discover_url(
             "timeout_count": analysis.timeout_count,
             "inconsistent_count": analysis.inconsistent_count,
             "inconsistent_breakdown": {
-                "gaming": analysis.inconsistent_gaming,
+                "warm_up": analysis.inconsistent_warm_up,
+                "flaky": analysis.inconsistent_flaky,
+                "small_responses": analysis.inconsistent_small_responses,
                 "both_failed": analysis.inconsistent_both_failed,
-                "error_pages": analysis.inconsistent_error_pages,
                 "size_mismatch": analysis.inconsistent_size_mismatch,
             },
             "retrievability_percent": analysis.retrievability_percent,

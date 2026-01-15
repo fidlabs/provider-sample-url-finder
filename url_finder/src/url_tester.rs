@@ -124,34 +124,44 @@ fn is_consistent_pair(tap1: &TapResult, tap2: &TapResult) -> bool {
 }
 
 /// Classifies WHY a pair of tap results is inconsistent.
-/// Only call this when `is_consistent_pair` returns false.
 fn classify_inconsistency(tap1: &TapResult, tap2: &TapResult) -> InconsistencyType {
-    match (tap1, tap2) {
-        // Gaming: one valid, one failed (strategic timeout)
-        (TapResult::Valid { .. }, TapResult::Failed { .. })
-        | (TapResult::Failed { .. }, TapResult::Valid { .. }) => InconsistencyType::Gaming,
+    use TapResult::*;
 
-        // Both failed: cannot verify
-        (TapResult::Failed { .. }, TapResult::Failed { .. }) => InconsistencyType::BothFailed,
-
-        // Size mismatch: both valid but different Content-Length
-        (
-            TapResult::Valid {
-                content_length: a, ..
-            },
-            TapResult::Valid {
-                content_length: b, ..
-            },
-        ) if a != b => InconsistencyType::SizeMismatch,
-
-        // Everything else involves SMALL responses = error pages
-        _ => InconsistencyType::ErrorPages,
+    // Size mismatch: both valid but different Content-Length
+    if let (
+        Valid {
+            content_length: a, ..
+        },
+        Valid {
+            content_length: b, ..
+        },
+    ) = (tap1, tap2)
+        && a != b
+    {
+        return InconsistencyType::SizeMismatch;
     }
+
+    // WarmUp: tap2 returned valid data (tap1 was not valid)
+    if matches!(tap2, Valid { .. }) && !matches!(tap1, Valid { .. }) {
+        return InconsistencyType::WarmUp;
+    }
+
+    // Flaky: tap1 was valid but tap2 degraded
+    if matches!(tap1, Valid { .. }) && !matches!(tap2, Valid { .. }) {
+        return InconsistencyType::Flaky;
+    }
+
+    // Both failed
+    if matches!((tap1, tap2), (Failed { .. }, Failed { .. })) {
+        return InconsistencyType::BothFailed;
+    }
+
+    // Default: small/garbage responses
+    InconsistencyType::SmallResponses
 }
 
 /// Makes a range request (bytes=0-4095) and extracts total file size from Content-Range header.
 /// Used for double-tap consistency testing to verify Content-Length without downloading full file.
-#[allow(dead_code)]
 async fn range_request(client: &Client, url: &str) -> Result<RangeResponse, UrlTestError> {
     let start = std::time::Instant::now();
 
@@ -214,36 +224,21 @@ fn classify_request_error(e: &reqwest::Error) -> UrlTestError {
 /// Performs a double-tap URL test: two range requests with a delay between them.
 ///
 /// STRICT CONSISTENCY RULES
-/// - success: true if either request succeeded (HTTP 2xx)
+/// - success: true if either request succeeded (HTTP 2xx with valid Content-Length)
 /// - consistent: true ONLY if both requests return VALID responses (>= 8GB) with identical Content-Length
 /// - Everything else is inconsistent: failures, small responses (error pages), mismatched sizes
-///
-/// This strict approach prevents gaming patterns where providers timeout on first request
-/// to avoid bandwidth costs, then respond on retries.
 pub async fn test_url_double_tap(client: &Client, url: &str) -> UrlTestResult {
     let r1 = range_request(client, url).await;
     tokio::time::sleep(Duration::from_millis(DOUBLE_TAP_DELAY_MS)).await;
     let r2 = range_request(client, url).await;
 
-    // Classify each tap result
     let tap1 = TapResult::from_range_result(r1);
     let tap2 = TapResult::from_range_result(r2);
 
-    // Success if either tap got a response (even if small/error page)
-    let success = tap1.is_valid()
-        || tap2.is_valid()
-        || tap1.content_length().is_some()
-        || tap2.content_length().is_some();
-
-    // STRICT: Only VALID+VALID with same size is consistent
+    let success = tap1.is_valid() || tap2.is_valid();
     let consistent = is_consistent_pair(&tap1, &tap2);
 
-    // Use largest VALID content_length from either tap.
-    // This ensures we capture real file sizes even from unreliable providers
-    // that return valid data on only one tap (gaming/flaky patterns).
-    // Falls back to any available content_length for non-valid responses.
     let best_content_length = match (&tap1, &tap2) {
-        // Both valid: use larger
         (
             TapResult::Valid {
                 content_length: a, ..
@@ -252,14 +247,11 @@ pub async fn test_url_double_tap(client: &Client, url: &str) -> UrlTestResult {
                 content_length: b, ..
             },
         ) => Some(std::cmp::max(*a, *b)),
-        // One valid: use the valid one (don't let SMALL overwrite VALID)
         (TapResult::Valid { content_length, .. }, _) => Some(*content_length),
         (_, TapResult::Valid { content_length, .. }) => Some(*content_length),
-        // Neither valid: fall back to tap2 preference (original behavior for error tracking)
         _ => tap2.content_length().or(tap1.content_length()),
     };
 
-    // Response time: prefer valid tap, then tap2, then tap1
     let best_response_time = match (&tap1, &tap2) {
         (
             _,
@@ -277,7 +269,6 @@ pub async fn test_url_double_tap(client: &Client, url: &str) -> UrlTestResult {
         _ => tap1.response_time_ms(),
     };
 
-    // Collect any error (prefer most recent)
     let error = tap2.error().or(tap1.error());
 
     let inconsistency_type = if consistent {
@@ -740,13 +731,16 @@ mod tests {
         assert_eq!(result.content_length, Some(16000000000));
     }
 
+    /// SMALL + VALID = WarmUp pattern - THE KEY REAL-WORLD SCENARIO
+    /// First request returns small stub, second returns real data after warm-up.
+    /// This is exactly what double-tap was built to handle.
     #[tokio::test]
-    async fn test_double_tap_inconsistent_content_length() {
+    async fn test_double_tap_warm_up_small_then_valid() {
         use wiremock::matchers::header;
 
         let mock_server = MockServer::start().await;
 
-        // First request returns small file
+        // First request returns small stub/placeholder
         Mock::given(method("GET"))
             .and(header("Range", "bytes=0-4095"))
             .respond_with(
@@ -756,7 +750,7 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        // Second request returns large file
+        // Second request returns valid large file - warm-up worked!
         Mock::given(method("GET"))
             .and(header("Range", "bytes=0-4095"))
             .respond_with(
@@ -773,20 +767,25 @@ mod tests {
 
         let result = test_url_double_tap(&client, &mock_server.uri()).await;
 
-        assert!(result.success);
-        assert!(!result.consistent); // Different Content-Length = inconsistent
+        assert!(result.success); // tap2 was valid - we got real data!
+        assert!(!result.consistent);
+        assert_eq!(
+            result.inconsistency_type,
+            Some(crate::types::InconsistencyType::WarmUp)
+        );
+        assert_eq!(result.content_length, Some(16000000000)); // We captured the valid size
     }
 
-    /// FAIL + VALID = inconsistent (gaming pattern detection)
-    /// Previously this was marked consistent because "can't detect variance with one failure"
-    /// Now we treat this as a gaming pattern where provider times out first, responds second
+    /// FAIL + VALID = WarmUp pattern - THIS IS WHY DOUBLE-TAP EXISTS
+    /// First request fails/times out, second succeeds with valid data.
+    /// We still get the data, provider just needs warm-up.
     #[tokio::test]
-    async fn test_double_tap_gaming_pattern_fail_then_valid() {
+    async fn test_double_tap_warm_up_fail_then_valid() {
         use wiremock::matchers::header;
 
         let mock_server = MockServer::start().await;
 
-        // First request fails (simulates timeout/gaming)
+        // First request fails (simulates timeout/warm-up needed)
         Mock::given(method("GET"))
             .and(header("Range", "bytes=0-4095"))
             .respond_with(ResponseTemplate::new(500))
@@ -811,14 +810,18 @@ mod tests {
 
         let result = test_url_double_tap(&client, &mock_server.uri()).await;
 
-        assert!(result.success); // Second request succeeded
-        assert!(!result.consistent); // STRICT: FAIL + VALID = inconsistent (gaming pattern)
+        assert!(result.success); // tap2 succeeded - we got the data!
+        assert!(!result.consistent);
+        assert_eq!(
+            result.inconsistency_type,
+            Some(crate::types::InconsistencyType::WarmUp)
+        );
         assert_eq!(result.content_length, Some(16000000000));
     }
 
-    /// VALID + FAIL = inconsistent (gaming pattern, reverse order)
+    /// VALID + FAIL = Flaky - provider served data once then stopped
     #[tokio::test]
-    async fn test_double_tap_gaming_pattern_valid_then_fail() {
+    async fn test_double_tap_flaky_valid_then_fail() {
         use wiremock::matchers::header;
 
         let mock_server = MockServer::start().await;
@@ -834,7 +837,7 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        // Second request fails
+        // Second request fails - provider degraded
         Mock::given(method("GET"))
             .and(header("Range", "bytes=0-4095"))
             .respond_with(ResponseTemplate::new(500))
@@ -848,19 +851,23 @@ mod tests {
 
         let result = test_url_double_tap(&client, &mock_server.uri()).await;
 
-        assert!(result.success); // First request succeeded
-        assert!(!result.consistent); // STRICT: VALID + FAIL = inconsistent
+        assert!(result.success); // tap1 succeeded - we got the data
+        assert!(!result.consistent);
+        assert_eq!(
+            result.inconsistency_type,
+            Some(crate::types::InconsistencyType::Flaky)
+        );
         assert_eq!(result.content_length, Some(16000000000));
     }
 
-    /// SMALL + SMALL = inconsistent (both returned error pages)
+    /// SMALL + SMALL = NOT successful - neither returned valid (>= 8GB) data
     #[tokio::test]
     async fn test_double_tap_both_small_responses() {
         use wiremock::matchers::header;
 
         let mock_server = MockServer::start().await;
 
-        // Both requests return small "error page" responses
+        // Both requests return small responses - neither is valid
         Mock::given(method("GET"))
             .and(header("Range", "bytes=0-4095"))
             .respond_with(
@@ -877,8 +884,12 @@ mod tests {
 
         let result = test_url_double_tap(&client, &mock_server.uri()).await;
 
-        assert!(result.success); // Got HTTP 200
-        assert!(!result.consistent); // STRICT: SMALL + SMALL = inconsistent (both garbage)
+        assert!(!result.success); // Neither tap was valid - NOT successful!
+        assert!(!result.consistent);
+        assert_eq!(
+            result.inconsistency_type,
+            Some(crate::types::InconsistencyType::SmallResponses)
+        );
     }
 
     /// FAIL + FAIL = inconsistent (cannot verify, assume bad)
@@ -941,7 +952,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_classify_gaming_valid_then_fail() {
+    async fn test_classify_flaky_valid_then_fail() {
         use wiremock::matchers::header;
 
         let mock_server = MockServer::start().await;
@@ -957,7 +968,7 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        // Second request fails
+        // Second request fails - provider degraded
         Mock::given(method("GET"))
             .and(header("Range", "bytes=0-4095"))
             .respond_with(ResponseTemplate::new(500))
@@ -971,10 +982,11 @@ mod tests {
 
         let result = test_url_double_tap(&client, &mock_server.uri()).await;
 
+        assert!(result.success); // tap1 was valid
         assert!(!result.consistent);
         assert_eq!(
             result.inconsistency_type,
-            Some(crate::types::InconsistencyType::Gaming)
+            Some(crate::types::InconsistencyType::Flaky)
         );
     }
 
@@ -1006,12 +1018,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_classify_error_pages() {
+    async fn test_classify_small_responses() {
         use wiremock::matchers::header;
 
         let mock_server = MockServer::start().await;
 
-        // Both return small responses (error pages)
+        // Both return small responses - neither is valid
         Mock::given(method("GET"))
             .and(header("Range", "bytes=0-4095"))
             .respond_with(
@@ -1028,10 +1040,11 @@ mod tests {
 
         let result = test_url_double_tap(&client, &mock_server.uri()).await;
 
+        assert!(!result.success); // Neither tap was valid
         assert!(!result.consistent);
         assert_eq!(
             result.inconsistency_type,
-            Some(crate::types::InconsistencyType::ErrorPages)
+            Some(crate::types::InconsistencyType::SmallResponses)
         );
     }
 

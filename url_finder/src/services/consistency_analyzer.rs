@@ -15,17 +15,19 @@ pub fn analyze_results(results: &[UrlTestResult]) -> ProviderAnalysis {
 
     // Count inconsistent results by type
     let mut inconsistent_count = 0;
-    let mut gaming = 0;
+    let mut warm_up = 0;
+    let mut flaky = 0;
+    let mut small_responses = 0;
     let mut both_failed = 0;
-    let mut error_pages = 0;
     let mut size_mismatch = 0;
 
     for r in results.iter().filter(|r| !r.consistent) {
         inconsistent_count += 1;
         match r.inconsistency_type {
-            Some(InconsistencyType::Gaming) => gaming += 1,
+            Some(InconsistencyType::WarmUp) => warm_up += 1,
+            Some(InconsistencyType::Flaky) => flaky += 1,
+            Some(InconsistencyType::SmallResponses) => small_responses += 1,
             Some(InconsistencyType::BothFailed) => both_failed += 1,
-            Some(InconsistencyType::ErrorPages) => error_pages += 1,
             Some(InconsistencyType::SizeMismatch) => size_mismatch += 1,
             None => {} // Shouldn't happen if !consistent, but handle gracefully
         }
@@ -43,9 +45,10 @@ pub fn analyze_results(results: &[UrlTestResult]) -> ProviderAnalysis {
         success_count,
         timeout_count,
         inconsistent_count,
-        inconsistent_gaming: gaming,
+        inconsistent_warm_up: warm_up,
+        inconsistent_flaky: flaky,
+        inconsistent_small_responses: small_responses,
         inconsistent_both_failed: both_failed,
-        inconsistent_error_pages: error_pages,
         inconsistent_size_mismatch: size_mismatch,
     }
 }
@@ -63,7 +66,7 @@ mod tests {
             inconsistency_type: if consistent {
                 None
             } else {
-                Some(InconsistencyType::Gaming)
+                Some(InconsistencyType::WarmUp)
             },
             content_length: Some(16_000_000_000),
             response_time_ms: 100,
@@ -143,20 +146,22 @@ mod tests {
     fn test_analyze_inconsistent_breakdown() {
         let results = vec![
             make_result(true, true, None), // consistent
-            make_inconsistent(InconsistencyType::Gaming),
-            make_inconsistent(InconsistencyType::Gaming),
+            make_inconsistent(InconsistencyType::WarmUp),
+            make_inconsistent(InconsistencyType::WarmUp),
+            make_inconsistent(InconsistencyType::Flaky),
+            make_inconsistent(InconsistencyType::SmallResponses),
             make_inconsistent(InconsistencyType::BothFailed),
-            make_inconsistent(InconsistencyType::ErrorPages),
             make_inconsistent(InconsistencyType::SizeMismatch),
         ];
 
         let analysis = analyze_results(&results);
 
-        assert_eq!(analysis.sample_count, 6);
-        assert_eq!(analysis.inconsistent_count, 5);
-        assert_eq!(analysis.inconsistent_gaming, 2);
+        assert_eq!(analysis.sample_count, 7);
+        assert_eq!(analysis.inconsistent_count, 6);
+        assert_eq!(analysis.inconsistent_warm_up, 2);
+        assert_eq!(analysis.inconsistent_flaky, 1);
+        assert_eq!(analysis.inconsistent_small_responses, 1);
         assert_eq!(analysis.inconsistent_both_failed, 1);
-        assert_eq!(analysis.inconsistent_error_pages, 1);
         assert_eq!(analysis.inconsistent_size_mismatch, 1);
         assert!(!analysis.is_consistent);
     }
@@ -168,9 +173,10 @@ mod tests {
         let analysis = analyze_results(&results);
 
         assert_eq!(analysis.inconsistent_count, 0);
-        assert_eq!(analysis.inconsistent_gaming, 0);
+        assert_eq!(analysis.inconsistent_warm_up, 0);
+        assert_eq!(analysis.inconsistent_flaky, 0);
+        assert_eq!(analysis.inconsistent_small_responses, 0);
         assert_eq!(analysis.inconsistent_both_failed, 0);
-        assert_eq!(analysis.inconsistent_error_pages, 0);
         assert_eq!(analysis.inconsistent_size_mismatch, 0);
         assert!(analysis.is_consistent);
     }

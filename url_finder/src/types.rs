@@ -478,13 +478,21 @@ impl std::fmt::Display for UrlTestError {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum InconsistencyType {
-    /// VALID+FAIL or FAIL+VALID - provider times out strategically
-    Gaming,
-    /// FAIL+FAIL - both taps failed, cannot verify
+    /// (Small|Failed, Valid) - Second tap returned valid data after warm-up.
+    /// Provider CAN serve data, just needs initial request to "warm up".
+    /// This is the pattern double-tap was designed to detect and handle.
+    WarmUp,
+    /// (Valid, Small|Failed) - First tap valid, second degraded.
+    /// Provider is unreliable - served data once then stopped.
+    Flaky,
+    /// (Small, Small|Failed) or (Failed, Small) - Neither tap returned valid data.
+    /// Provider consistently returns small/garbage responses.
+    SmallResponses,
+    /// (Failed, Failed) - Both taps failed completely.
+    /// Provider unreachable or broken.
     BothFailed,
-    /// SMALL+anything - error pages returned
-    ErrorPages,
-    /// VALID+VALID but different Content-Length
+    /// (Valid, Valid) but different Content-Length.
+    /// Data integrity issue - file size changed between requests.
     SizeMismatch,
 }
 
@@ -510,9 +518,10 @@ pub struct ProviderAnalysis {
     pub success_count: usize,
     pub timeout_count: usize,
     pub inconsistent_count: usize,
-    pub inconsistent_gaming: usize,
+    pub inconsistent_warm_up: usize,
+    pub inconsistent_flaky: usize,
+    pub inconsistent_small_responses: usize,
     pub inconsistent_both_failed: usize,
-    pub inconsistent_error_pages: usize,
     pub inconsistent_size_mismatch: usize,
 }
 
@@ -526,9 +535,10 @@ impl ProviderAnalysis {
             success_count: 0,
             timeout_count: 0,
             inconsistent_count: 0,
-            inconsistent_gaming: 0,
+            inconsistent_warm_up: 0,
+            inconsistent_flaky: 0,
+            inconsistent_small_responses: 0,
             inconsistent_both_failed: 0,
-            inconsistent_error_pages: 0,
             inconsistent_size_mismatch: 0,
         }
     }
