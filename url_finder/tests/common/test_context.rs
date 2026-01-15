@@ -6,7 +6,7 @@ use std::env;
 use std::sync::Arc;
 use tracing::{debug, warn};
 use url_finder::config::Config;
-use url_finder::repository::{DealRepository, UrlResult, UrlResultRepository};
+use url_finder::repository::{DealLabelRepository, DealRepository, UrlResult, UrlResultRepository};
 use url_finder::services::url_discovery_service::discover_url;
 use url_finder::types::{ClientAddress, ProviderAddress, ProviderId};
 
@@ -181,6 +181,7 @@ impl TestContext {
             Config::new_for_test(format!("{lotus_base}/rpc/v1"), self.mocks.cid_contact_url());
 
         let deal_repo = DealRepository::new(self.dbs.app_pool.clone());
+        let deal_label_repo = DealLabelRepository::new(self.dbs.app_pool.clone());
         let url_repo = UrlResultRepository::new(self.dbs.app_pool.clone());
 
         let discovery_result = discover_url(
@@ -188,6 +189,7 @@ impl TestContext {
             &fixture.provider_address,
             client_address,
             &deal_repo,
+            &deal_label_repo,
         )
         .await;
 

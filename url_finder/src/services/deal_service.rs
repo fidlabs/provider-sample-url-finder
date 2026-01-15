@@ -5,12 +5,20 @@ use crate::{
     types::{ClientAddress, ClientId, ProviderAddress, ProviderId},
 };
 
-/// get deals and extract piece_ids
-pub async fn get_piece_ids_by_provider(
+/// Context for testing a piece URL with deal metadata
+#[derive(Debug, Clone)]
+pub struct PieceTestContext {
+    pub piece_cid: String,
+    pub deal_id: i32,
+    pub url: String,
+}
+
+/// Get deals and extract piece contexts (piece_cid + deal_id)
+pub async fn get_piece_contexts_by_provider(
     deal_repo: &DealRepository,
     provider_id: &ProviderId,
     client_id: Option<&ClientId>,
-) -> Result<Vec<String>> {
+) -> Result<Vec<(String, i32)>> {
     let limit = 100;
     let offset = 0;
 
@@ -28,12 +36,22 @@ pub async fn get_piece_ids_by_provider(
         return Ok(vec![]);
     }
 
-    let piece_ids: Vec<String> = deals
+    let contexts: Vec<(String, i32)> = deals
         .iter()
-        .filter_map(|deal| deal.piece_cid.clone())
+        .filter_map(|deal| deal.piece_cid.clone().map(|cid| (cid, deal.deal_id)))
         .collect();
 
-    Ok(piece_ids)
+    Ok(contexts)
+}
+
+/// Backward-compatible: get deals and extract piece_ids only
+pub async fn get_piece_ids_by_provider(
+    deal_repo: &DealRepository,
+    provider_id: &ProviderId,
+    client_id: Option<&ClientId>,
+) -> Result<Vec<String>> {
+    let contexts = get_piece_contexts_by_provider(deal_repo, provider_id, client_id).await?;
+    Ok(contexts.into_iter().map(|(cid, _)| cid).collect())
 }
 
 pub async fn get_distinct_providers_by_client(
@@ -106,7 +124,27 @@ pub async fn get_random_piece_ids_by_provider(
     Ok(piece_ids)
 }
 
-/// construct every piece_cid and endoint combination
+/// Build test contexts: (piece_cid, deal_id, url) for each endpoint × piece combination
+pub fn build_piece_test_contexts(
+    endpoints: Vec<String>,
+    piece_contexts: Vec<(String, i32)>,
+) -> Vec<PieceTestContext> {
+    endpoints
+        .iter()
+        .flat_map(|endpoint| {
+            let endpoint = endpoint.trim_end_matches('/');
+            piece_contexts
+                .iter()
+                .map(move |(piece_cid, deal_id)| PieceTestContext {
+                    piece_cid: piece_cid.clone(),
+                    deal_id: *deal_id,
+                    url: format!("{endpoint}/piece/{piece_cid}"),
+                })
+        })
+        .collect()
+}
+
+/// Backward-compatible: construct every piece_cid and endpoint combination
 pub async fn get_piece_url(endpoints: Vec<String>, piece_ids: Vec<String>) -> Vec<String> {
     endpoints
         .iter()

@@ -4,12 +4,17 @@ use crate::{
     config::{Config, MIN_VALID_CONTENT_LENGTH},
     http_client::build_client,
     provider_endpoints,
-    repository::DealRepository,
-    services::{consistency_analyzer::analyze_results, deal_service},
-    types::{
-        ClientAddress, ClientId, DiscoveryType, ErrorCode, ProviderAddress, ProviderId, ResultCode,
+    repository::{DealLabelRepository, DealRepository},
+    services::{
+        consistency_analyzer::analyze_results,
+        deal_service,
+        label_verification::{self, VerificationContext},
     },
-    url_tester::test_urls_double_tap,
+    types::{
+        CarVerificationSummary, ClientAddress, ClientId, DiscoveryType, ErrorCode, ProviderAddress,
+        ProviderId, ResultCode,
+    },
+    url_tester::test_url_double_tap,
 };
 use tracing::{debug, error, trace};
 use uuid::Uuid;
@@ -71,6 +76,7 @@ pub async fn discover_url(
     provider_address: &ProviderAddress,
     client_address: Option<ClientAddress>,
     deal_repo: &DealRepository,
+    deal_label_repo: &DealLabelRepository,
 ) -> UrlDiscoveryResult {
     let provider_id: ProviderId = provider_address.clone().into();
     let client_id: Option<ClientId> = client_address.clone().map(|c| c.into());
@@ -85,6 +91,7 @@ pub async fn discover_url(
         None => UrlDiscoveryResult::new_provider_only(provider_id.clone()),
     };
 
+    // Get endpoints
     let (result_code, endpoints) =
         match provider_endpoints::get_provider_endpoints(config, provider_address).await {
             Ok((code, eps)) => (code, eps),
@@ -104,35 +111,40 @@ pub async fn discover_url(
         return result;
     };
 
-    let piece_ids =
-        match deal_service::get_piece_ids_by_provider(deal_repo, &provider_id, client_id.as_ref())
-            .await
-        {
-            Ok(ids) => ids,
-            Err(e) => {
-                error!(
-                    "Failed to get piece ids for {} {:?}: {:?}",
-                    provider_id, client_id, e
-                );
-                result.result_code = ResultCode::Error;
-                result.error_code = Some(ErrorCode::FailedToGetDeals);
-                return result;
-            }
-        };
+    // Get piece contexts (piece_cid + deal_id)
+    let piece_contexts = match deal_service::get_piece_contexts_by_provider(
+        deal_repo,
+        &provider_id,
+        client_id.as_ref(),
+    )
+    .await
+    {
+        Ok(ctx) => ctx,
+        Err(e) => {
+            error!(
+                "Failed to get piece contexts for {} {:?}: {:?}",
+                provider_id, client_id, e
+            );
+            result.result_code = ResultCode::Error;
+            result.error_code = Some(ErrorCode::FailedToGetDeals);
+            return result;
+        }
+    };
 
-    if piece_ids.is_empty() {
+    if piece_contexts.is_empty() {
         result.result_code = ResultCode::NoDealsFound;
         return result;
     }
 
-    let urls = deal_service::get_piece_url(endpoints.clone(), piece_ids).await;
+    // Build test contexts with deal_id preserved
+    let test_contexts = deal_service::build_piece_test_contexts(endpoints.clone(), piece_contexts);
     debug!(
-        "Built {} URLs to test from endpoints: {:?}",
-        urls.len(),
+        "Built {} test contexts from endpoints: {:?}",
+        test_contexts.len(),
         endpoints
     );
 
-    // Build HTTP client for double-tap testing
+    // Build HTTP client
     let client = match build_client(config) {
         Ok(c) => c,
         Err(e) => {
@@ -142,34 +154,98 @@ pub async fn discover_url(
         }
     };
 
-    // Double-tap test all URLs
-    let test_results = test_urls_double_tap(&client, urls).await;
+    // Double-tap test all URLs, collecting results with context
+    let mut test_results = Vec::with_capacity(test_contexts.len());
+    for ctx in &test_contexts {
+        let url_result = test_url_double_tap(&client, &ctx.url).await;
+        test_results.push((ctx.clone(), url_result));
+    }
     debug!("Double-tap tested {} URLs", test_results.len());
 
-    // Analyze results for provider-level metrics
-    let analysis = analyze_results(&test_results);
-    debug!(
-        "Provider {} analysis: retrievability={:.1}%, consistent={}, reliable={}, samples={}",
-        provider_address,
-        analysis.retrievability_percent,
-        analysis.is_consistent,
-        analysis.is_reliable,
-        analysis.sample_count
-    );
+    // Extract just UrlTestResults for analysis
+    let url_results: Vec<_> = test_results.iter().map(|(_, r)| r.clone()).collect();
+    let analysis = analyze_results(&url_results);
 
-    // Select best working URL: success && content_length >= 8GB
-    // Note: We intentionally do NOT require r.consistent here.
-    // Consistency is tracked as a provider-level quality metric (is_consistent),
-    // but an unreliable provider that returns valid data on at least one tap
-    // still has a working URL. The 8GB filter ensures we don't select error pages.
-    let working_url = test_results
+    // Initialize CAR verification summary
+    let mut car_summary = CarVerificationSummary {
+        responses_parsed: test_results.len(),
+        valid_car_headers: test_results.iter().filter(|(_, r)| r.is_valid_car).count(),
+        small_car_responses: test_results
+            .iter()
+            .filter(|(_, r)| {
+                r.is_valid_car && r.content_length.unwrap_or(0) < MIN_VALID_CONTENT_LENGTH
+            })
+            .count(),
+        ..Default::default()
+    };
+
+    // Select working URL
+    let working_url_ctx = test_results
         .iter()
-        .filter(|r| r.success)
-        .filter(|r| r.content_length.unwrap_or(0) >= MIN_VALID_CONTENT_LENGTH)
-        .max_by_key(|r| r.content_length)
-        .map(|r| r.url.clone());
+        .filter(|(_, r)| r.success)
+        .filter(|(_, r)| r.content_length.unwrap_or(0) >= MIN_VALID_CONTENT_LENGTH)
+        .max_by_key(|(_, r)| r.content_length);
 
-    // Build metadata with analysis details
+    let working_url = working_url_ctx.map(|(_, r)| r.url.clone());
+
+    // Build verification contexts
+    let mut to_verify: Vec<VerificationContext> = vec![];
+
+    // Must verify: all small CAR responses
+    for (ctx, r) in &test_results {
+        if r.is_valid_car && r.content_length.unwrap_or(0) < MIN_VALID_CONTENT_LENGTH {
+            to_verify.push(VerificationContext {
+                url: r.url.clone(),
+                deal_id: ctx.deal_id,
+                piece_cid: ctx.piece_cid.clone(),
+                root_cid: r.root_cid.clone(),
+                is_working_url: false,
+            });
+        }
+    }
+
+    // Must verify: working URL
+    if let Some((ctx, r)) = working_url_ctx {
+        // Check if already in to_verify (small CAR that's also working - unlikely but possible)
+        let already_added = to_verify.iter().any(|v| v.url == r.url);
+        if !already_added {
+            to_verify.push(VerificationContext {
+                url: r.url.clone(),
+                deal_id: ctx.deal_id,
+                piece_cid: ctx.piece_cid.clone(),
+                root_cid: r.root_cid.clone(),
+                is_working_url: true,
+            });
+        } else {
+            // Mark the existing one as working URL
+            for v in &mut to_verify {
+                if v.url == r.url {
+                    v.is_working_url = true;
+                }
+            }
+        }
+    }
+
+    // Should verify: first valid success (for pipeline validation)
+    let first_success = test_results
+        .iter()
+        .find(|(_, r)| r.success && r.is_valid_car && !to_verify.iter().any(|v| v.url == r.url));
+    if let Some((ctx, r)) = first_success {
+        to_verify.push(VerificationContext {
+            url: r.url.clone(),
+            deal_id: ctx.deal_id,
+            piece_cid: ctx.piece_cid.clone(),
+            root_cid: r.root_cid.clone(),
+            is_working_url: false,
+        });
+    }
+
+    // Run verification
+    let working_url_verification =
+        label_verification::verify_batch(config, deal_label_repo, to_verify, &mut car_summary)
+            .await;
+
+    // Build metadata
     let url_metadata = serde_json::json!({
         "analysis": {
             "sample_count": analysis.sample_count,
@@ -187,6 +263,8 @@ pub async fn discover_url(
             "is_consistent": analysis.is_consistent,
             "is_reliable": analysis.is_reliable,
         },
+        "car_verification": car_summary,
+        "working_url_verification": working_url_verification,
         "validated_at": Utc::now().to_rfc3339(),
     });
 
@@ -196,7 +274,6 @@ pub async fn discover_url(
     result.is_reliable = analysis.is_reliable;
     result.url_metadata = Some(url_metadata);
 
-    // Success if we found a valid working URL
     result.result_code = if working_url.is_some() {
         ResultCode::Success
     } else {

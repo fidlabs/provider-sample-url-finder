@@ -174,6 +174,7 @@ pub async fn seed_provider_with_url_status(
     .expect("Failed to insert provider with url status");
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn seed_bms_bandwidth_result(
     app_pool: &PgPool,
     provider_id: &str,
@@ -214,6 +215,7 @@ pub async fn seed_bms_bandwidth_result(
     .expect("Failed to insert bms_bandwidth_result");
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn seed_url_result_at(
     app_pool: &PgPool,
     provider_id: &str,

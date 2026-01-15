@@ -71,6 +71,8 @@ mod tests {
             content_length: Some(16_000_000_000),
             response_time_ms: 100,
             error,
+            is_valid_car: false,
+            root_cid: None,
         }
     }
 
@@ -83,6 +85,8 @@ mod tests {
             content_length: Some(16_000_000_000),
             response_time_ms: 100,
             error: None,
+            is_valid_car: false,
+            root_cid: None,
         }
     }
 

@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO deal_labels (deal_id, piece_cid, label_raw, payload_cid)\n            VALUES ($1, $2, $3, $4)\n            ON CONFLICT (deal_id) DO UPDATE SET\n                piece_cid = EXCLUDED.piece_cid,\n                label_raw = EXCLUDED.label_raw,\n                payload_cid = EXCLUDED.payload_cid,\n                fetched_at = NOW()\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "40cbd0f1a5200343ddc4a90c0ad8dcb7fe0efcbadb9401a76c99d4e15e599ab4"
+}

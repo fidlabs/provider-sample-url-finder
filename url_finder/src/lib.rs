@@ -6,6 +6,7 @@ pub mod api;
 pub mod api_response;
 pub mod background;
 pub mod bms_client;
+pub mod car_header;
 mod cid_contact;
 pub mod circuit_breaker;
 pub mod config;
@@ -25,6 +26,7 @@ pub use types::{ErrorCode, ResultCode};
 
 pub struct AppState {
     pub deal_repo: Arc<repository::DealRepository>,
+    pub deal_label_repo: Arc<repository::DealLabelRepository>,
     pub active_requests: Arc<AtomicUsize>,
     pub storage_provider_repo: Arc<repository::StorageProviderRepository>,
     pub url_repo: Arc<repository::UrlResultRepository>,

@@ -1,6 +1,9 @@
 use crate::{
     config::Config,
-    repository::{DealRepository, StorageProviderRepository, UrlResult, UrlResultRepository},
+    repository::{
+        DealLabelRepository, DealRepository, StorageProviderRepository, UrlResult,
+        UrlResultRepository,
+    },
     services::url_discovery_service,
     types::{ClientAddress, ClientId, ProviderAddress, ProviderId},
 };
@@ -127,13 +130,20 @@ pub async fn run_url_discovery_scheduler(
     sp_repo: Arc<StorageProviderRepository>,
     url_repo: Arc<UrlResultRepository>,
     deal_repo: Arc<DealRepository>,
+    deal_label_repo: Arc<DealLabelRepository>,
     shutdown: CancellationToken,
 ) {
     info!("Starting URL discovery scheduler loop");
 
     loop {
-        let interval = match schedule_url_discoveries(&config, &sp_repo, &url_repo, &deal_repo)
-            .await
+        let interval = match schedule_url_discoveries(
+            &config,
+            &sp_repo,
+            &url_repo,
+            &deal_repo,
+            &deal_label_repo,
+        )
+        .await
         {
             Ok(stats) if stats.is_empty() => {
                 debug!("No providers due for URL discovery, sleeping...");
@@ -175,6 +185,7 @@ async fn schedule_url_discoveries(
     sp_repo: &StorageProviderRepository,
     url_repo: &UrlResultRepository,
     deal_repo: &DealRepository,
+    deal_label_repo: &DealLabelRepository,
 ) -> Result<DiscoveryBatchStats> {
     let providers = sp_repo.get_due_for_url_discovery(BATCH_SIZE).await?;
 
@@ -195,9 +206,15 @@ async fn schedule_url_discoveries(
             );
         }
 
-        let outcome =
-            process_single_provider(config, sp_repo, url_repo, deal_repo, &provider.provider_id)
-                .await?;
+        let outcome = process_single_provider(
+            config,
+            sp_repo,
+            url_repo,
+            deal_repo,
+            deal_label_repo,
+            &provider.provider_id,
+        )
+        .await?;
 
         stats.record(&outcome);
         progress.maybe_log(&stats, &provider.provider_id);
@@ -211,6 +228,7 @@ async fn process_single_provider(
     sp_repo: &StorageProviderRepository,
     url_repo: &UrlResultRepository,
     deal_repo: &DealRepository,
+    deal_label_repo: &DealLabelRepository,
     provider_id: &ProviderId,
 ) -> Result<ProviderOutcome> {
     sp_repo.set_url_discovery_pending(provider_id).await?;
@@ -224,7 +242,8 @@ async fn process_single_provider(
 
     debug!("Provider {} has {} clients", provider_id, clients.len());
 
-    let results = test_provider_with_clients(config, provider_id, clients, deal_repo).await;
+    let results =
+        test_provider_with_clients(config, provider_id, clients, deal_repo, deal_label_repo).await;
 
     // Extract provider-only result for storage_providers update
     // None case: provider-only discovery missing (panic, filtering, etc.) - default is_consistent
@@ -303,6 +322,7 @@ async fn test_provider_with_clients(
     provider_id: &ProviderId,
     client_ids: Vec<ClientId>,
     deal_repo: &DealRepository,
+    deal_label_repo: &DealLabelRepository,
 ) -> Vec<url_discovery_service::UrlDiscoveryResult> {
     let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_CLIENT_TESTS));
     let mut tasks = vec![];
@@ -312,9 +332,10 @@ async fn test_provider_with_clients(
         let cfg = config.clone();
         let addr = provider_address.clone();
         let repo = deal_repo.clone();
-        tokio::spawn(
-            async move { url_discovery_service::discover_url(&cfg, &addr, None, &repo).await },
-        )
+        let label_repo = deal_label_repo.clone();
+        tokio::spawn(async move {
+            url_discovery_service::discover_url(&cfg, &addr, None, &repo, &label_repo).await
+        })
     };
     tasks.push(provider_task);
 
@@ -328,12 +349,14 @@ async fn test_provider_with_clients(
         let provider_addr = provider_address.clone();
         let client_address: ClientAddress = client_id.into();
         let repo = deal_repo.clone();
+        let label_repo = deal_label_repo.clone();
         tasks.push(tokio::spawn(async move {
             let result = url_discovery_service::discover_url(
                 &cfg,
                 &provider_addr,
                 Some(client_address),
                 &repo,
+                &label_repo,
             )
             .await;
             drop(permit); // release semaphore

@@ -73,6 +73,7 @@ async fn main() -> Result<()> {
 
     let sp_repo = Arc::new(StorageProviderRepository::new(pool.clone()));
     let deal_repo = Arc::new(DealRepository::new(dmob_pool.clone()));
+    let deal_label_repo = Arc::new(DealLabelRepository::new(pool.clone()));
     let url_repo = Arc::new(UrlResultRepository::new(pool.clone()));
     let bms_result_repo = Arc::new(BmsBandwidthResultRepository::new(pool.clone()));
     let bms_client = Arc::new(url_finder::bms_client::BmsClient::new(
@@ -89,6 +90,7 @@ async fn main() -> Result<()> {
 
     let app_state = Arc::new(AppState {
         deal_repo: deal_repo.clone(),
+        deal_label_repo: deal_label_repo.clone(),
         active_requests: active_requests.clone(),
         storage_provider_repo: sp_repo.clone(),
         url_repo: url_repo.clone(),
@@ -112,11 +114,19 @@ async fn main() -> Result<()> {
         let sp_repo = sp_repo.clone();
         let url_repo = url_repo.clone();
         let deal_repo = deal_repo.clone();
+        let deal_label_repo = deal_label_repo.clone();
         let config = config.clone();
         let shutdown = shutdown_token.clone();
         async move {
-            background::run_url_discovery_scheduler(config, sp_repo, url_repo, deal_repo, shutdown)
-                .await;
+            background::run_url_discovery_scheduler(
+                config,
+                sp_repo,
+                url_repo,
+                deal_repo,
+                deal_label_repo,
+                shutdown,
+            )
+            .await;
         }
     });
 

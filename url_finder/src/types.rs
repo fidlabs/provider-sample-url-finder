@@ -506,6 +506,9 @@ pub struct UrlTestResult {
     pub content_length: Option<u64>,
     pub response_time_ms: u64,
     pub error: Option<UrlTestError>,
+    // CAR header info
+    pub is_valid_car: bool,
+    pub root_cid: Option<String>,
 }
 
 /// Analysis of URL test results for a provider
@@ -542,6 +545,45 @@ impl ProviderAnalysis {
             inconsistent_size_mismatch: 0,
         }
     }
+}
+
+/// Summary counters for CAR verification - stored in url_metadata
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CarVerificationSummary {
+    /// Responses where we attempted CAR header parse
+    pub responses_parsed: usize,
+    /// Valid CAR headers found
+    pub valid_car_headers: usize,
+    /// Small responses (< 8GB) that were valid CARs
+    pub small_car_responses: usize,
+    /// Label lookups performed (Lotus RPC calls)
+    pub labels_fetched: usize,
+    /// Verified: root_cid matched label_cid
+    pub verified_match: usize,
+    /// Verified: root_cid did NOT match label_cid
+    pub verified_mismatch: usize,
+    /// Could not verify (no valid label, RPC failed)
+    pub unverifiable: usize,
+}
+
+/// Verification result for the working URL we save
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkingUrlVerification {
+    pub status: VerificationStatus,
+    pub root_cid: Option<String>,
+    pub label_cid: Option<String>,
+    pub deal_id: Option<i32>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VerificationStatus {
+    /// root_cid matches label_cid
+    Match,
+    /// root_cid does NOT match label_cid
+    Mismatch,
+    /// Could not verify (not a CAR, no label, RPC failed)
+    Unverified,
 }
 
 #[cfg(test)]

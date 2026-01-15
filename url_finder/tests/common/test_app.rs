@@ -11,7 +11,13 @@ use std::{
     sync::{Arc, atomic::AtomicUsize},
 };
 use url_finder::{
-    AppState, config::Config, repository::*, services::provider_service::ProviderService,
+    AppState,
+    config::Config,
+    repository::{
+        BmsBandwidthResultRepository, DealLabelRepository, DealRepository,
+        StorageProviderRepository, UrlResultRepository,
+    },
+    services::provider_service::ProviderService,
 };
 
 use super::{TestDatabases, mock_servers::MockExternalServices};
@@ -43,6 +49,7 @@ pub async fn create_test_app(dbs: &TestDatabases, mocks: &MockExternalServices) 
 
     let app_state = Arc::new(AppState {
         deal_repo: Arc::new(DealRepository::new(dbs.app_pool.clone())),
+        deal_label_repo: Arc::new(DealLabelRepository::new(dbs.app_pool.clone())),
         active_requests,
         storage_provider_repo,
         url_repo,

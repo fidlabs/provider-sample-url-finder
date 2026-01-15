@@ -9,6 +9,7 @@ use reqwest::Client;
 use tokio::sync::Semaphore;
 use tracing::debug;
 
+use crate::car_header::{CarHeaderParseResult, parse_car_header};
 use crate::config::{
     Config, DOUBLE_TAP_DELAY_MS, MAX_CONCURRENT_URL_TESTS, MIN_VALID_CONTENT_LENGTH,
     RANGE_REQUEST_BYTES,
@@ -25,6 +26,7 @@ const RETRI_CONCURRENCY_LIMIT: usize = 20;
 struct RangeResponse {
     content_length: Option<u64>,
     response_time_ms: u64,
+    body_sample: Option<Vec<u8>>,
 }
 
 /// Classification of a single tap result for consistency checking.
@@ -34,11 +36,13 @@ enum TapResult {
     Valid {
         content_length: u64,
         response_time_ms: u64,
+        car_header: Option<CarHeaderParseResult>,
     },
     /// HTTP success but Content-Length < MIN_VALID_CONTENT_LENGTH (likely error page)
     Small {
         content_length: u64,
         response_time_ms: u64,
+        car_header: Option<CarHeaderParseResult>,
     },
     /// Request failed (timeout, connection error, HTTP error status)
     Failed { error: UrlTestError },
@@ -47,22 +51,32 @@ enum TapResult {
 impl TapResult {
     /// Classify a range request result into Valid/Small/Failed
     fn from_range_result(result: Result<RangeResponse, UrlTestError>) -> Self {
-        match result {
-            Ok(r) => {
-                let content_length = r.content_length.unwrap_or(0);
-                if content_length >= MIN_VALID_CONTENT_LENGTH {
-                    TapResult::Valid {
-                        content_length,
-                        response_time_ms: r.response_time_ms,
-                    }
-                } else {
-                    TapResult::Small {
-                        content_length,
-                        response_time_ms: r.response_time_ms,
-                    }
-                }
-            }
-            Err(e) => TapResult::Failed { error: e },
+        let response = match result {
+            Ok(r) => r,
+            Err(e) => return TapResult::Failed { error: e },
+        };
+
+        let content_length = response.content_length.unwrap_or(0);
+        let response_time_ms = response.response_time_ms;
+
+        // Parse CAR header from body sample
+        let car_header = response
+            .body_sample
+            .as_ref()
+            .map(|bytes| parse_car_header(bytes));
+
+        if content_length >= MIN_VALID_CONTENT_LENGTH {
+            return TapResult::Valid {
+                content_length,
+                response_time_ms,
+                car_header,
+            };
+        }
+
+        TapResult::Small {
+            content_length,
+            response_time_ms,
+            car_header,
         }
     }
 
@@ -95,6 +109,21 @@ impl TapResult {
             TapResult::Failed { error } => Some(error.clone()),
             _ => None,
         }
+    }
+
+    fn car_header(&self) -> Option<&CarHeaderParseResult> {
+        match self {
+            TapResult::Valid { car_header, .. } => car_header.as_ref(),
+            TapResult::Small { car_header, .. } => car_header.as_ref(),
+            TapResult::Failed { .. } => None,
+        }
+    }
+
+    #[allow(dead_code)]
+    fn root_cid(&self) -> Option<String> {
+        self.car_header()
+            .filter(|h| h.is_valid)
+            .and_then(|h| h.root_cid.clone())
     }
 }
 
@@ -178,10 +207,15 @@ async fn range_request(client: &Client, url: &str) -> Result<RangeResponse, UrlT
     }
 
     let content_length = extract_total_length(&resp);
+    let response_time_ms = start.elapsed().as_millis() as u64;
+
+    // Always capture body sample for CAR header parsing
+    let body_sample = resp.bytes().await.ok().map(|b| b.to_vec());
 
     Ok(RangeResponse {
         content_length,
-        response_time_ms: start.elapsed().as_millis() as u64,
+        response_time_ms,
+        body_sample,
     })
 }
 
@@ -277,6 +311,11 @@ pub async fn test_url_double_tap(client: &Client, url: &str) -> UrlTestResult {
         Some(classify_inconsistency(&tap1, &tap2))
     };
 
+    // CAR header info: prefer tap2, fall back to tap1
+    let best_car = tap2.car_header().or(tap1.car_header());
+    let is_valid_car = best_car.map(|h| h.is_valid).unwrap_or(false);
+    let root_cid = best_car.and_then(|h| h.root_cid.clone());
+
     UrlTestResult {
         url: url.to_string(),
         success,
@@ -285,6 +324,8 @@ pub async fn test_url_double_tap(client: &Client, url: &str) -> UrlTestResult {
         content_length: best_content_length,
         response_time_ms: best_response_time,
         error,
+        is_valid_car,
+        root_cid,
     }
 }
 
@@ -560,7 +601,7 @@ mod tests {
             .await;
 
         let client = Client::new();
-        let resp = client.get(&mock_server.uri()).send().await.unwrap();
+        let resp = client.get(mock_server.uri()).send().await.unwrap();
 
         // Should complete without error - body is drained
         drain_response_body(resp).await;
@@ -580,7 +621,7 @@ mod tests {
             .await;
 
         let client = Client::new();
-        let resp = client.get(&mock_server.uri()).send().await.unwrap();
+        let resp = client.get(mock_server.uri()).send().await.unwrap();
 
         let start = Instant::now();
         drain_response_body(resp).await;
@@ -605,7 +646,7 @@ mod tests {
             .await;
 
         let client = Client::new();
-        let resp = client.get(&mock_server.uri()).send().await.unwrap();
+        let resp = client.get(mock_server.uri()).send().await.unwrap();
 
         // Should handle empty body gracefully
         drain_response_body(resp).await;
@@ -622,7 +663,7 @@ mod tests {
             .await;
 
         let client = Client::new();
-        let resp = client.get(&mock_server.uri()).send().await.unwrap();
+        let resp = client.get(mock_server.uri()).send().await.unwrap();
 
         // Error responses are typically small and should be drained
         drain_response_body(resp).await;
@@ -644,7 +685,7 @@ mod tests {
             .await;
 
         let client = Client::new();
-        let resp = client.get(&mock_server.uri()).send().await.unwrap();
+        let resp = client.get(mock_server.uri()).send().await.unwrap();
 
         let start = Instant::now();
         drain_response_body(resp).await;
@@ -669,7 +710,7 @@ mod tests {
             .await;
 
         let client = Client::new();
-        let resp = client.get(&mock_server.uri()).send().await.unwrap();
+        let resp = client.get(mock_server.uri()).send().await.unwrap();
 
         // Should complete without error - missing Content-Length means skip draining
         drain_response_body(resp).await;
