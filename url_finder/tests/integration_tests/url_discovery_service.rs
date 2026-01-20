@@ -1,7 +1,7 @@
 use crate::common::*;
 use url_finder::{
     config::Config,
-    repository::{DealLabelRepository, DealRepository},
+    repository::DealRepository,
     services::url_discovery_service::discover_url,
     types::{ClientAddress, ProviderAddress, ResultCode},
 };
@@ -9,27 +9,14 @@ use url_finder::{
 fn setup_discovery_params(
     ctx: &TestContext,
     fixture: &ProviderFixture,
-) -> (
-    ProviderAddress,
-    ClientAddress,
-    DealRepository,
-    DealLabelRepository,
-    Config,
-) {
+) -> (ProviderAddress, ClientAddress, DealRepository, Config) {
     let provider_address = fixture.provider_address.clone();
     let client_address = test_client_address();
     let deal_repo = DealRepository::new(ctx.dbs.app_pool.clone());
-    let deal_label_repo = DealLabelRepository::new(ctx.dbs.app_pool.clone());
     let lotus_url = ctx.mocks.lotus_url();
     let lotus_base = lotus_url.trim_end_matches('/');
     let config = Config::new_for_test(format!("{lotus_base}/rpc/v1"), ctx.mocks.cid_contact_url());
-    (
-        provider_address,
-        client_address,
-        deal_repo,
-        deal_label_repo,
-        config,
-    )
+    (provider_address, client_address, deal_repo, config)
 }
 
 #[tokio::test]
@@ -48,17 +35,10 @@ async fn test_url_discovery_success() {
         )
         .await;
 
-    let (provider_address, client_address, deal_repo, deal_label_repo, config) =
+    let (provider_address, client_address, deal_repo, config) =
         setup_discovery_params(&ctx, &fixture);
 
-    let result = discover_url(
-        &config,
-        &provider_address,
-        Some(client_address),
-        &deal_repo,
-        &deal_label_repo,
-    )
-    .await;
+    let result = discover_url(&config, &provider_address, Some(client_address), &deal_repo).await;
 
     assert_eq!(result.result_code, ResultCode::Success, "Expected Success");
 
@@ -91,17 +71,10 @@ async fn test_url_discovery_partial_retrievability() {
         )
         .await;
 
-    let (provider_address, client_address, deal_repo, deal_label_repo, config) =
+    let (provider_address, client_address, deal_repo, config) =
         setup_discovery_params(&ctx, &fixture);
 
-    let result = discover_url(
-        &config,
-        &provider_address,
-        Some(client_address),
-        &deal_repo,
-        &deal_label_repo,
-    )
-    .await;
+    let result = discover_url(&config, &provider_address, Some(client_address), &deal_repo).await;
 
     assert_eq!(
         result.result_code,

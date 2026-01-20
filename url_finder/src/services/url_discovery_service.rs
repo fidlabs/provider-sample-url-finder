@@ -4,15 +4,10 @@ use crate::{
     config::{Config, MIN_VALID_CONTENT_LENGTH},
     http_client::build_client,
     provider_endpoints,
-    repository::{DealLabelRepository, DealRepository},
-    services::{
-        consistency_analyzer::analyze_results,
-        deal_service,
-        label_verification::{self, VerificationContext},
-    },
+    repository::DealRepository,
+    services::{consistency_analyzer::analyze_results, deal_service},
     types::{
-        CarVerificationSummary, ClientAddress, ClientId, DiscoveryType, ErrorCode, ProviderAddress,
-        ProviderId, ResultCode,
+        ClientAddress, ClientId, DiscoveryType, ErrorCode, ProviderAddress, ProviderId, ResultCode,
     },
     url_tester::test_url_double_tap,
 };
@@ -76,7 +71,6 @@ pub async fn discover_url(
     provider_address: &ProviderAddress,
     client_address: Option<ClientAddress>,
     deal_repo: &DealRepository,
-    deal_label_repo: &DealLabelRepository,
 ) -> UrlDiscoveryResult {
     let provider_id: ProviderId = provider_address.clone().into();
     let client_id: Option<ClientId> = client_address.clone().map(|c| c.into());
@@ -166,84 +160,30 @@ pub async fn discover_url(
     let url_results: Vec<_> = test_results.iter().map(|(_, r)| r.clone()).collect();
     let analysis = analyze_results(&url_results);
 
-    // Initialize CAR verification summary
-    let mut car_summary = CarVerificationSummary {
-        responses_parsed: test_results.len(),
-        valid_car_headers: test_results.iter().filter(|(_, r)| r.is_valid_car).count(),
-        small_car_responses: test_results
-            .iter()
-            .filter(|(_, r)| {
-                r.is_valid_car && r.content_length.unwrap_or(0) < MIN_VALID_CONTENT_LENGTH
-            })
-            .count(),
-        ..Default::default()
-    };
-
-    // Select working URL
-    let working_url_ctx = test_results
+    // Select working URL (largest valid response)
+    let working_url_result = test_results
         .iter()
         .filter(|(_, r)| r.success)
         .filter(|(_, r)| r.content_length.unwrap_or(0) >= MIN_VALID_CONTENT_LENGTH)
         .max_by_key(|(_, r)| r.content_length);
 
-    let working_url = working_url_ctx.map(|(_, r)| r.url.clone());
+    let working_url = working_url_result.map(|(_, r)| r.url.clone());
 
-    // Build verification contexts
-    let mut to_verify: Vec<VerificationContext> = vec![];
-
-    // Must verify: all small CAR responses
-    for (ctx, r) in &test_results {
-        if r.is_valid_car && r.content_length.unwrap_or(0) < MIN_VALID_CONTENT_LENGTH {
-            to_verify.push(VerificationContext {
-                url: r.url.clone(),
-                deal_id: ctx.deal_id,
-                piece_cid: ctx.piece_cid.clone(),
-                root_cid: r.root_cid.clone(),
-                is_working_url: false,
-            });
-        }
-    }
-
-    // Must verify: working URL
-    if let Some((ctx, r)) = working_url_ctx {
-        // Check if already in to_verify (small CAR that's also working - unlikely but possible)
-        let already_added = to_verify.iter().any(|v| v.url == r.url);
-        if !already_added {
-            to_verify.push(VerificationContext {
-                url: r.url.clone(),
-                deal_id: ctx.deal_id,
-                piece_cid: ctx.piece_cid.clone(),
-                root_cid: r.root_cid.clone(),
-                is_working_url: true,
-            });
-        } else {
-            // Mark the existing one as working URL
-            for v in &mut to_verify {
-                if v.url == r.url {
-                    v.is_working_url = true;
-                }
-            }
-        }
-    }
-
-    // Should verify: first valid success (for pipeline validation)
-    let first_success = test_results
+    // CAR diagnostics (kept for diagnostic value - detects if response is actually a CAR file)
+    let valid_car_count = test_results.iter().filter(|(_, r)| r.is_valid_car).count();
+    let small_car_count = test_results
         .iter()
-        .find(|(_, r)| r.success && r.is_valid_car && !to_verify.iter().any(|v| v.url == r.url));
-    if let Some((ctx, r)) = first_success {
-        to_verify.push(VerificationContext {
-            url: r.url.clone(),
-            deal_id: ctx.deal_id,
-            piece_cid: ctx.piece_cid.clone(),
-            root_cid: r.root_cid.clone(),
-            is_working_url: false,
-        });
-    }
+        .filter(|(_, r)| r.is_valid_car && r.content_length.unwrap_or(0) < MIN_VALID_CONTENT_LENGTH)
+        .count();
 
-    // Run verification
-    let working_url_verification =
-        label_verification::verify_batch(config, deal_label_repo, to_verify, &mut car_summary)
-            .await;
+    // Extract CAR info for working URL (diagnostic only, no verification)
+    let working_url_car_info = working_url_result.map(|(_, r)| {
+        serde_json::json!({
+            "is_valid_car": r.is_valid_car,
+            "root_cid": r.root_cid,
+            "content_length": r.content_length,
+        })
+    });
 
     // Build metadata
     let url_metadata = serde_json::json!({
@@ -263,8 +203,12 @@ pub async fn discover_url(
             "is_consistent": analysis.is_consistent,
             "is_reliable": analysis.is_reliable,
         },
-        "car_verification": car_summary,
-        "working_url_verification": working_url_verification,
+        "car_diagnostics": {
+            "responses_parsed": test_results.len(),
+            "valid_car_headers": valid_car_count,
+            "small_car_responses": small_car_count,
+            "working_url_car_info": working_url_car_info,
+        },
         "validated_at": Utc::now().to_rfc3339(),
     });
 
