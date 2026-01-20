@@ -28,6 +28,7 @@ pub struct UrlDiscoveryResult {
     pub is_consistent: bool,
     pub is_reliable: bool,
     pub url_metadata: Option<serde_json::Value>,
+    pub sector_utilization_percent: Option<f64>,
 }
 
 impl UrlDiscoveryResult {
@@ -45,6 +46,7 @@ impl UrlDiscoveryResult {
             is_consistent: false, // No verification performed yet
             is_reliable: false,   // No verification performed yet
             url_metadata: None,
+            sector_utilization_percent: None,
         }
     }
 
@@ -62,6 +64,7 @@ impl UrlDiscoveryResult {
             is_consistent: false, // No verification performed yet
             is_reliable: false,   // No verification performed yet
             url_metadata: None,
+            sector_utilization_percent: None,
         }
     }
 }
@@ -185,6 +188,28 @@ pub async fn discover_url(
         })
     });
 
+    // Calculate sector utilization (content_length / piece_size * 100)
+    let utilization_samples: Vec<f64> = test_results
+        .iter()
+        .filter(|(_, r)| r.success)
+        .filter_map(|(ctx, r)| {
+            let content_length = r.content_length? as f64;
+            let piece_size = ctx.piece_size? as f64;
+            if piece_size > 0.0 {
+                Some((content_length / piece_size) * 100.0)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    let sector_utilization_percent = if utilization_samples.is_empty() {
+        None
+    } else {
+        let sum: f64 = utilization_samples.iter().sum();
+        Some(sum / utilization_samples.len() as f64)
+    };
+
     // Build metadata
     let url_metadata = serde_json::json!({
         "analysis": {
@@ -209,6 +234,11 @@ pub async fn discover_url(
             "small_car_responses": small_car_count,
             "working_url_car_info": working_url_car_info,
         },
+        "sector_utilization": {
+            "sample_count": utilization_samples.len(),
+            "min_percent": utilization_samples.iter().cloned().reduce(f64::min),
+            "max_percent": utilization_samples.iter().cloned().reduce(f64::max),
+        },
         "validated_at": Utc::now().to_rfc3339(),
     });
 
@@ -217,6 +247,7 @@ pub async fn discover_url(
     result.is_consistent = analysis.is_consistent;
     result.is_reliable = analysis.is_reliable;
     result.url_metadata = Some(url_metadata);
+    result.sector_utilization_percent = sector_utilization_percent;
 
     result.result_code = if working_url.is_some() {
         ResultCode::Success

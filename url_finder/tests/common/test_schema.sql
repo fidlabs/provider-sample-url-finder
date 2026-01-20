@@ -6,5 +6,6 @@ CREATE TABLE IF NOT EXISTS unified_verified_deal (
     "claimId" INTEGER NOT NULL DEFAULT 0,
     "clientId" TEXT,
     "providerId" TEXT,
-    "pieceCid" TEXT
+    "pieceCid" TEXT,
+    "pieceSize" NUMERIC
 );

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO\n                    url_results (id, provider_id, client_id, result_type, working_url, retrievability_percent, result_code, error_code, tested_at, is_consistent, is_reliable, url_metadata)\n               SELECT\n                    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12\n               FROM UNNEST(\n                    $1::uuid[],\n                    $2::text[],\n                    $3::text[],\n                    $4::discovery_type[],\n                    $5::text[],\n                    $6::double precision[],\n                    $7::result_code[],\n                    $8::error_code[],\n                    $9::timestamptz[],\n                    $10::bool[],\n                    $11::bool[],\n                    $12::jsonb[]\n               ) AS t(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12)\n            ",
+  "query": "INSERT INTO\n                    url_results (id, provider_id, client_id, result_type, working_url, retrievability_percent, result_code, error_code, tested_at, is_consistent, is_reliable, url_metadata, sector_utilization_percent)\n               SELECT\n                    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13\n               FROM UNNEST(\n                    $1::uuid[],\n                    $2::text[],\n                    $3::text[],\n                    $4::discovery_type[],\n                    $5::text[],\n                    $6::double precision[],\n                    $7::result_code[],\n                    $8::error_code[],\n                    $9::timestamptz[],\n                    $10::bool[],\n                    $11::bool[],\n                    $12::jsonb[],\n                    $13::double precision[]\n               ) AS t(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13)\n            ",
   "describe": {
     "columns": [],
     "parameters": {
@@ -77,10 +77,11 @@
         "TimestamptzArray",
         "BoolArray",
         "BoolArray",
-        "JsonbArray"
+        "JsonbArray",
+        "Float8Array"
       ]
     },
     "nullable": []
   },
-  "hash": "c9b99b830a90ad5ae3628b32b0a333729f249d529981648fe150ce0318675c6c"
+  "hash": "b2dff2341802927f51749256a34eb4deb4f3b63ec3ca7c534ea17539f107e1b4"
 }

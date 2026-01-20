@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT DISTINCT ON (DATE(tested_at))\n                    DATE(tested_at) AS \"date!\",\n                    retrievability_percent::float8 AS \"retrievability_percent!\",\n                    is_consistent,\n                    is_reliable,\n                    working_url,\n                    result_code AS \"result_code: ResultCode\",\n                    error_code AS \"error_code: ErrorCode\",\n                    tested_at,\n                    url_metadata\n               FROM\n                    url_results\n               WHERE\n                    provider_id = $1\n                    AND result_type = 'Provider'\n                    AND tested_at >= $2::date\n                    AND tested_at < ($3::date + INTERVAL '1 day')\n               ORDER BY\n                    DATE(tested_at),\n                    tested_at DESC\n            ",
+  "query": "SELECT DISTINCT ON (DATE(tested_at))\n                    DATE(tested_at) AS \"date!\",\n                    retrievability_percent::float8 AS \"retrievability_percent!\",\n                    sector_utilization_percent::float8 AS \"sector_utilization_percent\",\n                    is_consistent,\n                    is_reliable,\n                    working_url,\n                    result_code AS \"result_code: ResultCode\",\n                    error_code AS \"error_code: ErrorCode\",\n                    tested_at,\n                    url_metadata\n               FROM\n                    url_results\n               WHERE\n                    provider_id = $1\n                    AND client_id = $2\n                    AND result_type = 'ProviderClient'\n                    AND tested_at >= $3::date\n                    AND tested_at < ($4::date + INTERVAL '1 day')\n               ORDER BY\n                    DATE(tested_at),\n                    tested_at DESC\n            ",
   "describe": {
     "columns": [
       {
@@ -15,21 +15,26 @@
       },
       {
         "ordinal": 2,
+        "name": "sector_utilization_percent",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 3,
         "name": "is_consistent",
         "type_info": "Bool"
       },
       {
-        "ordinal": 3,
+        "ordinal": 4,
         "name": "is_reliable",
         "type_info": "Bool"
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "working_url",
         "type_info": "Text"
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "result_code: ResultCode",
         "type_info": {
           "Custom": {
@@ -51,7 +56,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "error_code: ErrorCode",
         "type_info": {
           "Custom": {
@@ -69,12 +74,12 @@
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "tested_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "url_metadata",
         "type_info": "Jsonb"
       }
@@ -82,11 +87,13 @@
     "parameters": {
       "Left": [
         "Text",
+        "Text",
         "Date",
         "Date"
       ]
     },
     "nullable": [
+      null,
       null,
       null,
       true,
@@ -98,5 +105,5 @@
       true
     ]
   },
-  "hash": "b7b59fb41b0ee0ca9905c2415c59058bd3cd77e8e120e4a398a646bd850d923f"
+  "hash": "5def243cfa2cd40cc4c0b6269ee4cc0d6d0e9b8346b86a3bcda0f5ba8a8a4212"
 }

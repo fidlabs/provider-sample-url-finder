@@ -31,6 +31,7 @@ pub struct UrlResult {
     pub is_consistent: Option<bool>,
     pub is_reliable: Option<bool>,
     pub url_metadata: Option<serde_json::Value>,
+    pub sector_utilization_percent: Option<f64>,
 }
 
 impl From<UrlDiscoveryResult> for UrlResult {
@@ -48,6 +49,7 @@ impl From<UrlDiscoveryResult> for UrlResult {
             is_consistent: Some(result.is_consistent),
             is_reliable: Some(result.is_reliable),
             url_metadata: result.url_metadata,
+            sector_utilization_percent: result.sector_utilization_percent,
         }
     }
 }
@@ -56,6 +58,7 @@ impl From<UrlDiscoveryResult> for UrlResult {
 pub struct HistoryRow {
     pub date: NaiveDate,
     pub retrievability_percent: f64,
+    pub sector_utilization_percent: Option<f64>,
     pub is_consistent: Option<bool>,
     pub is_reliable: Option<bool>,
     pub working_url: Option<String>,
@@ -93,7 +96,8 @@ impl UrlResultRepository {
                     tested_at,
                     is_consistent,
                     is_reliable,
-                    url_metadata
+                    url_metadata,
+                    sector_utilization_percent::float8 AS "sector_utilization_percent"
                FROM
                     url_results
                WHERE
@@ -130,7 +134,8 @@ impl UrlResultRepository {
                     tested_at,
                     is_consistent,
                     is_reliable,
-                    url_metadata
+                    url_metadata,
+                    sector_utilization_percent::float8 AS "sector_utilization_percent"
                FROM
                     url_results
                WHERE
@@ -168,7 +173,8 @@ impl UrlResultRepository {
                     tested_at,
                     is_consistent,
                     is_reliable,
-                    url_metadata
+                    url_metadata,
+                    sector_utilization_percent::float8 AS "sector_utilization_percent"
                FROM
                     url_results
                WHERE
@@ -206,7 +212,8 @@ impl UrlResultRepository {
                     ur.tested_at,
                     ur.is_consistent,
                     ur.is_reliable,
-                    ur.url_metadata
+                    ur.url_metadata,
+                    ur.sector_utilization_percent::float8 AS "sector_utilization_percent"
                FROM
                     url_results ur
                JOIN
@@ -276,7 +283,8 @@ impl UrlResultRepository {
                     tested_at,
                     is_consistent,
                     is_reliable,
-                    url_metadata
+                    url_metadata,
+                    sector_utilization_percent::float8 AS "sector_utilization_percent"
                FROM
                     url_results
                WHERE
@@ -312,6 +320,7 @@ impl UrlResultRepository {
         let mut is_consistents: Vec<Option<bool>> = Vec::with_capacity(len);
         let mut is_reliables: Vec<Option<bool>> = Vec::with_capacity(len);
         let mut url_metadatas: Vec<Option<serde_json::Value>> = Vec::with_capacity(len);
+        let mut sector_utilization_percents: Vec<Option<f64>> = Vec::with_capacity(len);
 
         for result in results {
             ids.push(result.id);
@@ -326,13 +335,14 @@ impl UrlResultRepository {
             is_consistents.push(result.is_consistent);
             is_reliables.push(result.is_reliable);
             url_metadatas.push(result.url_metadata.clone());
+            sector_utilization_percents.push(result.sector_utilization_percent);
         }
 
         let result = sqlx::query!(
             r#"INSERT INTO
-                    url_results (id, provider_id, client_id, result_type, working_url, retrievability_percent, result_code, error_code, tested_at, is_consistent, is_reliable, url_metadata)
+                    url_results (id, provider_id, client_id, result_type, working_url, retrievability_percent, result_code, error_code, tested_at, is_consistent, is_reliable, url_metadata, sector_utilization_percent)
                SELECT
-                    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12
+                    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13
                FROM UNNEST(
                     $1::uuid[],
                     $2::text[],
@@ -345,8 +355,9 @@ impl UrlResultRepository {
                     $9::timestamptz[],
                     $10::bool[],
                     $11::bool[],
-                    $12::jsonb[]
-               ) AS t(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12)
+                    $12::jsonb[],
+                    $13::double precision[]
+               ) AS t(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13)
             "#,
             &ids as &[Uuid],
             &provider_ids as &[String],
@@ -359,7 +370,8 @@ impl UrlResultRepository {
             &tested_ats as &[DateTime<Utc>],
             &is_consistents as &[Option<bool>],
             &is_reliables as &[Option<bool>],
-            &url_metadatas as &[Option<serde_json::Value>]
+            &url_metadatas as &[Option<serde_json::Value>],
+            &sector_utilization_percents as &[Option<f64>]
         )
         .execute(&self.pool)
         .await?;
@@ -378,6 +390,7 @@ impl UrlResultRepository {
             r#"SELECT DISTINCT ON (DATE(tested_at))
                     DATE(tested_at) AS "date!",
                     retrievability_percent::float8 AS "retrievability_percent!",
+                    sector_utilization_percent::float8 AS "sector_utilization_percent",
                     is_consistent,
                     is_reliable,
                     working_url,
@@ -418,6 +431,7 @@ impl UrlResultRepository {
             r#"SELECT DISTINCT ON (DATE(tested_at))
                     DATE(tested_at) AS "date!",
                     retrievability_percent::float8 AS "retrievability_percent!",
+                    sector_utilization_percent::float8 AS "sector_utilization_percent",
                     is_consistent,
                     is_reliable,
                     working_url,

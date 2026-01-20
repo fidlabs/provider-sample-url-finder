@@ -136,6 +136,8 @@ pub struct ProviderResponse {
     pub working_url: Option<String>,
     pub retrievability_percent: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub sector_utilization_percent: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tested_at: Option<DateTime<Utc>>,
     // New: always returned
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -159,6 +161,8 @@ pub struct ProviderClientResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub working_url: Option<String>,
     pub retrievability_percent: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sector_utilization_percent: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tested_at: Option<DateTime<Utc>>,
     // New: always returned
@@ -246,6 +250,7 @@ impl ProviderResponse {
             provider_id: provider_address.to_string(),
             working_url: data.working_url,
             retrievability_percent: data.retrievability_percent,
+            sector_utilization_percent: data.sector_utilization_percent,
             tested_at: Some(data.tested_at),
             is_consistent: data.is_consistent,
             is_reliable: data.is_reliable,
@@ -339,6 +344,7 @@ impl ProviderClientResponse {
             client_id,
             working_url: data.working_url,
             retrievability_percent: data.retrievability_percent,
+            sector_utilization_percent: data.sector_utilization_percent,
             tested_at: Some(data.tested_at),
             is_consistent: data.is_consistent,
             is_reliable: data.is_reliable,

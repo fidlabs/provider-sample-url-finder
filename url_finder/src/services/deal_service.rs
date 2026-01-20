@@ -1,4 +1,5 @@
 use color_eyre::Result;
+use sqlx::types::BigDecimal;
 
 use crate::{
     repository::DealRepository,
@@ -10,15 +11,16 @@ use crate::{
 pub struct PieceTestContext {
     pub piece_cid: String,
     pub deal_id: i32,
+    pub piece_size: Option<i64>,
     pub url: String,
 }
 
-/// Get deals and extract piece contexts (piece_cid + deal_id)
+/// Get deals and extract piece contexts (piece_cid + deal_id + piece_size)
 pub async fn get_piece_contexts_by_provider(
     deal_repo: &DealRepository,
     provider_id: &ProviderId,
     client_id: Option<&ClientId>,
-) -> Result<Vec<(String, i32)>> {
+) -> Result<Vec<(String, i32, Option<i64>)>> {
     let limit = 100;
     let offset = 0;
 
@@ -36,12 +38,22 @@ pub async fn get_piece_contexts_by_provider(
         return Ok(vec![]);
     }
 
-    let contexts: Vec<(String, i32)> = deals
+    let contexts: Vec<(String, i32, Option<i64>)> = deals
         .iter()
-        .filter_map(|deal| deal.piece_cid.clone().map(|cid| (cid, deal.deal_id)))
+        .filter_map(|deal| {
+            deal.piece_cid.clone().map(|cid| {
+                let piece_size = deal.piece_size.as_ref().and_then(bigdecimal_to_i64);
+                (cid, deal.deal_id, piece_size)
+            })
+        })
         .collect();
 
     Ok(contexts)
+}
+
+fn bigdecimal_to_i64(val: &BigDecimal) -> Option<i64> {
+    use std::str::FromStr;
+    i64::from_str(&val.to_string()).ok()
 }
 
 /// Backward-compatible: get deals and extract piece_ids only
@@ -51,7 +63,7 @@ pub async fn get_piece_ids_by_provider(
     client_id: Option<&ClientId>,
 ) -> Result<Vec<String>> {
     let contexts = get_piece_contexts_by_provider(deal_repo, provider_id, client_id).await?;
-    Ok(contexts.into_iter().map(|(cid, _)| cid).collect())
+    Ok(contexts.into_iter().map(|(cid, _, _)| cid).collect())
 }
 
 pub async fn get_distinct_providers_by_client(
@@ -124,10 +136,10 @@ pub async fn get_random_piece_ids_by_provider(
     Ok(piece_ids)
 }
 
-/// Build test contexts: (piece_cid, deal_id, url) for each endpoint × piece combination
+/// Build test contexts: (piece_cid, deal_id, piece_size, url) for each endpoint × piece combination
 pub fn build_piece_test_contexts(
     endpoints: Vec<String>,
-    piece_contexts: Vec<(String, i32)>,
+    piece_contexts: Vec<(String, i32, Option<i64>)>,
 ) -> Vec<PieceTestContext> {
     endpoints
         .iter()
@@ -135,9 +147,10 @@ pub fn build_piece_test_contexts(
             let endpoint = endpoint.trim_end_matches('/');
             piece_contexts
                 .iter()
-                .map(move |(piece_cid, deal_id)| PieceTestContext {
+                .map(move |(piece_cid, deal_id, piece_size)| PieceTestContext {
                     piece_cid: piece_cid.clone(),
                     deal_id: *deal_id,
+                    piece_size: *piece_size,
                     url: format!("{endpoint}/piece/{piece_cid}"),
                 })
         })

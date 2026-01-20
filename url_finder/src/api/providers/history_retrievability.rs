@@ -58,6 +58,8 @@ pub struct RetrievabilityDataPoint {
     pub date: NaiveDate,
     pub retrievability_percent: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub sector_utilization_percent: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub is_consistent: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_reliable: Option<bool>,
@@ -74,10 +76,15 @@ pub struct RetrievabilityDataPoint {
 }
 
 impl RetrievabilityDataPoint {
-    fn basic(date: NaiveDate, retrievability_percent: f64) -> Self {
+    fn basic(
+        date: NaiveDate,
+        retrievability_percent: f64,
+        sector_utilization_percent: Option<f64>,
+    ) -> Self {
         Self {
             date,
             retrievability_percent,
+            sector_utilization_percent,
             is_consistent: None,
             is_reliable: None,
             working_url: None,
@@ -94,6 +101,7 @@ impl From<HistoryRow> for RetrievabilityDataPoint {
         Self {
             date: row.date,
             retrievability_percent: row.retrievability_percent,
+            sector_utilization_percent: row.sector_utilization_percent,
             is_consistent: row.is_consistent,
             is_reliable: row.is_reliable,
             working_url: row.working_url,
@@ -183,7 +191,11 @@ pub async fn handle_history_retrievability(
             if query.extended {
                 row.into()
             } else {
-                RetrievabilityDataPoint::basic(row.date, row.retrievability_percent)
+                RetrievabilityDataPoint::basic(
+                    row.date,
+                    row.retrievability_percent,
+                    row.sector_utilization_percent,
+                )
             }
         })
         .collect();
@@ -255,7 +267,11 @@ pub async fn handle_history_retrievability_client(
             if query.extended {
                 row.into()
             } else {
-                RetrievabilityDataPoint::basic(row.date, row.retrievability_percent)
+                RetrievabilityDataPoint::basic(
+                    row.date,
+                    row.retrievability_percent,
+                    row.sector_utilization_percent,
+                )
             }
         })
         .collect();

@@ -25,6 +25,7 @@ pub struct ProviderData {
     pub is_consistent: Option<bool>,
     pub is_reliable: Option<bool>,
     pub url_metadata: Option<serde_json::Value>,
+    pub sector_utilization_percent: Option<f64>,
     pub performance: PerformanceData,
 }
 
@@ -234,6 +235,7 @@ impl ProviderService {
             is_consistent: url_result.is_consistent,
             is_reliable: url_result.is_reliable,
             url_metadata: url_result.url_metadata,
+            sector_utilization_percent: url_result.sector_utilization_percent,
             performance: Self::build_performance(bms_result),
         }
     }
