@@ -19,6 +19,9 @@ pub struct StorageProvider {
     pub bms_test_status: Option<String>,
     pub bms_routing_key: Option<String>,
     pub last_bms_region_discovery_at: Option<DateTime<Utc>>,
+    pub is_consistent: bool,
+    pub is_reliable: bool,
+    pub url_metadata: Option<serde_json::Value>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -75,11 +78,14 @@ impl StorageProviderRepository {
                     bms_test_status,
                     bms_routing_key,
                     last_bms_region_discovery_at,
+                    is_consistent,
+                    is_reliable,
+                    url_metadata,
                     created_at,
                     updated_at
                FROM
                     storage_providers
-                WHERE
+               WHERE
                     provider_id = $1
             "#,
             provider_id as &ProviderId
@@ -102,6 +108,9 @@ impl StorageProviderRepository {
                     bms_test_status,
                     bms_routing_key,
                     last_bms_region_discovery_at,
+                    is_consistent,
+                    is_reliable,
+                    url_metadata,
                     created_at,
                     updated_at
                FROM
@@ -147,6 +156,9 @@ impl StorageProviderRepository {
         &self,
         provider_id: &ProviderId,
         last_working_url: Option<String>,
+        is_consistent: bool,
+        is_reliable: bool,
+        url_metadata: Option<serde_json::Value>,
     ) -> Result<()> {
         sqlx::query!(
             r#"UPDATE
@@ -156,15 +168,187 @@ impl StorageProviderRepository {
                     url_discovery_status = NULL,
                     url_discovery_pending_since = NULL,
                     last_working_url = $2,
+                    is_consistent = $3,
+                    is_reliable = $4,
+                    url_metadata = $5,
                     updated_at = NOW()
                WHERE
                     provider_id = $1
             "#,
             provider_id as &ProviderId,
-            last_working_url
+            last_working_url,
+            is_consistent,
+            is_reliable,
+            url_metadata
         )
         .execute(&self.pool)
         .await?;
         Ok(())
+    }
+
+    pub async fn get_due_for_bms_test(&self, limit: i64) -> Result<Vec<StorageProvider>> {
+        Ok(sqlx::query_as!(
+            StorageProvider,
+            r#"SELECT
+                    id,
+                    provider_id AS "provider_id: ProviderId",
+                    next_url_discovery_at,
+                    url_discovery_status,
+                    url_discovery_pending_since,
+                    last_working_url,
+                    next_bms_test_at,
+                    bms_test_status,
+                    bms_routing_key,
+                    last_bms_region_discovery_at,
+                    is_consistent,
+                    is_reliable,
+                    url_metadata,
+                    created_at,
+                    updated_at
+               FROM
+                    storage_providers
+               WHERE
+                    last_working_url IS NOT NULL
+                    AND is_consistent = true
+                    AND next_bms_test_at <= NOW()
+               ORDER BY
+                    next_bms_test_at ASC
+               LIMIT $1
+            "#,
+            limit
+        )
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
+    pub async fn schedule_next_bms_test(
+        &self,
+        provider_id: &ProviderId,
+        interval_days: i64,
+    ) -> Result<()> {
+        sqlx::query!(
+            r#"UPDATE
+                    storage_providers
+               SET
+                    next_bms_test_at = NOW() + ($2 || ' days')::INTERVAL,
+                    updated_at = NOW()
+               WHERE
+                    provider_id = $1
+            "#,
+            provider_id as &ProviderId,
+            interval_days.to_string()
+        )
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn reset_url_discovery_schedule(
+        &self,
+        provider_id: &ProviderId,
+    ) -> Result<Option<StorageProvider>> {
+        Ok(sqlx::query_as!(
+            StorageProvider,
+            r#"UPDATE
+                    storage_providers
+               SET
+                    next_url_discovery_at = NOW(),
+                    updated_at = NOW()
+               WHERE
+                    provider_id = $1
+               RETURNING
+                    id,
+                    provider_id AS "provider_id: ProviderId",
+                    next_url_discovery_at,
+                    url_discovery_status,
+                    url_discovery_pending_since,
+                    last_working_url,
+                    next_bms_test_at,
+                    bms_test_status,
+                    bms_routing_key,
+                    last_bms_region_discovery_at,
+                    is_consistent,
+                    is_reliable,
+                    url_metadata,
+                    created_at,
+                    updated_at
+            "#,
+            provider_id as &ProviderId
+        )
+        .fetch_optional(&self.pool)
+        .await?)
+    }
+
+    pub async fn reset_bms_test_schedule(
+        &self,
+        provider_id: &ProviderId,
+    ) -> Result<Option<StorageProvider>> {
+        Ok(sqlx::query_as!(
+            StorageProvider,
+            r#"UPDATE
+                    storage_providers
+               SET
+                    next_bms_test_at = NOW(),
+                    updated_at = NOW()
+               WHERE
+                    provider_id = $1
+               RETURNING
+                    id,
+                    provider_id AS "provider_id: ProviderId",
+                    next_url_discovery_at,
+                    url_discovery_status,
+                    url_discovery_pending_since,
+                    last_working_url,
+                    next_bms_test_at,
+                    bms_test_status,
+                    bms_routing_key,
+                    last_bms_region_discovery_at,
+                    is_consistent,
+                    is_reliable,
+                    url_metadata,
+                    created_at,
+                    updated_at
+            "#,
+            provider_id as &ProviderId
+        )
+        .fetch_optional(&self.pool)
+        .await?)
+    }
+
+    pub async fn reset_all_schedules(
+        &self,
+        provider_id: &ProviderId,
+    ) -> Result<Option<StorageProvider>> {
+        Ok(sqlx::query_as!(
+            StorageProvider,
+            r#"UPDATE
+                    storage_providers
+               SET
+                    next_url_discovery_at = NOW(),
+                    next_bms_test_at = NOW(),
+                    updated_at = NOW()
+               WHERE
+                    provider_id = $1
+               RETURNING
+                    id,
+                    provider_id AS "provider_id: ProviderId",
+                    next_url_discovery_at,
+                    url_discovery_status,
+                    url_discovery_pending_since,
+                    last_working_url,
+                    next_bms_test_at,
+                    bms_test_status,
+                    bms_routing_key,
+                    last_bms_region_discovery_at,
+                    is_consistent,
+                    is_reliable,
+                    url_metadata,
+                    created_at,
+                    updated_at
+            "#,
+            provider_id as &ProviderId
+        )
+        .fetch_optional(&self.pool)
+        .await?)
     }
 }

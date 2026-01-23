@@ -1,3 +1,4 @@
+use std::sync::Once;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -9,6 +10,7 @@ use tracing::info;
 const RETRI_TIMEOUT_SEC: u64 = 15;
 static ATOMIC_PROXY_PORT: AtomicU32 = AtomicU32::new(8001);
 static ATOMIC_PROXY_LAST_CHANGE: AtomicU64 = AtomicU64::new(0);
+static PROXY_LOG_ONCE: Once = Once::new();
 
 fn get_sticky_port_atomic(config: &Config) -> u32 {
     let proxy_default_port = config.proxy_default_port.unwrap();
@@ -52,7 +54,7 @@ pub fn build_client(config: &Config) -> Result<Client, reqwest::Error> {
         Some(proxy_user),
         Some(proxy_password),
         Some(proxy_ip_count),
-        Some(proxy_default_port),
+        Some(_proxy_default_port),
     ) = (
         &config.proxy_url,
         &config.proxy_user,
@@ -60,15 +62,15 @@ pub fn build_client(config: &Config) -> Result<Client, reqwest::Error> {
         &config.proxy_ip_count,
         &config.proxy_default_port,
     ) {
-        info!(
-            "Configuring HTTP client with proxy: {} (user: {}, ip_count: {}, default_port: {})",
-            proxy_url, proxy_user, proxy_ip_count, proxy_default_port
-        );
-
         let port = get_sticky_port_atomic(config);
         let proxy_url_result = format!("{}:{}", proxy_url, port);
 
-        info!("Start using proxy: {}", proxy_url_result);
+        PROXY_LOG_ONCE.call_once(|| {
+            info!(
+                "HTTP client configured with proxy: {} (user: {}, ip_count: {}, port: {})",
+                proxy_url, proxy_user, proxy_ip_count, port
+            );
+        });
 
         let proxy = (Proxy::http(proxy_url_result))?.basic_auth(proxy_user, proxy_password);
         builder = builder

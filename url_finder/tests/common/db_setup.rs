@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use chrono::{DateTime, Utc};
 use sqlx::{PgPool, Postgres, migrate::MigrateDatabase};
 
 pub use super::container::{POSTGRES_PASSWORD, POSTGRES_USER};
@@ -144,4 +145,125 @@ pub async fn seed_url_result(
     .execute(app_pool)
     .await
     .expect("Failed to insert url_result");
+}
+
+pub async fn seed_provider_with_url_status(
+    app_pool: &PgPool,
+    provider_id: &str,
+    last_working_url: Option<&str>,
+    is_consistent: bool,
+) {
+    sqlx::query(
+        r#"INSERT INTO
+                storage_providers (
+                    provider_id,
+                    last_working_url,
+                    is_consistent
+                )
+           VALUES
+                ($1, $2, $3)
+           ON CONFLICT (provider_id) DO UPDATE SET
+                last_working_url = $2,
+                is_consistent = $3"#,
+    )
+    .bind(provider_id)
+    .bind(last_working_url)
+    .bind(is_consistent)
+    .execute(app_pool)
+    .await
+    .expect("Failed to insert provider with url status");
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn seed_bms_bandwidth_result(
+    app_pool: &PgPool,
+    provider_id: &str,
+    url_tested: &str,
+    status: &str,
+    ping_avg_ms: Option<f64>,
+    head_avg_ms: Option<f64>,
+    ttfb_ms: Option<f64>,
+    download_speed_mbps: Option<f64>,
+) {
+    sqlx::query(
+        r#"INSERT INTO
+                bms_bandwidth_results (
+                    provider_id,
+                    bms_job_id,
+                    url_tested,
+                    routing_key,
+                    worker_count,
+                    status,
+                    ping_avg_ms,
+                    head_avg_ms,
+                    ttfb_ms,
+                    download_speed_mbps,
+                    completed_at
+                )
+           VALUES
+                ($1, gen_random_uuid(), $2, 'test-region', 1, $3, $4, $5, $6, $7, NOW())"#,
+    )
+    .bind(provider_id)
+    .bind(url_tested)
+    .bind(status)
+    .bind(ping_avg_ms)
+    .bind(head_avg_ms)
+    .bind(ttfb_ms)
+    .bind(download_speed_mbps)
+    .execute(app_pool)
+    .await
+    .expect("Failed to insert bms_bandwidth_result");
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn seed_url_result_at(
+    app_pool: &PgPool,
+    provider_id: &str,
+    client_id: Option<&str>,
+    working_url: Option<&str>,
+    retrievability: f64,
+    result_code: &str,
+    tested_at: DateTime<Utc>,
+    is_consistent: Option<bool>,
+    is_reliable: Option<bool>,
+) {
+    assert!(
+        (0.0..=100.0).contains(&retrievability),
+        "retrievability must be in range 0..=100, got {retrievability}"
+    );
+
+    let result_type = if client_id.is_some() {
+        "ProviderClient"
+    } else {
+        "Provider"
+    };
+
+    sqlx::query(
+        r#"INSERT INTO
+                url_results (
+                    provider_id,
+                    client_id,
+                    result_type,
+                    working_url,
+                    retrievability_percent,
+                    result_code,
+                    tested_at,
+                    is_consistent,
+                    is_reliable
+                )
+           VALUES
+                ($1, $2, $3::discovery_type, $4, $5, $6::result_code, $7, $8, $9)"#,
+    )
+    .bind(provider_id)
+    .bind(client_id)
+    .bind(result_type)
+    .bind(working_url)
+    .bind(retrievability)
+    .bind(result_code)
+    .bind(tested_at)
+    .bind(is_consistent)
+    .bind(is_reliable)
+    .execute(app_pool)
+    .await
+    .expect("Failed to insert url_result with timestamp");
 }

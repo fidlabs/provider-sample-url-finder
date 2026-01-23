@@ -1,6 +1,7 @@
 use color_eyre::Result;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
+use sqlx::types::BigDecimal;
 
 use crate::types::{ClientId, ProviderId};
 
@@ -17,6 +18,8 @@ pub struct UnifiedVerifiedDeal {
     pub client_id: Option<String>,
     pub provider_id: Option<String>,
     pub piece_cid: Option<String>,
+    #[serde(skip)]
+    pub piece_size: Option<BigDecimal>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -44,7 +47,8 @@ impl DealRepository {
                 "claimId" AS claim_id,
                 "clientId" AS client_id,
                 "providerId" AS provider_id,
-                "pieceCid" AS piece_cid
+                "pieceCid" AS piece_cid,
+                "pieceSize" AS piece_size
             FROM unified_verified_deal
             WHERE
                 "providerId" = $1
@@ -78,9 +82,10 @@ impl DealRepository {
                 "claimId" AS claim_id,
                 "clientId" AS client_id,
                 "providerId" AS provider_id,
-                "pieceCid" AS piece_cid
+                "pieceCid" AS piece_cid,
+                "pieceSize" AS piece_size
             FROM unified_verified_deal
-            WHERE 
+            WHERE
                 "providerId" = $1
                 AND "clientId" = $2
             ORDER BY random()
@@ -114,7 +119,8 @@ impl DealRepository {
                 "claimId" AS claim_id,
                 "clientId" AS client_id,
                 "providerId" AS provider_id,
-                "pieceCid" AS piece_cid
+                "pieceCid" AS piece_cid,
+                "pieceSize" AS piece_size
             FROM unified_verified_deal
             WHERE
                 "providerId" = $1
@@ -149,7 +155,8 @@ impl DealRepository {
                 "claimId" AS claim_id,
                 "clientId" AS client_id,
                 "providerId" AS provider_id,
-                "pieceCid" AS piece_cid
+                "pieceCid" AS piece_cid,
+                "pieceSize" AS piece_size
             FROM unified_verified_deal
             WHERE
                 "providerId" = $1

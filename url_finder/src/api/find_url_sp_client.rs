@@ -13,7 +13,8 @@ use utoipa::{IntoParams, ToSchema};
 
 use crate::{
     AppState, ResultCode,
-    types::{ClientAddress, ClientId, ProviderAddress, ProviderId},
+    services::provider_service::ProviderData,
+    types::{ClientAddress, ProviderAddress},
 };
 
 #[derive(Deserialize, ToSchema, IntoParams)]
@@ -31,11 +32,33 @@ pub struct FindUrlSpClientResponse {
     pub message: Option<String>,
 }
 
-/// Find a working url for a given SP address
+impl From<ProviderData> for FindUrlSpClientResponse {
+    fn from(data: ProviderData) -> Self {
+        Self {
+            result: data.result_code,
+            url: data.working_url,
+            message: None,
+        }
+    }
+}
+
+impl FindUrlSpClientResponse {
+    fn not_indexed() -> Self {
+        Self {
+            result: ResultCode::Error,
+            url: None,
+            message: Some(
+                "Provider/client pair has not been indexed yet. Please try again later."
+                    .to_string(),
+            ),
+        }
+    }
+}
+
 #[utoipa::path(
     get,
     path = "/url/find/{provider}/{client}",
-    params (FindUrlSpClientPath),
+    params(FindUrlSpClientPath),
     description = r#"
 **Find a working url for a given SP address**
     "#,
@@ -54,39 +77,30 @@ pub async fn handle_find_url_sp_client(
         ApiResponse<ErrorResponse>,
     >,
 ) -> Result<ApiResponse<FindUrlSpClientResponse>, ApiResponse<()>> {
-    debug!("find url input address: {:?}", &path.provider);
+    debug!(
+        "find url input addresses - provider: {:?}, client: {:?}",
+        &path.provider, &path.client
+    );
 
-    // Parse and validate provider and client addresses
-    let provider_address = ProviderAddress::new(path.provider)
+    let provider_address = ProviderAddress::new(&path.provider)
         .map_err(|e| bad_request(format!("Invalid provider address: {e}")))?;
-    let client_address = ClientAddress::new(path.client)
+    let client_address = ClientAddress::new(&path.client)
         .map_err(|e| bad_request(format!("Invalid client address: {e}")))?;
 
-    let provider_id: ProviderId = provider_address.into();
-    let client_id: ClientId = client_address.into();
+    let provider_id = provider_address.into();
+    let client_id = client_address.into();
 
     let result = state
-        .url_repo
-        .get_latest_for_provider_client(&provider_id, &client_id)
+        .provider_service
+        .get_provider_client(&provider_id, &client_id)
         .await
         .map_err(|e| {
-            debug!("Failed to query url_results: {:?}", e);
+            debug!("Failed to query provider+client: {:?}", e);
             internal_server_error("Failed to query url results")
         })?;
 
-    match result {
-        Some(url_result) => Ok(ok_response(FindUrlSpClientResponse {
-            result: url_result.result_code,
-            url: url_result.working_url,
-            message: None,
-        })),
-        None => Ok(ok_response(FindUrlSpClientResponse {
-            result: ResultCode::Error,
-            url: None,
-            message: Some(
-                "Provider/client pair has not been indexed yet. Please try again later."
-                    .to_string(),
-            ),
-        })),
-    }
+    Ok(ok_response(match result {
+        Some(data) => data.into(),
+        None => FindUrlSpClientResponse::not_indexed(),
+    }))
 }

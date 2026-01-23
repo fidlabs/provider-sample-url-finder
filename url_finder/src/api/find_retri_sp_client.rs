@@ -13,7 +13,8 @@ use utoipa::{IntoParams, ToSchema};
 
 use crate::{
     AppState,
-    types::{ClientAddress, ClientId, ProviderAddress, ProviderId},
+    services::provider_service::ProviderData,
+    types::{ClientAddress, ProviderAddress},
 };
 
 use super::ResultCode;
@@ -32,13 +33,35 @@ pub struct FindRetriByClientAndSpResponse {
     pub message: Option<String>,
 }
 
-/// Find retrievability of urls for a given SP and Client address
+impl From<ProviderData> for FindRetriByClientAndSpResponse {
+    fn from(data: ProviderData) -> Self {
+        Self {
+            result: data.result_code,
+            retrievability_percent: data.retrievability_percent,
+            message: None,
+        }
+    }
+}
+
+impl FindRetriByClientAndSpResponse {
+    fn not_indexed() -> Self {
+        Self {
+            result: ResultCode::Error,
+            retrievability_percent: 0.0,
+            message: Some(
+                "Provider/client pair has not been indexed yet. Please try again later."
+                    .to_string(),
+            ),
+        }
+    }
+}
+
 #[utoipa::path(
     get,
     path = "/url/retrievability/{provider}/{client}",
-    params (FindRetriByClientAndSpPath),
+    params(FindRetriByClientAndSpPath),
     description = r#"
-**Find retrievabiliy of urls for a given SP and Client address**
+**Find retrievability of urls for a given SP and Client address**
     "#,
     responses(
         (status = 200, description = "Successful check", body = FindRetriByClientAndSpResponse),
@@ -60,37 +83,25 @@ pub async fn handle_find_retri_by_client_and_sp(
         &path.provider, &path.client
     );
 
-    // Parse and validate provider and client addresses
-    let provider_address = ProviderAddress::new(path.provider)
+    let provider_address = ProviderAddress::new(&path.provider)
         .map_err(|e| bad_request(format!("Invalid provider address: {e}")))?;
-    let client_address = ClientAddress::new(path.client)
+    let client_address = ClientAddress::new(&path.client)
         .map_err(|e| bad_request(format!("Invalid client address: {e}")))?;
 
-    let provider_id: ProviderId = provider_address.into();
-    let client_id: ClientId = client_address.into();
+    let provider_id = provider_address.into();
+    let client_id = client_address.into();
 
     let result = state
-        .url_repo
-        .get_latest_for_provider_client(&provider_id, &client_id)
+        .provider_service
+        .get_provider_client(&provider_id, &client_id)
         .await
         .map_err(|e| {
-            debug!("Failed to query url_results: {:?}", e);
-            internal_server_error("Failed to query url results")
+            debug!("Failed to query provider+client: {:?}", e);
+            internal_server_error("Failed to query provider data")
         })?;
 
-    match result {
-        Some(url_result) => Ok(ok_response(FindRetriByClientAndSpResponse {
-            result: url_result.result_code,
-            retrievability_percent: url_result.retrievability_percent,
-            message: None,
-        })),
-        None => Ok(ok_response(FindRetriByClientAndSpResponse {
-            result: ResultCode::Error,
-            retrievability_percent: 0.0,
-            message: Some(
-                "Provider/client pair has not been indexed yet. Please try again later."
-                    .to_string(),
-            ),
-        })),
-    }
+    Ok(ok_response(match result {
+        Some(data) => data.into(),
+        None => FindRetriByClientAndSpResponse::not_indexed(),
+    }))
 }

@@ -1,8 +1,39 @@
 use std::env;
 
 use color_eyre::Result;
+use tracing::warn;
 
 use crate::types::DbConnectParams;
+
+// Double-tap consistency testing settings
+pub const DOUBLE_TAP_DELAY_MS: u64 = 500;
+pub const RANGE_REQUEST_BYTES: u64 = 4096;
+pub const MAX_CONCURRENT_URL_TESTS: usize = 20;
+
+// Thresholds
+pub const RELIABILITY_TIMEOUT_THRESHOLD: f64 = 0.30;
+pub const MIN_VALID_CONTENT_LENGTH: u64 = 8 * 1024 * 1024 * 1024; // 8GB
+
+// History endpoint settings
+pub const MAX_HISTORY_DAYS: i64 = 30;
+
+fn parse_positive_i64_or_default(env_var: &str, default: i64) -> i64 {
+    assert!(default > 0, "default must be positive");
+    match env::var(env_var) {
+        Ok(s) => match s.parse::<i64>() {
+            Ok(v) if v > 0 => v,
+            Ok(v) => {
+                warn!("{env_var}={v} is not positive, defaulting to {default}");
+                default
+            }
+            Err(e) => {
+                warn!("{env_var}='{s}' is not a valid integer ({e}), defaulting to {default}");
+                default
+            }
+        },
+        Err(_) => default,
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -16,6 +47,9 @@ pub struct Config {
     pub proxy_password: Option<String>,
     pub proxy_ip_count: Option<u32>,
     pub proxy_default_port: Option<u32>,
+    pub bms_url: String,
+    pub bms_default_worker_count: i64,
+    pub bms_test_interval_days: i64,
 }
 
 impl Config {
@@ -44,6 +78,9 @@ impl Config {
                 .ok()
                 .and_then(|s| s.parse().ok()),
             proxy_ip_count: env::var("PROXY_IP_COUNT").ok().and_then(|s| s.parse().ok()),
+            bms_url: env::var("BMS_URL").expect("BMS_URL must be set"),
+            bms_default_worker_count: parse_positive_i64_or_default("BMS_WORKER_COUNT", 10),
+            bms_test_interval_days: parse_positive_i64_or_default("BMS_TEST_INTERVAL_DAYS", 7),
         })
     }
 
@@ -60,6 +97,9 @@ impl Config {
             proxy_user: None,
             proxy_ip_count: None,
             proxy_default_port: None,
+            bms_url: "http://localhost:8080".to_string(),
+            bms_default_worker_count: 10,
+            bms_test_interval_days: 7,
         }
     }
 }

@@ -46,13 +46,13 @@ pub async fn get_contact(
         .await
         .map_err(|_| CidContactError::InvalidResponse)?;
 
-    debug!("cid contact status: {:?}", res.status());
+    let status = res.status();
+    debug!("cid contact status: {:?}", status);
 
-    if !res.status().is_success() {
-        debug!(
-            "cid contact returned non-success status: {:?}",
-            res.status()
-        );
+    if !status.is_success() {
+        debug!("cid contact returned non-success status: {:?}", status);
+        // Drain body to allow connection reuse
+        let _ = res.text().await;
         return Err(CidContactError::NoData);
     }
 

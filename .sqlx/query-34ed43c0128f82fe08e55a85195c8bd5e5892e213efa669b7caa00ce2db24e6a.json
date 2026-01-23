@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT\n                    id,\n                    provider_id AS \"provider_id: ProviderId\",\n                    next_url_discovery_at,\n                    url_discovery_status,\n                    url_discovery_pending_since,\n                    last_working_url,\n                    next_bms_test_at,\n                    bms_test_status,\n                    bms_routing_key,\n                    last_bms_region_discovery_at,\n                    created_at,\n                    updated_at\n               FROM\n                    storage_providers\n               WHERE\n                    (\n                        next_url_discovery_at <= NOW()\n                        AND url_discovery_status IS DISTINCT FROM 'pending'\n                    )\n                    OR\n                    (\n                        url_discovery_status = 'pending'\n                        AND url_discovery_pending_since < NOW() - INTERVAL '60 minutes'\n                    )\n               ORDER BY\n                    next_url_discovery_at ASC\n               LIMIT $1\n            ",
+  "query": "SELECT\n                    id,\n                    provider_id AS \"provider_id: ProviderId\",\n                    next_url_discovery_at,\n                    url_discovery_status,\n                    url_discovery_pending_since,\n                    last_working_url,\n                    next_bms_test_at,\n                    bms_test_status,\n                    bms_routing_key,\n                    last_bms_region_discovery_at,\n                    is_consistent,\n                    is_reliable,\n                    url_metadata,\n                    created_at,\n                    updated_at\n               FROM\n                    storage_providers\n               WHERE\n                    last_working_url IS NOT NULL\n                    AND is_consistent = true\n                    AND next_bms_test_at <= NOW()\n               ORDER BY\n                    next_bms_test_at ASC\n               LIMIT $1\n            ",
   "describe": {
     "columns": [
       {
@@ -55,11 +55,26 @@
       },
       {
         "ordinal": 10,
+        "name": "is_consistent",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 11,
+        "name": "is_reliable",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 12,
+        "name": "url_metadata",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 13,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 11,
+        "ordinal": 14,
         "name": "updated_at",
         "type_info": "Timestamptz"
       }
@@ -81,8 +96,11 @@
       true,
       true,
       false,
+      false,
+      true,
+      false,
       false
     ]
   },
-  "hash": "808f33282188dbb6bc4ed48c3cbad3f9f793e9b51bbb50736d979733cd4455d5"
+  "hash": "34ed43c0128f82fe08e55a85195c8bd5e5892e213efa669b7caa00ce2db24e6a"
 }

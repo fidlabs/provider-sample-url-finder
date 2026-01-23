@@ -8,13 +8,10 @@ use axum::{
 use axum_extra::extract::WithRejection;
 use color_eyre::Result;
 use serde::{Deserialize, Serialize};
-use tracing::debug;
+use tracing::{debug, warn};
 use utoipa::{IntoParams, ToSchema};
 
-use crate::{
-    AppState,
-    types::{ProviderAddress, ProviderId},
-};
+use crate::{AppState, services::provider_service::ProviderData, types::ProviderAddress};
 
 use super::ResultCode;
 
@@ -31,11 +28,30 @@ pub struct FindRetriBySpResponse {
     pub message: Option<String>,
 }
 
-/// Find retrivabiliy of urls for a given SP address
+impl From<ProviderData> for FindRetriBySpResponse {
+    fn from(data: ProviderData) -> Self {
+        Self {
+            result: data.result_code,
+            retrievability_percent: data.retrievability_percent,
+            message: None,
+        }
+    }
+}
+
+impl FindRetriBySpResponse {
+    fn not_indexed() -> Self {
+        Self {
+            result: ResultCode::Error,
+            retrievability_percent: 0.0,
+            message: Some("Provider has not been indexed yet. Please try again later.".to_string()),
+        }
+    }
+}
+
 #[utoipa::path(
     get,
     path = "/url/retrievability/{provider}",
-    params (FindRetriBySpPath),
+    params(FindRetriBySpPath),
     description = r#"
 **Find retrievabiliy of urls for a given SP address**
     "#,
@@ -56,31 +72,22 @@ pub async fn handle_find_retri_by_sp(
 ) -> Result<ApiResponse<FindRetriBySpResponse>, ApiResponse<()>> {
     debug!("find retri for input address: {:?}", &path.provider);
 
-    // Parse and validate provider address
-    let provider_address = ProviderAddress::new(path.provider)
+    let provider_address = ProviderAddress::new(&path.provider)
         .map_err(|e| bad_request(format!("Invalid provider address: {e}")))?;
 
-    let provider_id: ProviderId = provider_address.into();
+    let provider_id = provider_address.into();
 
     let result = state
-        .url_repo
-        .get_latest_for_provider(&provider_id)
+        .provider_service
+        .get_provider(&provider_id)
         .await
         .map_err(|e| {
-            debug!("Failed to query url_results: {:?}", e);
-            internal_server_error("Failed to query url results")
+            warn!("Failed to query provider: {:?}", e);
+            internal_server_error("Failed to query provider")
         })?;
 
-    match result {
-        Some(url_result) => Ok(ok_response(FindRetriBySpResponse {
-            result: url_result.result_code,
-            retrievability_percent: url_result.retrievability_percent,
-            message: None,
-        })),
-        None => Ok(ok_response(FindRetriBySpResponse {
-            result: ResultCode::Error,
-            retrievability_percent: 0.0,
-            message: Some("Provider has not been indexed yet. Please try again later.".to_string()),
-        })),
-    }
+    Ok(ok_response(match result {
+        Some(data) => data.into(),
+        None => FindRetriBySpResponse::not_indexed(),
+    }))
 }

@@ -65,7 +65,7 @@ pub async fn valid_curio_provider(
                 break;
             }
             Err(e) => {
-                info!("Attempt {attempt}/3 failed: {e} for address: {address}");
+                debug!("Attempt {attempt}/3 failed: {e} for address: {address}");
                 sleep(Duration::from_secs(1)).await;
             }
         }
@@ -123,11 +123,23 @@ pub async fn get_provider_endpoints(
     }
 
     // parse addresses to http endpoints
-    let endpoints = multiaddr_parser::parse(addrs);
+    let mut endpoints = multiaddr_parser::parse(addrs);
     if endpoints.is_empty() {
         debug!("Missing http addr from cid contact, No endpoints found");
 
         return Ok((ResultCode::MissingHttpAddrFromCidContact, None));
+    }
+
+    // Deduplicate endpoints
+    let original_count = endpoints.len();
+    endpoints.sort();
+    endpoints.dedup();
+    if endpoints.len() < original_count {
+        debug!(
+            "Deduplicated endpoints: {} -> {} unique",
+            original_count,
+            endpoints.len()
+        );
     }
 
     Ok((ResultCode::Success, Some(endpoints)))

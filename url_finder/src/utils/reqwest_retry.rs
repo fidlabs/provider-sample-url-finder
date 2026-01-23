@@ -40,6 +40,27 @@ pub fn build_reqwest_retry_client(
     min_retry_interval_ms: u64,
     max_retry_interval_ms: u64,
 ) -> ClientWithMiddleware {
+    build_reqwest_retry_client_with_config(
+        min_retry_interval_ms,
+        max_retry_interval_ms,
+        3,
+        None,
+        None,
+    )
+}
+
+/// Build an HTTP client with configurable retry policy and timeouts.
+///
+/// - `max_retries`: Number of retry attempts (use 1 for services with long gateway timeouts)
+/// - `connect_timeout_ms`: TCP connection timeout (None = no timeout)
+/// - `request_timeout_ms`: Per-request timeout applied to each attempt (None = no timeout)
+pub fn build_reqwest_retry_client_with_config(
+    min_retry_interval_ms: u64,
+    max_retry_interval_ms: u64,
+    max_retries: u32,
+    connect_timeout_ms: Option<u64>,
+    request_timeout_ms: Option<u64>,
+) -> ClientWithMiddleware {
     let retry_policy = ExponentialBackoff::builder()
         .jitter(Jitter::None)
         .base(2)
@@ -47,10 +68,22 @@ pub fn build_reqwest_retry_client(
             Duration::from_millis(min_retry_interval_ms),
             Duration::from_millis(max_retry_interval_ms),
         )
-        .build_with_max_retries(3);
+        .build_with_max_retries(max_retries);
 
-    ClientBuilder::new(Client::new())
-        .with(HttpRequestContextLogger) // Add context before retry middleware
+    let mut client_builder = Client::builder();
+
+    if let Some(connect_ms) = connect_timeout_ms {
+        client_builder = client_builder.connect_timeout(Duration::from_millis(connect_ms));
+    }
+
+    if let Some(request_ms) = request_timeout_ms {
+        client_builder = client_builder.timeout(Duration::from_millis(request_ms));
+    }
+
+    let client = client_builder.build().expect("Failed to build HTTP client");
+
+    ClientBuilder::new(client)
+        .with(HttpRequestContextLogger)
         .with(RetryTransientMiddleware::new_with_policy(retry_policy))
         .build()
 }

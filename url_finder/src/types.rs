@@ -448,6 +448,105 @@ impl PgHasArrayType for ErrorCode {
     }
 }
 
+/// Error types for URL testing operations
+#[derive(Debug, Clone, PartialEq)]
+pub enum UrlTestError {
+    Timeout,
+    ConnectionRefused,
+    ConnectionReset,
+    DnsFailure,
+    TlsError,
+    HttpError(u16),
+    Other(String),
+}
+
+impl std::fmt::Display for UrlTestError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Timeout => write!(f, "timeout"),
+            Self::ConnectionRefused => write!(f, "connection_refused"),
+            Self::ConnectionReset => write!(f, "connection_reset"),
+            Self::DnsFailure => write!(f, "dns_failure"),
+            Self::TlsError => write!(f, "tls_error"),
+            Self::HttpError(code) => write!(f, "http_{code}"),
+            Self::Other(msg) => write!(f, "other: {msg}"),
+        }
+    }
+}
+
+/// Classification of why a URL test was inconsistent
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InconsistencyType {
+    /// (Small|Failed, Valid) - Second tap returned valid data after warm-up.
+    /// Provider CAN serve data, just needs initial request to "warm up".
+    /// This is the pattern double-tap was designed to detect and handle.
+    WarmUp,
+    /// (Valid, Small|Failed) - First tap valid, second degraded.
+    /// Provider is unreliable - served data once then stopped.
+    Flaky,
+    /// (Small, Small|Failed) or (Failed, Small) - Neither tap returned valid data.
+    /// Provider consistently returns small/garbage responses.
+    SmallResponses,
+    /// (Failed, Failed) - Both taps failed completely.
+    /// Provider unreachable or broken.
+    BothFailed,
+    /// (Valid, Valid) but different Content-Length.
+    /// Data integrity issue - file size changed between requests.
+    SizeMismatch,
+}
+
+/// Result of a double-tap URL test
+#[derive(Debug, Clone)]
+pub struct UrlTestResult {
+    pub url: String,
+    pub success: bool,
+    pub consistent: bool,
+    pub inconsistency_type: Option<InconsistencyType>,
+    pub content_length: Option<u64>,
+    pub response_time_ms: u64,
+    pub error: Option<UrlTestError>,
+    // CAR header info
+    pub is_valid_car: bool,
+    pub root_cid: Option<String>,
+}
+
+/// Analysis of URL test results for a provider
+#[derive(Debug, Clone)]
+pub struct ProviderAnalysis {
+    pub retrievability_percent: f64,
+    pub is_consistent: bool,
+    pub is_reliable: bool,
+    pub sample_count: usize,
+    pub success_count: usize,
+    pub timeout_count: usize,
+    pub inconsistent_count: usize,
+    pub inconsistent_warm_up: usize,
+    pub inconsistent_flaky: usize,
+    pub inconsistent_small_responses: usize,
+    pub inconsistent_both_failed: usize,
+    pub inconsistent_size_mismatch: usize,
+}
+
+impl ProviderAnalysis {
+    pub fn empty() -> Self {
+        Self {
+            retrievability_percent: 0.0,
+            is_consistent: false,
+            is_reliable: false,
+            sample_count: 0,
+            success_count: 0,
+            timeout_count: 0,
+            inconsistent_count: 0,
+            inconsistent_warm_up: 0,
+            inconsistent_flaky: 0,
+            inconsistent_small_responses: 0,
+            inconsistent_both_failed: 0,
+            inconsistent_size_mismatch: 0,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

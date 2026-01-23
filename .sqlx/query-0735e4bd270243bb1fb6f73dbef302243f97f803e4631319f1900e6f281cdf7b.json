@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT\n                    id,\n                    provider_id AS \"provider_id: ProviderId\",\n                    next_url_discovery_at,\n                    url_discovery_status,\n                    url_discovery_pending_since,\n                    last_working_url,\n                    next_bms_test_at,\n                    bms_test_status,\n                    bms_routing_key,\n                    last_bms_region_discovery_at,\n                    created_at,\n                    updated_at\n               FROM\n                    storage_providers\n                WHERE\n                    provider_id = $1\n            ",
+  "query": "UPDATE\n                    storage_providers\n               SET\n                    next_bms_test_at = NOW(),\n                    updated_at = NOW()\n               WHERE\n                    provider_id = $1\n               RETURNING\n                    id,\n                    provider_id AS \"provider_id: ProviderId\",\n                    next_url_discovery_at,\n                    url_discovery_status,\n                    url_discovery_pending_since,\n                    last_working_url,\n                    next_bms_test_at,\n                    bms_test_status,\n                    bms_routing_key,\n                    last_bms_region_discovery_at,\n                    is_consistent,\n                    is_reliable,\n                    url_metadata,\n                    created_at,\n                    updated_at\n            ",
   "describe": {
     "columns": [
       {
@@ -55,11 +55,26 @@
       },
       {
         "ordinal": 10,
+        "name": "is_consistent",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 11,
+        "name": "is_reliable",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 12,
+        "name": "url_metadata",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 13,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 11,
+        "ordinal": 14,
         "name": "updated_at",
         "type_info": "Timestamptz"
       }
@@ -81,8 +96,11 @@
       true,
       true,
       false,
+      false,
+      true,
+      false,
       false
     ]
   },
-  "hash": "6d0246db36942f288a537ce27d69774377dbdca219880e5d54c21c817813d648"
+  "hash": "0735e4bd270243bb1fb6f73dbef302243f97f803e4631319f1900e6f281cdf7b"
 }

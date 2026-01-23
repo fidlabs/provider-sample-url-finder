@@ -1,6 +1,12 @@
 use std::{sync::Arc, time::Duration};
 
-use axum::{Router, body::Body, http::Response, response::IntoResponse, routing::get};
+use axum::{
+    Router,
+    body::Body,
+    http::Response,
+    response::IntoResponse,
+    routing::{get, post},
+};
 use tower_governor::{
     GovernorError, GovernorLayer, governor::GovernorConfigBuilder,
     key_extractor::SmartIpKeyExtractor,
@@ -51,7 +57,7 @@ pub fn create_routes() -> Router<Arc<AppState>> {
 
     let swagger_routes = SwaggerUi::new("/").url("/api-doc/openapi.json", ApiDoc::openapi());
 
-    let api_routes = Router::new()
+    let legacy_api_routes = Router::new()
         .route("/url/find/{provider}", get(handle_find_url_sp))
         .route(
             "/url/find/{provider}/{client}",
@@ -71,6 +77,35 @@ pub fn create_routes() -> Router<Arc<AppState>> {
                 .error_handler(too_many_requests_error_handler),
         );
 
+    let providers_api_routes = Router::new()
+        .route("/providers", get(providers::handle_list_providers))
+        .route("/providers/bulk", post(providers::handle_bulk_providers))
+        .route("/providers/{id}", get(providers::handle_get_provider))
+        .route(
+            "/providers/{id}/reset",
+            post(providers::handle_reset_provider),
+        )
+        .route(
+            "/providers/{id}/clients/{client_id}",
+            get(providers::handle_get_provider_client),
+        )
+        .route(
+            "/providers/{id}/history/retrievability",
+            get(providers::handle_history_retrievability),
+        )
+        .route(
+            "/providers/{id}/clients/{client_id}/history/retrievability",
+            get(providers::handle_history_retrievability_client),
+        )
+        .route(
+            "/clients/{id}/providers",
+            get(providers::handle_get_client_providers),
+        )
+        .layer(
+            GovernorLayer::new(governor_config.clone())
+                .error_handler(too_many_requests_error_handler),
+        );
+
     let healthcheck_route = Router::new()
         .route("/healthcheck", get(handle_healthcheck))
         .layer(
@@ -80,6 +115,7 @@ pub fn create_routes() -> Router<Arc<AppState>> {
 
     Router::new()
         .merge(swagger_routes)
-        .merge(api_routes)
+        .merge(legacy_api_routes)
+        .merge(providers_api_routes)
         .merge(healthcheck_route)
 }
