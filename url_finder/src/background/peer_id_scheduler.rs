@@ -8,7 +8,7 @@ use tracing::{debug, error, info};
 use crate::config::Config;
 use crate::lotus_rpc;
 use crate::provider_endpoints::valid_curio_provider;
-use crate::repository::StorageProviderRepository;
+use crate::repository::{StorageProvider, StorageProviderRepository};
 use crate::types::{ProviderAddress, ProviderId};
 
 const SCHEDULER_INTERVAL: Duration = Duration::from_secs(300); // 5 minutes
@@ -71,7 +71,7 @@ async fn refresh_peer_ids(
 async fn process_provider_batch(
     config: &Config,
     sp_repo: &StorageProviderRepository,
-    providers: Vec<crate::types::StorageProvider>,
+    providers: Vec<StorageProvider>,
     action: &str,
 ) -> usize {
     let mut count = 0;
