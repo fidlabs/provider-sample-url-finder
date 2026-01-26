@@ -388,19 +388,20 @@ pub enum ErrorCode {
     FailedToGetPeerId,
     FailedToGetDeals,
     FailedToGetPeerIdFromCurio,
+    PeerIdNotCached,
 }
 
 impl fmt::Display for ErrorCode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let s = match self {
-            ErrorCode::NoProviderOrClient => "NoProviderOrClient",
-            ErrorCode::NoProvidersFound => "NoProvidersFound",
-            ErrorCode::FailedToRetrieveCidContactData => "FailedToRetrieveCidContactData",
-            ErrorCode::FailedToGetPeerId => "FailedToGetPeerId",
-            ErrorCode::FailedToGetDeals => "FailedToGetDeals",
-            ErrorCode::FailedToGetPeerIdFromCurio => "FailedToGetPeerIdFromCurio",
-        };
-        write!(f, "{s}")
+        match self {
+            Self::NoProviderOrClient => write!(f, "NoProviderOrClient"),
+            Self::NoProvidersFound => write!(f, "NoProvidersFound"),
+            Self::FailedToRetrieveCidContactData => write!(f, "FailedToRetrieveCidContactData"),
+            Self::FailedToGetPeerId => write!(f, "FailedToGetPeerId"),
+            Self::FailedToGetDeals => write!(f, "FailedToGetDeals"),
+            Self::FailedToGetPeerIdFromCurio => write!(f, "FailedToGetPeerIdFromCurio"),
+            Self::PeerIdNotCached => write!(f, "PeerIdNotCached"),
+        }
     }
 }
 
@@ -415,6 +416,7 @@ impl FromStr for ErrorCode {
             "FailedToGetPeerId" => Ok(Self::FailedToGetPeerId),
             "FailedToGetDeals" => Ok(Self::FailedToGetDeals),
             "FailedToGetPeerIdFromCurio" => Ok(Self::FailedToGetPeerIdFromCurio),
+            "PeerIdNotCached" => Ok(Self::PeerIdNotCached),
             _ => Err(color_eyre::eyre::eyre!("Invalid error code: {}", s)),
         }
     }

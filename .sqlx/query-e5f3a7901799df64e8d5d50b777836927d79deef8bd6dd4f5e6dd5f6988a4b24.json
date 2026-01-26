@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE\n                    storage_providers\n               SET\n                    peer_id = $2,\n                    peer_id_fetched_at = NOW(),\n                    updated_at = NOW()\n               WHERE\n                    provider_id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e5f3a7901799df64e8d5d50b777836927d79deef8bd6dd4f5e6dd5f6988a4b24"
+}

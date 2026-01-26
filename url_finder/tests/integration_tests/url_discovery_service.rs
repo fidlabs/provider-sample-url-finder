@@ -9,14 +9,21 @@ use url_finder::{
 fn setup_discovery_params(
     ctx: &TestContext,
     fixture: &ProviderFixture,
-) -> (ProviderAddress, ClientAddress, DealRepository, Config) {
+) -> (
+    ProviderAddress,
+    ClientAddress,
+    DealRepository,
+    Config,
+    String,
+) {
     let provider_address = fixture.provider_address.clone();
     let client_address = test_client_address();
     let deal_repo = DealRepository::new(ctx.dbs.app_pool.clone());
     let lotus_url = ctx.mocks.lotus_url();
     let lotus_base = lotus_url.trim_end_matches('/');
     let config = Config::new_for_test(format!("{lotus_base}/rpc/v1"), ctx.mocks.cid_contact_url());
-    (provider_address, client_address, deal_repo, config)
+    let peer_id = fixture.peer_id.clone();
+    (provider_address, client_address, deal_repo, config, peer_id)
 }
 
 #[tokio::test]
@@ -35,10 +42,17 @@ async fn test_url_discovery_success() {
         )
         .await;
 
-    let (provider_address, client_address, deal_repo, config) =
+    let (provider_address, client_address, deal_repo, config, peer_id) =
         setup_discovery_params(&ctx, &fixture);
 
-    let result = discover_url(&config, &provider_address, Some(client_address), &deal_repo).await;
+    let result = discover_url(
+        &config,
+        &provider_address,
+        Some(client_address),
+        &deal_repo,
+        Some(peer_id),
+    )
+    .await;
 
     assert_eq!(result.result_code, ResultCode::Success, "Expected Success");
 
@@ -71,10 +85,17 @@ async fn test_url_discovery_partial_retrievability() {
         )
         .await;
 
-    let (provider_address, client_address, deal_repo, config) =
+    let (provider_address, client_address, deal_repo, config, peer_id) =
         setup_discovery_params(&ctx, &fixture);
 
-    let result = discover_url(&config, &provider_address, Some(client_address), &deal_repo).await;
+    let result = discover_url(
+        &config,
+        &provider_address,
+        Some(client_address),
+        &deal_repo,
+        Some(peer_id),
+    )
+    .await;
 
     assert_eq!(
         result.result_code,

@@ -107,6 +107,16 @@ async fn main() -> Result<()> {
         }
     });
 
+    // Start the peer_id scheduler in the background
+    let peer_id_scheduler_handle: JoinHandle<()> = tokio::spawn({
+        let config = config.clone();
+        let sp_repo = sp_repo.clone();
+        let shutdown = shutdown_token.clone();
+        async move {
+            background::run_peer_id_scheduler(config, sp_repo, shutdown).await;
+        }
+    });
+
     // Start the URL discovery scheduler in the background
     let url_discovery_handle: JoinHandle<()> = tokio::spawn({
         let sp_repo = sp_repo.clone();
@@ -174,6 +184,7 @@ async fn main() -> Result<()> {
     info!("Waiting for background tasks to complete...");
     let background_handles = vec![
         ("provider_discovery", provider_discovery_handle),
+        ("peer_id_scheduler", peer_id_scheduler_handle),
         ("url_discovery", url_discovery_handle),
         ("bms_scheduler", bms_scheduler_handle),
     ];

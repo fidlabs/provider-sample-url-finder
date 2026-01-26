@@ -188,6 +188,7 @@ impl TestContext {
             &fixture.provider_address,
             client_address,
             &deal_repo,
+            Some(fixture.peer_id.clone()),
         )
         .await;
 

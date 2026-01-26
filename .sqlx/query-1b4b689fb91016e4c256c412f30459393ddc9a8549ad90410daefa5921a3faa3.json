@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "UPDATE\n                    storage_providers\n               SET\n                    next_url_discovery_at = NOW(),\n                    next_bms_test_at = NOW(),\n                    updated_at = NOW()\n               WHERE\n                    provider_id = $1\n               RETURNING\n                    id,\n                    provider_id AS \"provider_id: ProviderId\",\n                    next_url_discovery_at,\n                    url_discovery_status,\n                    url_discovery_pending_since,\n                    last_working_url,\n                    next_bms_test_at,\n                    bms_test_status,\n                    bms_routing_key,\n                    last_bms_region_discovery_at,\n                    is_consistent,\n                    is_reliable,\n                    url_metadata,\n                    created_at,\n                    updated_at\n            ",
+  "query": "SELECT\n                    id,\n                    provider_id AS \"provider_id: ProviderId\",\n                    peer_id,\n                    peer_id_fetched_at,\n                    next_url_discovery_at,\n                    url_discovery_status,\n                    url_discovery_pending_since,\n                    last_working_url,\n                    next_bms_test_at,\n                    bms_test_status,\n                    bms_routing_key,\n                    last_bms_region_discovery_at,\n                    is_consistent,\n                    is_reliable,\n                    url_metadata,\n                    created_at,\n                    updated_at\n               FROM\n                    storage_providers\n               WHERE\n                    peer_id IS NOT NULL\n                    AND peer_id_fetched_at < NOW() - INTERVAL '1 day' * $2\n               ORDER BY\n                    peer_id_fetched_at ASC\n               LIMIT $1\n            ",
   "describe": {
     "columns": [
       {
@@ -15,78 +15,91 @@
       },
       {
         "ordinal": 2,
+        "name": "peer_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "peer_id_fetched_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 4,
         "name": "next_url_discovery_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 3,
+        "ordinal": 5,
         "name": "url_discovery_status",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 4,
+        "ordinal": 6,
         "name": "url_discovery_pending_since",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 5,
+        "ordinal": 7,
         "name": "last_working_url",
         "type_info": "Text"
       },
       {
-        "ordinal": 6,
+        "ordinal": 8,
         "name": "next_bms_test_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 7,
+        "ordinal": 9,
         "name": "bms_test_status",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 8,
+        "ordinal": 10,
         "name": "bms_routing_key",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 9,
+        "ordinal": 11,
         "name": "last_bms_region_discovery_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 10,
+        "ordinal": 12,
         "name": "is_consistent",
         "type_info": "Bool"
       },
       {
-        "ordinal": 11,
+        "ordinal": 13,
         "name": "is_reliable",
         "type_info": "Bool"
       },
       {
-        "ordinal": 12,
+        "ordinal": 14,
         "name": "url_metadata",
         "type_info": "Jsonb"
       },
       {
-        "ordinal": 13,
+        "ordinal": 15,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 14,
+        "ordinal": 16,
         "name": "updated_at",
         "type_info": "Timestamptz"
       }
     ],
     "parameters": {
       "Left": [
-        "Text"
+        "Int8",
+        "Float8"
       ]
     },
     "nullable": [
       false,
       false,
+      true,
+      true,
       false,
       true,
       true,
@@ -102,5 +115,5 @@
       false
     ]
   },
-  "hash": "115e726bcb380b3521ffd3e41db323939295497fe867b5fe96fd661069ea4f9d"
+  "hash": "1b4b689fb91016e4c256c412f30459393ddc9a8549ad90410daefa5921a3faa3"
 }

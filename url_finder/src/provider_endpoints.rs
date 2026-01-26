@@ -17,7 +17,7 @@ use crate::{
     ErrorCode, ResultCode,
     cid_contact::{self, CidContactError},
     config::Config,
-    lotus_rpc, multiaddr_parser,
+    multiaddr_parser,
     types::ProviderAddress,
 };
 
@@ -88,17 +88,12 @@ pub async fn valid_curio_provider(
 
 pub async fn get_provider_endpoints(
     config: &Config,
-    address: &ProviderAddress,
+    _address: &ProviderAddress,
+    cached_peer_id: Option<String>,
 ) -> Result<(ResultCode, Option<Vec<String>>), ErrorCode> {
-    let peer_id = match valid_curio_provider(config, address).await {
-        Ok(Some(curio_provider)) => curio_provider,
-        _ => {
-            debug!("Falling back to lotus for peer_id lookup");
-            lotus_rpc::get_peer_id(config, address).await.map_err(|e| {
-                error!("Failed to get peer id from lotus: {e:?}");
-                ErrorCode::FailedToGetPeerId
-            })?
-        }
+    let peer_id = match cached_peer_id {
+        Some(pid) => pid,
+        None => return Err(ErrorCode::PeerIdNotCached),
     };
 
     // get cid contact response
