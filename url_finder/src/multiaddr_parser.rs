@@ -106,15 +106,10 @@ fn parse_multiaddr(multiaddr: Multiaddr) -> UrlParts {
     // Default to HTTP if we have host + TCP port but no explicit protocol.
     // This handles multiaddrs like /ip4/x.x.x.x/tcp/8080 without explicit /http suffix.
     if url_parts.protocol.is_none()
-        && url_parts.host.is_some()
-        && url_parts.port.is_some()
         && url_parts.is_tcp
+        && let (Some(host), Some(port)) = (&url_parts.host, &url_parts.port)
     {
-        warn!(
-            "Inferring HTTP for TCP multiaddr without explicit protocol: {}:{}",
-            url_parts.host.as_ref().unwrap(),
-            url_parts.port.as_ref().unwrap()
-        );
+        warn!("Inferring HTTP for TCP multiaddr without explicit protocol: {host}:{port}");
         url_parts.protocol = Some("http".to_string());
     }
 
