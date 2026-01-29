@@ -11,6 +11,8 @@ use crate::types::ProviderId;
 pub struct StorageProvider {
     pub id: Uuid,
     pub provider_id: ProviderId,
+    pub peer_id: Option<String>,
+    pub peer_id_fetched_at: Option<DateTime<Utc>>,
     pub next_url_discovery_at: DateTime<Utc>,
     pub url_discovery_status: Option<String>,
     pub url_discovery_pending_since: Option<DateTime<Utc>>,
@@ -70,6 +72,8 @@ impl StorageProviderRepository {
             r#"SELECT
                     id,
                     provider_id AS "provider_id: ProviderId",
+                    peer_id,
+                    peer_id_fetched_at,
                     next_url_discovery_at,
                     url_discovery_status,
                     url_discovery_pending_since,
@@ -100,6 +104,8 @@ impl StorageProviderRepository {
             r#"SELECT
                     id,
                     provider_id AS "provider_id: ProviderId",
+                    peer_id,
+                    peer_id_fetched_at,
                     next_url_discovery_at,
                     url_discovery_status,
                     url_discovery_pending_since,
@@ -123,7 +129,10 @@ impl StorageProviderRepository {
                     OR
                     (
                         url_discovery_status = 'pending'
-                        AND url_discovery_pending_since < NOW() - INTERVAL '60 minutes'
+                        AND (
+                            url_discovery_pending_since IS NULL
+                            OR url_discovery_pending_since < NOW() - INTERVAL '60 minutes'
+                        )
                     )
                ORDER BY
                     next_url_discovery_at ASC
@@ -186,12 +195,36 @@ impl StorageProviderRepository {
         Ok(())
     }
 
+    pub async fn reschedule_url_discovery_delayed(
+        &self,
+        provider_id: &ProviderId,
+        delay_seconds: i64,
+    ) -> Result<()> {
+        sqlx::query!(
+            r#"UPDATE
+                    storage_providers
+               SET
+                    next_url_discovery_at = NOW() + INTERVAL '1 second' * $2,
+                    updated_at = NOW()
+               WHERE
+                    provider_id = $1
+            "#,
+            provider_id as &ProviderId,
+            delay_seconds as f64
+        )
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
     pub async fn get_due_for_bms_test(&self, limit: i64) -> Result<Vec<StorageProvider>> {
         Ok(sqlx::query_as!(
             StorageProvider,
             r#"SELECT
                     id,
                     provider_id AS "provider_id: ProviderId",
+                    peer_id,
+                    peer_id_fetched_at,
                     next_url_discovery_at,
                     url_discovery_status,
                     url_discovery_pending_since,
@@ -259,6 +292,8 @@ impl StorageProviderRepository {
                RETURNING
                     id,
                     provider_id AS "provider_id: ProviderId",
+                    peer_id,
+                    peer_id_fetched_at,
                     next_url_discovery_at,
                     url_discovery_status,
                     url_discovery_pending_since,
@@ -295,6 +330,8 @@ impl StorageProviderRepository {
                RETURNING
                     id,
                     provider_id AS "provider_id: ProviderId",
+                    peer_id,
+                    peer_id_fetched_at,
                     next_url_discovery_at,
                     url_discovery_status,
                     url_discovery_pending_since,
@@ -332,6 +369,8 @@ impl StorageProviderRepository {
                RETURNING
                     id,
                     provider_id AS "provider_id: ProviderId",
+                    peer_id,
+                    peer_id_fetched_at,
                     next_url_discovery_at,
                     url_discovery_status,
                     url_discovery_pending_since,
@@ -350,5 +389,100 @@ impl StorageProviderRepository {
         )
         .fetch_optional(&self.pool)
         .await?)
+    }
+
+    pub async fn get_providers_without_peer_id(&self, limit: i64) -> Result<Vec<StorageProvider>> {
+        Ok(sqlx::query_as!(
+            StorageProvider,
+            r#"SELECT
+                    id,
+                    provider_id AS "provider_id: ProviderId",
+                    peer_id,
+                    peer_id_fetched_at,
+                    next_url_discovery_at,
+                    url_discovery_status,
+                    url_discovery_pending_since,
+                    last_working_url,
+                    next_bms_test_at,
+                    bms_test_status,
+                    bms_routing_key,
+                    last_bms_region_discovery_at,
+                    is_consistent,
+                    is_reliable,
+                    url_metadata,
+                    created_at,
+                    updated_at
+               FROM
+                    storage_providers
+               WHERE
+                    peer_id IS NULL
+               ORDER BY
+                    created_at ASC
+               LIMIT $1
+            "#,
+            limit
+        )
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
+    pub async fn get_providers_with_stale_peer_id(
+        &self,
+        limit: i64,
+        stale_days: i64,
+    ) -> Result<Vec<StorageProvider>> {
+        Ok(sqlx::query_as!(
+            StorageProvider,
+            r#"SELECT
+                    id,
+                    provider_id AS "provider_id: ProviderId",
+                    peer_id,
+                    peer_id_fetched_at,
+                    next_url_discovery_at,
+                    url_discovery_status,
+                    url_discovery_pending_since,
+                    last_working_url,
+                    next_bms_test_at,
+                    bms_test_status,
+                    bms_routing_key,
+                    last_bms_region_discovery_at,
+                    is_consistent,
+                    is_reliable,
+                    url_metadata,
+                    created_at,
+                    updated_at
+               FROM
+                    storage_providers
+               WHERE
+                    peer_id IS NOT NULL
+                    AND peer_id_fetched_at < NOW() - INTERVAL '1 day' * $2
+               ORDER BY
+                    peer_id_fetched_at ASC
+               LIMIT $1
+            "#,
+            limit,
+            stale_days as f64
+        )
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
+    pub async fn update_peer_id(&self, provider_id: &ProviderId, peer_id: &str) -> Result<()> {
+        sqlx::query!(
+            r#"UPDATE
+                    storage_providers
+               SET
+                    peer_id = $2,
+                    peer_id_fetched_at = NOW(),
+                    updated_at = NOW()
+               WHERE
+                    provider_id = $1
+            "#,
+            provider_id as &ProviderId,
+            peer_id
+        )
+        .execute(&self.pool)
+        .await?;
+        Ok(())
     }
 }

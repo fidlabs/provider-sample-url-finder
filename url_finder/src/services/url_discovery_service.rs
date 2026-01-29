@@ -74,6 +74,7 @@ pub async fn discover_url(
     provider_address: &ProviderAddress,
     client_address: Option<ClientAddress>,
     deal_repo: &DealRepository,
+    cached_peer_id: Option<String>,
 ) -> UrlDiscoveryResult {
     let provider_id: ProviderId = provider_address.clone().into();
     let client_id: Option<ClientId> = client_address.clone().map(|c| c.into());
@@ -90,7 +91,9 @@ pub async fn discover_url(
 
     // Get endpoints
     let (result_code, endpoints) =
-        match provider_endpoints::get_provider_endpoints(config, provider_address).await {
+        match provider_endpoints::get_provider_endpoints(config, provider_address, cached_peer_id)
+            .await
+        {
             Ok((code, eps)) => (code, eps),
             Err(e) => {
                 error!(

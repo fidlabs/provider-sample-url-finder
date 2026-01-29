@@ -1,6 +1,8 @@
 use crate::{
     config::Config,
-    repository::{DealRepository, StorageProviderRepository, UrlResult, UrlResultRepository},
+    repository::{
+        DealRepository, StorageProvider, StorageProviderRepository, UrlResult, UrlResultRepository,
+    },
     services::url_discovery_service,
     types::{ClientAddress, ClientId, ProviderAddress, ProviderId},
 };
@@ -23,6 +25,7 @@ struct DiscoveryBatchStats {
     total: usize,
     ok: usize,
     failed: usize,
+    skipped: usize,
     total_retrievability: f64,
     consistent: usize,
     started_at: Instant,
@@ -34,6 +37,7 @@ impl DiscoveryBatchStats {
             total: 0,
             ok: 0,
             failed: 0,
+            skipped: 0,
             total_retrievability: 0.0,
             consistent: 0,
             started_at: Instant::now(),
@@ -42,14 +46,23 @@ impl DiscoveryBatchStats {
 
     fn record(&mut self, outcome: &ProviderOutcome) {
         self.total += 1;
-        if outcome.success {
-            self.ok += 1;
-        } else {
-            self.failed += 1;
-        }
-        self.total_retrievability += outcome.retrievability;
-        if outcome.consistent {
-            self.consistent += 1;
+        match outcome {
+            ProviderOutcome::Processed {
+                success,
+                retrievability,
+                consistent,
+            } => {
+                if *success {
+                    self.ok += 1;
+                } else {
+                    self.failed += 1;
+                }
+                self.total_retrievability += retrievability;
+                if *consistent {
+                    self.consistent += 1;
+                }
+            }
+            ProviderOutcome::Skipped => self.skipped += 1,
         }
     }
 
@@ -78,10 +91,13 @@ impl DiscoveryBatchStats {
     }
 }
 
-struct ProviderOutcome {
-    success: bool,
-    retrievability: f64,
-    consistent: bool,
+enum ProviderOutcome {
+    Processed {
+        success: bool,
+        retrievability: f64,
+        consistent: bool,
+    },
+    Skipped,
 }
 
 struct ProgressReporter {
@@ -141,14 +157,15 @@ pub async fn run_url_discovery_scheduler(
             }
             Ok(stats) => {
                 info!(
-                    "URL discovery: done {}/{} ({}%) in {:.0}s | avg_retri: {:.1}% consistent: {}/{}",
+                    "URL discovery: done {}/{} ({}%) in {:.0}s | avg_retri: {:.1}% consistent: {}/{} skipped: {}",
                     stats.ok,
                     stats.total,
                     stats.success_percent(),
                     stats.elapsed().as_secs_f64(),
                     stats.avg_retrievability(),
                     stats.consistent,
-                    stats.total
+                    stats.total,
+                    stats.skipped
                 );
                 SCHEDULER_NEXT_INTERVAL
             }
@@ -196,8 +213,7 @@ async fn schedule_url_discoveries(
         }
 
         let outcome =
-            process_single_provider(config, sp_repo, url_repo, deal_repo, &provider.provider_id)
-                .await?;
+            process_single_provider(config, sp_repo, url_repo, deal_repo, &provider).await?;
 
         stats.record(&outcome);
         progress.maybe_log(&stats, &provider.provider_id);
@@ -211,8 +227,22 @@ async fn process_single_provider(
     sp_repo: &StorageProviderRepository,
     url_repo: &UrlResultRepository,
     deal_repo: &DealRepository,
-    provider_id: &ProviderId,
+    provider: &StorageProvider,
 ) -> Result<ProviderOutcome> {
+    let provider_id = &provider.provider_id;
+
+    // Skip providers without cached peer_id - they'll be picked up by peer_id_scheduler
+    if provider.peer_id.is_none() {
+        debug!(
+            "Skipping provider {} - no cached peer_id, rescheduling for 1 hour",
+            provider_id
+        );
+        sp_repo
+            .reschedule_url_discovery_delayed(provider_id, 3600)
+            .await?;
+        return Ok(ProviderOutcome::Skipped);
+    }
+
     sp_repo.set_url_discovery_pending(provider_id).await?;
 
     let clients = deal_repo.get_clients_for_provider(provider_id).await?;
@@ -224,7 +254,9 @@ async fn process_single_provider(
 
     debug!("Provider {} has {} clients", provider_id, clients.len());
 
-    let results = test_provider_with_clients(config, provider_id, clients, deal_repo).await;
+    let cached_peer_id = provider.peer_id.clone();
+    let results =
+        test_provider_with_clients(config, provider_id, clients, deal_repo, cached_peer_id).await;
 
     // Extract provider-only result for storage_providers update
     // None case: provider-only discovery missing (panic, filtering, etc.) - default is_consistent
@@ -238,7 +270,7 @@ async fn process_single_provider(
                 r.is_consistent,
                 r.is_reliable,
                 r.url_metadata.clone(),
-                ProviderOutcome {
+                ProviderOutcome::Processed {
                     success: r.working_url.is_some(),
                     retrievability: r.retrievability_percent,
                     consistent: r.is_consistent,
@@ -249,7 +281,7 @@ async fn process_single_provider(
                 false,
                 false,
                 None,
-                ProviderOutcome {
+                ProviderOutcome::Processed {
                     success: false,
                     retrievability: 0.0,
                     consistent: false,
@@ -289,11 +321,18 @@ async fn process_single_provider(
             client_ids_for_log.join(", ")
         )
     };
-    let result_str = if outcome.success { "ok" } else { "failed" };
-    debug!(
-        "f0{} {}: {} retri={:.1}% consistent={}",
-        provider_id, client_display, result_str, outcome.retrievability, outcome.consistent
-    );
+    if let ProviderOutcome::Processed {
+        success,
+        retrievability,
+        consistent,
+    } = &outcome
+    {
+        let result_str = if *success { "ok" } else { "failed" };
+        debug!(
+            "f0{} {}: {} retri={:.1}% consistent={}",
+            provider_id, client_display, result_str, retrievability, consistent
+        );
+    }
 
     Ok(outcome)
 }
@@ -303,6 +342,7 @@ async fn test_provider_with_clients(
     provider_id: &ProviderId,
     client_ids: Vec<ClientId>,
     deal_repo: &DealRepository,
+    cached_peer_id: Option<String>,
 ) -> Vec<url_discovery_service::UrlDiscoveryResult> {
     let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_CLIENT_TESTS));
     let mut tasks = vec![];
@@ -312,9 +352,10 @@ async fn test_provider_with_clients(
         let cfg = config.clone();
         let addr = provider_address.clone();
         let repo = deal_repo.clone();
-        tokio::spawn(
-            async move { url_discovery_service::discover_url(&cfg, &addr, None, &repo).await },
-        )
+        let peer_id = cached_peer_id.clone();
+        tokio::spawn(async move {
+            url_discovery_service::discover_url(&cfg, &addr, None, &repo, peer_id).await
+        })
     };
     tasks.push(provider_task);
 
@@ -328,12 +369,14 @@ async fn test_provider_with_clients(
         let provider_addr = provider_address.clone();
         let client_address: ClientAddress = client_id.into();
         let repo = deal_repo.clone();
+        let peer_id = cached_peer_id.clone();
         tasks.push(tokio::spawn(async move {
             let result = url_discovery_service::discover_url(
                 &cfg,
                 &provider_addr,
                 Some(client_address),
                 &repo,
+                peer_id,
             )
             .await;
             drop(permit); // release semaphore
