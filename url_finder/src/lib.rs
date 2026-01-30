@@ -1,6 +1,6 @@
 /// lib exports for integration testing
 /// separated to simulate real api call: http request -> api handler -> service -> repo -> db
-pub use std::sync::{Arc, atomic::AtomicUsize};
+pub use std::sync::Arc;
 
 pub mod api;
 pub mod api_response;
@@ -26,7 +26,6 @@ pub use types::{ErrorCode, ResultCode};
 
 pub struct AppState {
     pub deal_repo: Arc<repository::DealRepository>,
-    pub active_requests: Arc<AtomicUsize>,
     pub storage_provider_repo: Arc<repository::StorageProviderRepository>,
     pub url_repo: Arc<repository::UrlResultRepository>,
     pub bms_repo: Arc<repository::BmsBandwidthResultRepository>,

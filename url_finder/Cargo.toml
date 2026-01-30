@@ -16,7 +16,7 @@ tokio = { version = "1.40.0", features = ["full"] }
 color-eyre = "0.6.3"
 axum = { version = "0.8", features = ["macros", "tokio"] }
 axum-extra = { version = "0.10" }
-reqwest = { version = "0.12.7", features = ["json"] }
+reqwest = { version = "0.12.7", features = ["json", "stream"] }
 reqwest-middleware = { version = "0.4", features = ["json"] }
 reqwest-retry = "0.7"
 retry-policies = "0.4"

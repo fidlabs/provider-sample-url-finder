@@ -474,6 +474,7 @@ impl StorageProviderRepository {
                SET
                     peer_id = $2,
                     peer_id_fetched_at = NOW(),
+                    next_url_discovery_at = NOW(),
                     updated_at = NOW()
                WHERE
                     provider_id = $1

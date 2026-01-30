@@ -6,10 +6,7 @@ use axum::{
     response::Response,
 };
 use axum_test::TestServer;
-use std::{
-    net::SocketAddr,
-    sync::{Arc, atomic::AtomicUsize},
-};
+use std::{net::SocketAddr, sync::Arc};
 use url_finder::{
     AppState,
     config::Config,
@@ -29,8 +26,6 @@ async fn inject_socket_addr(mut request: Request, next: Next) -> Response {
 }
 
 pub async fn create_test_app(dbs: &TestDatabases, mocks: &MockExternalServices) -> TestServer {
-    let active_requests = Arc::new(AtomicUsize::new(0));
-
     let lotus_url = mocks.lotus_url();
     let lotus_base = lotus_url.trim_end_matches('/');
     let config = Arc::new(Config::new_for_test(
@@ -49,7 +44,6 @@ pub async fn create_test_app(dbs: &TestDatabases, mocks: &MockExternalServices) 
 
     let app_state = Arc::new(AppState {
         deal_repo: Arc::new(DealRepository::new(dbs.app_pool.clone())),
-        active_requests,
         storage_provider_repo,
         url_repo,
         bms_repo,
