@@ -209,8 +209,8 @@ async fn range_request(client: &Client, url: &str) -> Result<RangeResponse, UrlT
     let content_length = extract_total_length(&resp);
     let response_time_ms = start.elapsed().as_millis() as u64;
 
-    // Always capture body sample for CAR header parsing
-    let body_sample = resp.bytes().await.ok().map(|b| b.to_vec());
+    // Capture body sample for CAR header parsing (limited to prevent full file downloads)
+    let body_sample = read_limited_body(resp, RANGE_REQUEST_BYTES as usize).await;
 
     Ok(RangeResponse {
         content_length,
@@ -582,6 +582,34 @@ async fn drain_response_body(resp: reqwest::Response) {
     }
     // For unknown/large bodies, dropping resp closes the connection
     // This is acceptable since large file responses are less frequent
+}
+
+/// Reads up to `limit` bytes from response body, then stops.
+/// Prevents downloading entire files when servers ignore Range headers.
+/// Returns partial data on network errors (CAR header is in first bytes).
+async fn read_limited_body(resp: reqwest::Response, limit: usize) -> Option<Vec<u8>> {
+    let mut stream = resp.bytes_stream();
+    let mut buffer = Vec::with_capacity(limit);
+
+    while let Some(chunk) = stream.next().await {
+        match chunk {
+            Ok(bytes) => {
+                let remaining = limit.saturating_sub(buffer.len());
+                if remaining == 0 {
+                    break;
+                }
+                let take = bytes.len().min(remaining);
+                buffer.extend_from_slice(&bytes[..take]);
+            }
+            Err(_) => break,
+        }
+    }
+
+    if buffer.is_empty() {
+        None
+    } else {
+        Some(buffer)
+    }
 }
 
 #[cfg(test)]
@@ -1155,5 +1183,61 @@ mod tests {
 
         assert!(result.consistent);
         assert_eq!(result.inconsistency_type, None);
+    }
+
+    /// Verifies that range_request limits body download when server ignores Range header.
+    #[tokio::test]
+    async fn test_range_request_limits_body_download() {
+        use wiremock::matchers::header;
+
+        let mock_server = MockServer::start().await;
+
+        // Server ignores Range header: returns HTTP 200 (not 206) with 50KB body
+        let large_body = vec![0xCAu8; 50_000];
+
+        Mock::given(method("GET"))
+            .and(header("Range", "bytes=0-4095"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("Content-Length", "50000")
+                    .set_body_raw(large_body, "application/octet-stream"),
+            )
+            .mount(&mock_server)
+            .await;
+
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
+            .unwrap();
+
+        let start = Instant::now();
+        let result = range_request(&client, &mock_server.uri()).await;
+        let elapsed = start.elapsed();
+
+        assert!(result.is_ok(), "Request should succeed");
+        let response = result.unwrap();
+
+        // Key assertion: body limited to RANGE_REQUEST_BYTES (4096), not full 50KB
+        assert!(response.body_sample.is_some(), "Should have body sample");
+        let body = response.body_sample.unwrap();
+        assert_eq!(
+            body.len(),
+            RANGE_REQUEST_BYTES as usize,
+            "Body should be limited to RANGE_REQUEST_BYTES (4096), got {}",
+            body.len()
+        );
+
+        // Verify correct data pattern
+        assert!(
+            body.iter().all(|&b| b == 0xCA),
+            "Should contain expected pattern"
+        );
+
+        // Should complete quickly
+        assert!(
+            elapsed.as_millis() < 1000,
+            "Should not download full body, took {:?}",
+            elapsed
+        );
     }
 }
