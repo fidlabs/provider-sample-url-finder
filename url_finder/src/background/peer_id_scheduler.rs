@@ -34,7 +34,6 @@ pub async fn run_peer_id_scheduler(
                     );
                 }
 
-                // If there are more providers without peer_id, continue with short interval
                 if more_pending {
                     tokio::select! {
                         _ = sleep(CATCHUP_SHORT_INTERVAL) => continue,
@@ -57,8 +56,6 @@ pub async fn run_peer_id_scheduler(
     info!("Peer ID scheduler stopped");
 }
 
-/// Returns (new_count, stale_count, more_pending)
-/// more_pending = true means there are still providers without peer_id to process
 async fn refresh_peer_ids(
     config: &Config,
     sp_repo: &StorageProviderRepository,
@@ -82,7 +79,6 @@ async fn refresh_peer_ids(
     let new_count =
         process_provider_batch(config, sp_repo, new_providers, "Cached", shutdown).await;
 
-    // Only process stale if we're caught up on new providers
     let stale_count = if !batch_was_full {
         let stale_providers = sp_repo
             .get_providers_with_stale_peer_id(BATCH_SIZE, STALE_DAYS)

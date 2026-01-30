@@ -335,7 +335,6 @@ async fn process_single_provider(
         )
         .await?;
 
-    // Log result - INFO for success (working URL found), DEBUG for failures
     if let ProviderOutcome::Processed {
         success,
         retrievability,

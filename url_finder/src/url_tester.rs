@@ -1185,7 +1185,6 @@ mod tests {
         assert_eq!(result.inconsistency_type, None);
     }
 
-    /// Verifies that range_request limits body download when server ignores Range header.
     #[tokio::test]
     async fn test_range_request_limits_body_download() {
         use wiremock::matchers::header;
@@ -1217,7 +1216,6 @@ mod tests {
         assert!(result.is_ok(), "Request should succeed");
         let response = result.unwrap();
 
-        // Key assertion: body limited to RANGE_REQUEST_BYTES (4096), not full 50KB
         assert!(response.body_sample.is_some(), "Should have body sample");
         let body = response.body_sample.unwrap();
         assert_eq!(
@@ -1227,13 +1225,11 @@ mod tests {
             body.len()
         );
 
-        // Verify correct data pattern
         assert!(
             body.iter().all(|&b| b == 0xCA),
             "Should contain expected pattern"
         );
 
-        // Should complete quickly
         assert!(
             elapsed.as_millis() < 1000,
             "Should not download full body, took {:?}",
