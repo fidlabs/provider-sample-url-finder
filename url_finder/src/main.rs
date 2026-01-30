@@ -1,17 +1,5 @@
-use std::{
-    net::SocketAddr,
-    sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
-    },
-    time::Duration,
-};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
-use axum::{
-    extract::{Request, State},
-    middleware::{self, Next},
-    response::Response,
-};
 use color_eyre::Result;
 use tokio::{
     net::TcpListener,
@@ -20,27 +8,12 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 use tower_http::cors::{Any, CorsLayer};
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 
 use url_finder::{AppState, background, config::Config, repository::*, routes::create_routes};
 
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(30);
-
-/// Active requests counter middleware.
-/// Keeps track of the number of active requests.
-/// The counter is used to gracefully shutdown the server.
-async fn request_counter(
-    State(state): State<Arc<AppState>>,
-    request: Request,
-    next: Next,
-) -> Response {
-    state.active_requests.fetch_add(1, Ordering::SeqCst);
-    let response = next.run(request).await;
-    state.active_requests.fetch_sub(1, Ordering::SeqCst);
-
-    response
-}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -68,7 +41,6 @@ async fn main() -> Result<()> {
         .expect("Failed to run migrations");
     info!("Database migrations applied successfully");
 
-    let active_requests = Arc::new(AtomicUsize::new(0));
     let shutdown_token = CancellationToken::new();
 
     let sp_repo = Arc::new(StorageProviderRepository::new(pool.clone()));
@@ -89,7 +61,6 @@ async fn main() -> Result<()> {
 
     let app_state = Arc::new(AppState {
         deal_repo: deal_repo.clone(),
-        active_requests: active_requests.clone(),
         storage_provider_repo: sp_repo.clone(),
         url_repo: url_repo.clone(),
         bms_repo: bms_result_repo.clone(),
@@ -160,10 +131,6 @@ async fn main() -> Result<()> {
         .allow_headers(Any);
 
     let app = create_routes()
-        .layer(middleware::from_fn_with_state(
-            app_state.clone(),
-            request_counter,
-        ))
         .layer(cors)
         .with_state(app_state.clone());
 
@@ -174,10 +141,7 @@ async fn main() -> Result<()> {
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
-    .with_graceful_shutdown(shutdown_signal(
-        active_requests.clone(),
-        shutdown_token.clone(),
-    ))
+    .with_graceful_shutdown(shutdown_signal(shutdown_token.clone()))
     .await?;
 
     // Await background task completion with timeout
@@ -202,30 +166,16 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn shutdown_signal(active_requests: Arc<AtomicUsize>, shutdown_token: CancellationToken) {
+async fn shutdown_signal(shutdown_token: CancellationToken) {
     let mut sigint = signal(SignalKind::interrupt()).expect("SIGINT signal handler failed");
     let mut sigterm = signal(SignalKind::terminate()).expect("SIGTERM signal handler failed");
 
     tokio::select! {
-        _ = sigint.recv() => {
-            info!("Received SIGINT signal, shutting down...");
-        }
-        _ = sigterm.recv() => {
-            info!("Received SIGTERM signal, shutting down...");
-        }
+        _ = sigint.recv() => info!("Received SIGINT signal, shutting down..."),
+        _ = sigterm.recv() => info!("Received SIGTERM signal, shutting down..."),
     }
 
-    // Signal background tasks to stop
     info!("Signaling background tasks to stop...");
     shutdown_token.cancel();
-
-    while active_requests.load(Ordering::SeqCst) > 0 {
-        debug!(
-            "Waiting for {} active requests to finish...",
-            active_requests.load(Ordering::SeqCst)
-        );
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-    }
-
-    info!("All active requests have been completed");
+    // Axum's graceful_shutdown handles draining in-flight requests
 }

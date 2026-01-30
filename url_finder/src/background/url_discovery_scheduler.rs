@@ -152,7 +152,7 @@ pub async fn run_url_discovery_scheduler(
             .await
         {
             Ok(stats) if stats.is_empty() => {
-                debug!("No providers due for URL discovery, sleeping...");
+                info!("URL discovery: idle, sleeping 1h");
                 SCHEDULER_SLEEP_INTERVAL
             }
             Ok(stats) => {
@@ -195,10 +195,19 @@ async fn schedule_url_discoveries(
 ) -> Result<DiscoveryBatchStats> {
     let providers = sp_repo.get_due_for_url_discovery(BATCH_SIZE).await?;
 
-    debug!("Found {} providers due for URL discovery", providers.len());
-
     if !providers.is_empty() {
-        info!("URL discovery: starting {} providers", providers.len());
+        let ready = providers.iter().filter(|p| p.peer_id.is_some()).count();
+        let need_peer_id = providers.len() - ready;
+        if need_peer_id > 0 {
+            info!(
+                "URL discovery: starting {} providers ({} ready, {} need peer_id)",
+                providers.len(),
+                ready,
+                need_peer_id
+            );
+        } else {
+            info!("URL discovery: starting {} providers", providers.len());
+        }
     }
 
     let mut stats = DiscoveryBatchStats::new();
@@ -309,29 +318,25 @@ async fn process_single_provider(
         )
         .await?;
 
-    // Debug per-provider result
-    let client_display = if client_ids_for_log.is_empty() {
-        "(0 clients)".to_string()
-    } else if client_ids_for_log.len() == 1 {
-        format!("(1 client) [{}]", client_ids_for_log.join(", "))
-    } else {
-        format!(
-            "({} clients) [{}]",
-            client_ids_for_log.len(),
-            client_ids_for_log.join(", ")
-        )
-    };
+    // Log result - INFO for success (working URL found), DEBUG for failures
     if let ProviderOutcome::Processed {
         success,
         retrievability,
         consistent,
     } = &outcome
     {
-        let result_str = if *success { "ok" } else { "failed" };
-        debug!(
-            "f0{} {}: {} retri={:.1}% consistent={}",
-            provider_id, client_display, result_str, retrievability, consistent
-        );
+        let clients_count = client_ids_for_log.len();
+        if *success {
+            info!(
+                "f0{} ({} clients): OK retri={:.1}% consistent={}",
+                provider_id, clients_count, retrievability, consistent
+            );
+        } else {
+            debug!(
+                "f0{} ({} clients): FAIL retri={:.1}%",
+                provider_id, clients_count, retrievability
+            );
+        }
     }
 
     Ok(outcome)
