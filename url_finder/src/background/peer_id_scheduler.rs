@@ -71,11 +71,16 @@ async fn refresh_peer_ids(
         info!(
             "Caching peer_ids for {} providers{}",
             new_providers.len(),
-            if batch_was_full { " (more pending)" } else { "" }
+            if batch_was_full {
+                " (more pending)"
+            } else {
+                ""
+            }
         );
     }
 
-    let new_count = process_provider_batch(config, sp_repo, new_providers, "Cached", shutdown).await;
+    let new_count =
+        process_provider_batch(config, sp_repo, new_providers, "Cached", shutdown).await;
 
     // Only process stale if we're caught up on new providers
     let stale_count = if !batch_was_full {

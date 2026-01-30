@@ -148,8 +148,10 @@ pub async fn run_url_discovery_scheduler(
     info!("Starting URL discovery scheduler loop");
 
     loop {
-        let interval = match schedule_url_discoveries(&config, &sp_repo, &url_repo, &deal_repo)
-            .await
+        let interval = match schedule_url_discoveries(
+            &config, &sp_repo, &url_repo, &deal_repo, &shutdown,
+        )
+        .await
         {
             Ok(stats) if stats.is_empty() => {
                 info!("URL discovery: idle, sleeping 1h");
@@ -192,6 +194,7 @@ async fn schedule_url_discoveries(
     sp_repo: &StorageProviderRepository,
     url_repo: &UrlResultRepository,
     deal_repo: &DealRepository,
+    shutdown: &CancellationToken,
 ) -> Result<DiscoveryBatchStats> {
     let providers = sp_repo.get_due_for_url_discovery(BATCH_SIZE).await?;
 
@@ -214,6 +217,11 @@ async fn schedule_url_discoveries(
     let mut progress = ProgressReporter::new(providers.len());
 
     for provider in providers {
+        if shutdown.is_cancelled() {
+            info!("URL discovery batch interrupted by shutdown");
+            break;
+        }
+
         if provider.url_discovery_status.as_deref() == Some("pending") {
             warn!(
                 "Recovering stale pending provider: {} (pending since {:?})",
@@ -222,7 +230,8 @@ async fn schedule_url_discoveries(
         }
 
         let outcome =
-            process_single_provider(config, sp_repo, url_repo, deal_repo, &provider).await?;
+            process_single_provider(config, sp_repo, url_repo, deal_repo, &provider, shutdown)
+                .await?;
 
         stats.record(&outcome);
         progress.maybe_log(&stats, &provider.provider_id);
@@ -237,6 +246,7 @@ async fn process_single_provider(
     url_repo: &UrlResultRepository,
     deal_repo: &DealRepository,
     provider: &StorageProvider,
+    shutdown: &CancellationToken,
 ) -> Result<ProviderOutcome> {
     let provider_id = &provider.provider_id;
 
@@ -264,8 +274,15 @@ async fn process_single_provider(
     debug!("Provider {} has {} clients", provider_id, clients.len());
 
     let cached_peer_id = provider.peer_id.clone();
-    let results =
-        test_provider_with_clients(config, provider_id, clients, deal_repo, cached_peer_id).await;
+    let results = test_provider_with_clients(
+        config,
+        provider_id,
+        clients,
+        deal_repo,
+        cached_peer_id,
+        shutdown,
+    )
+    .await;
 
     // Extract provider-only result for storage_providers update
     // None case: provider-only discovery missing (panic, filtering, etc.) - default is_consistent
@@ -348,6 +365,7 @@ async fn test_provider_with_clients(
     client_ids: Vec<ClientId>,
     deal_repo: &DealRepository,
     cached_peer_id: Option<String>,
+    shutdown: &CancellationToken,
 ) -> Vec<url_discovery_service::UrlDiscoveryResult> {
     let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_CLIENT_TESTS));
     let mut tasks = vec![];
@@ -389,16 +407,25 @@ async fn test_provider_with_clients(
         }));
     }
 
-    let results = join_all(tasks).await;
-
-    results
-        .into_iter()
-        .filter_map(|r| {
-            r.map_err(|e| {
-                error!("URL discovery task panicked: {:?}", e);
-                e
-            })
-            .ok()
-        })
-        .collect()
+    tokio::select! {
+        results = join_all(&mut tasks) => {
+            results
+                .into_iter()
+                .filter_map(|r| {
+                    r.map_err(|e| {
+                        error!("URL discovery task panicked: {:?}", e);
+                        e
+                    })
+                    .ok()
+                })
+                .collect()
+        }
+        _ = shutdown.cancelled() => {
+            info!("Aborting {} URL discovery tasks for provider {}", tasks.len(), provider_id);
+            for task in tasks {
+                task.abort();
+            }
+            vec![]
+        }
+    }
 }

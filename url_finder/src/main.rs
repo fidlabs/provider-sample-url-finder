@@ -130,9 +130,7 @@ async fn main() -> Result<()> {
         .allow_methods(Any)
         .allow_headers(Any);
 
-    let app = create_routes()
-        .layer(cors)
-        .with_state(app_state.clone());
+    let app = create_routes().layer(cors).with_state(app_state.clone());
 
     let server_addr = SocketAddr::from(([0, 0, 0, 0], 3010));
     let listener = TcpListener::bind(&server_addr).await?;
