@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT\n                    id,\n                    provider_id AS \"provider_id: ProviderId\",\n                    peer_id,\n                    peer_id_fetched_at,\n                    next_url_discovery_at,\n                    url_discovery_status,\n                    url_discovery_pending_since,\n                    last_working_url,\n                    next_bms_test_at,\n                    bms_test_status,\n                    bms_routing_key,\n                    last_bms_region_discovery_at,\n                    is_consistent,\n                    is_reliable,\n                    url_metadata,\n                    created_at,\n                    updated_at\n               FROM\n                    storage_providers\n               WHERE\n                    last_working_url IS NOT NULL\n                    AND is_consistent = true\n                    AND next_bms_test_at <= NOW()\n               ORDER BY\n                    next_bms_test_at ASC\n               LIMIT $1\n            ",
+  "query": "UPDATE\n                    storage_providers\n               SET\n                    next_bms_test_at = NOW(),\n                    updated_at = NOW()\n               WHERE\n                    provider_id = $1\n               RETURNING\n                    id,\n                    provider_id AS \"provider_id: ProviderId\",\n                    peer_id,\n                    next_url_discovery_at,\n                    url_discovery_status,\n                    url_discovery_pending_since,\n                    last_working_url,\n                    next_bms_test_at,\n                    bms_test_status,\n                    bms_routing_key,\n                    last_bms_region_discovery_at,\n                    is_consistent,\n                    is_reliable,\n                    url_metadata,\n                    cached_http_endpoints,\n                    endpoints_fetched_at,\n                    created_at,\n                    updated_at\n            ",
   "describe": {
     "columns": [
       {
@@ -20,85 +20,89 @@
       },
       {
         "ordinal": 3,
-        "name": "peer_id_fetched_at",
-        "type_info": "Timestamptz"
-      },
-      {
-        "ordinal": 4,
         "name": "next_url_discovery_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 5,
+        "ordinal": 4,
         "name": "url_discovery_status",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 6,
+        "ordinal": 5,
         "name": "url_discovery_pending_since",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 7,
+        "ordinal": 6,
         "name": "last_working_url",
         "type_info": "Text"
       },
       {
-        "ordinal": 8,
+        "ordinal": 7,
         "name": "next_bms_test_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 9,
+        "ordinal": 8,
         "name": "bms_test_status",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 10,
+        "ordinal": 9,
         "name": "bms_routing_key",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 11,
+        "ordinal": 10,
         "name": "last_bms_region_discovery_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 12,
+        "ordinal": 11,
         "name": "is_consistent",
         "type_info": "Bool"
       },
       {
-        "ordinal": 13,
+        "ordinal": 12,
         "name": "is_reliable",
         "type_info": "Bool"
       },
       {
-        "ordinal": 14,
+        "ordinal": 13,
         "name": "url_metadata",
         "type_info": "Jsonb"
       },
       {
+        "ordinal": 14,
+        "name": "cached_http_endpoints",
+        "type_info": "TextArray"
+      },
+      {
         "ordinal": 15,
-        "name": "created_at",
+        "name": "endpoints_fetched_at",
         "type_info": "Timestamptz"
       },
       {
         "ordinal": 16,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 17,
         "name": "updated_at",
         "type_info": "Timestamptz"
       }
     ],
     "parameters": {
       "Left": [
-        "Int8"
+        "Text"
       ]
     },
     "nullable": [
       false,
       false,
       true,
-      true,
       false,
       true,
       true,
@@ -109,10 +113,12 @@
       true,
       false,
       false,
+      true,
+      true,
       true,
       false,
       false
     ]
   },
-  "hash": "f0e629f86605a532abe4fb621c4d38636c758740174230b63e4e494e515c1b0a"
+  "hash": "18f183fec736355c9fb15adb67249d3574870e001e438aa524143a547a7a7376"
 }

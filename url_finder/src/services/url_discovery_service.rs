@@ -3,7 +3,6 @@ use chrono::{DateTime, Utc};
 use crate::{
     config::{Config, MIN_VALID_CONTENT_LENGTH},
     http_client::build_client,
-    provider_endpoints,
     repository::DealRepository,
     services::{consistency_analyzer::analyze_results, deal_service},
     types::{
@@ -74,14 +73,14 @@ pub async fn discover_url(
     provider_address: &ProviderAddress,
     client_address: Option<ClientAddress>,
     deal_repo: &DealRepository,
-    cached_peer_id: Option<String>,
+    endpoints: Vec<String>,
 ) -> UrlDiscoveryResult {
     let provider_id: ProviderId = provider_address.clone().into();
     let client_id: Option<ClientId> = client_address.clone().map(|c| c.into());
 
     trace!(
-        "discover_url: provider={}, client={:?}",
-        provider_address, client_address
+        "discover_url: provider={}, client={:?}, endpoints={:?}",
+        provider_address, client_address, endpoints
     );
 
     let mut result = match &client_id {
@@ -89,27 +88,10 @@ pub async fn discover_url(
         None => UrlDiscoveryResult::new_provider_only(provider_id.clone()),
     };
 
-    // Get endpoints
-    let (result_code, endpoints) =
-        match provider_endpoints::get_provider_endpoints(config, provider_address, cached_peer_id)
-            .await
-        {
-            Ok((code, eps)) => (code, eps),
-            Err(e) => {
-                error!(
-                    "Failed to get provider endpoints for {}: {:?}",
-                    provider_address, e
-                );
-                result.result_code = ResultCode::Error;
-                result.error_code = Some(e);
-                return result;
-            }
-        };
-
-    let Some(endpoints) = endpoints else {
-        result.result_code = result_code;
+    if endpoints.is_empty() {
+        result.result_code = ResultCode::MissingHttpAddrFromCidContact;
         return result;
-    };
+    }
 
     // Get piece contexts (piece_cid + deal_id)
     let piece_contexts = match deal_service::get_piece_contexts_by_provider(
@@ -175,14 +157,13 @@ pub async fn discover_url(
 
     let working_url = working_url_result.map(|(_, r)| r.url.clone());
 
-    // CAR diagnostics (kept for diagnostic value - detects if response is actually a CAR file)
+    // CAR diagnostics
     let valid_car_count = test_results.iter().filter(|(_, r)| r.is_valid_car).count();
     let small_car_count = test_results
         .iter()
         .filter(|(_, r)| r.is_valid_car && r.content_length.unwrap_or(0) < MIN_VALID_CONTENT_LENGTH)
         .count();
 
-    // Extract CAR info for working URL (diagnostic only, no verification)
     let working_url_car_info = working_url_result.map(|(_, r)| {
         serde_json::json!({
             "is_valid_car": r.is_valid_car,
@@ -191,7 +172,7 @@ pub async fn discover_url(
         })
     });
 
-    // Calculate sector utilization (content_length / piece_size * 100)
+    // Calculate sector utilization
     let utilization_samples: Vec<f64> = test_results
         .iter()
         .filter(|(_, r)| r.success)

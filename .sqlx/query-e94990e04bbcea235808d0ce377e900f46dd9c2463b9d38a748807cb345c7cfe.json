@@ -1,0 +1,124 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                    id,\n                    provider_id AS \"provider_id: ProviderId\",\n                    peer_id,\n                    next_url_discovery_at,\n                    url_discovery_status,\n                    url_discovery_pending_since,\n                    last_working_url,\n                    next_bms_test_at,\n                    bms_test_status,\n                    bms_routing_key,\n                    last_bms_region_discovery_at,\n                    is_consistent,\n                    is_reliable,\n                    url_metadata,\n                    cached_http_endpoints,\n                    endpoints_fetched_at,\n                    created_at,\n                    updated_at\n               FROM\n                    storage_providers\n               WHERE\n                    (\n                        next_url_discovery_at <= NOW()\n                        AND url_discovery_status IS DISTINCT FROM 'pending'\n                    )\n                    OR\n                    (\n                        url_discovery_status = 'pending'\n                        AND (\n                            url_discovery_pending_since IS NULL\n                            OR url_discovery_pending_since < NOW() - INTERVAL '60 minutes'\n                        )\n                    )\n               ORDER BY\n                    (cached_http_endpoints IS NULL) ASC,\n                    next_url_discovery_at ASC\n               LIMIT $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "provider_id: ProviderId",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "peer_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "next_url_discovery_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 4,
+        "name": "url_discovery_status",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "url_discovery_pending_since",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "last_working_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "next_bms_test_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 8,
+        "name": "bms_test_status",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 9,
+        "name": "bms_routing_key",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 10,
+        "name": "last_bms_region_discovery_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 11,
+        "name": "is_consistent",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 12,
+        "name": "is_reliable",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 13,
+        "name": "url_metadata",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 14,
+        "name": "cached_http_endpoints",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 15,
+        "name": "endpoints_fetched_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 16,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 17,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "e94990e04bbcea235808d0ce377e900f46dd9c2463b9d38a748807cb345c7cfe"
+}

@@ -30,6 +30,7 @@ pub struct ProviderFixture {
     pub provider_id: ProviderId,
     pub provider_address: ProviderAddress,
     pub peer_id: String,
+    pub endpoints: Vec<String>,
 }
 
 impl TestContext {
@@ -71,13 +72,17 @@ impl TestContext {
             .await;
 
         self.mocks
-            .setup_cid_contact_mock(&peer_id, multiaddrs)
+            .setup_cid_contact_mock(&peer_id, multiaddrs.clone())
             .await;
+
+        // Parse multiaddrs to HTTP endpoints (same logic as multiaddr_parser)
+        let endpoints = multiaddrs_to_endpoints(&multiaddrs);
 
         ProviderFixture {
             provider_id: ProviderId::new(provider_id).unwrap(),
             provider_address: ProviderAddress::new(format!("f0{provider_id}")).unwrap(),
             peer_id,
+            endpoints,
         }
     }
 
@@ -95,13 +100,16 @@ impl TestContext {
             .await;
 
         self.mocks
-            .setup_cid_contact_mock(&peer_id, multiaddrs)
+            .setup_cid_contact_mock(&peer_id, multiaddrs.clone())
             .await;
+
+        let endpoints = multiaddrs_to_endpoints(&multiaddrs);
 
         ProviderFixture {
             provider_id: ProviderId::new(provider_id).unwrap(),
             provider_address: ProviderAddress::new(format!("f0{provider_id}")).unwrap(),
             peer_id,
+            endpoints,
         }
     }
 
@@ -159,13 +167,16 @@ impl TestContext {
             .await;
 
         self.mocks
-            .setup_cid_contact_mock(&peer_id, multiaddrs)
+            .setup_cid_contact_mock(&peer_id, multiaddrs.clone())
             .await;
+
+        let endpoints = multiaddrs_to_endpoints(&multiaddrs);
 
         ProviderFixture {
             provider_id: ProviderId::new(provider_id).unwrap(),
             provider_address: ProviderAddress::new(format!("f0{provider_id}")).unwrap(),
             peer_id,
+            endpoints,
         }
     }
 
@@ -188,7 +199,7 @@ impl TestContext {
             &fixture.provider_address,
             client_address,
             &deal_repo,
-            Some(fixture.peer_id.clone()),
+            fixture.endpoints.clone(),
         )
         .await;
 
@@ -199,6 +210,24 @@ impl TestContext {
             .await
             .expect("Failed to insert discovery result");
     }
+}
+
+/// Convert multiaddrs like "/ip4/127.0.0.1/tcp/8080" to HTTP endpoints like "http://127.0.0.1:8080"
+fn multiaddrs_to_endpoints(multiaddrs: &[String]) -> Vec<String> {
+    multiaddrs
+        .iter()
+        .filter_map(|addr| {
+            let parts: Vec<&str> = addr.split('/').collect();
+            // Parse /ip4/{host}/tcp/{port} or /ip4/{host}/tcp/{port}/http
+            if parts.len() >= 5 && parts[1] == "ip4" && parts[3] == "tcp" {
+                let host = parts[2];
+                let port = parts[4];
+                Some(format!("http://{host}:{port}"))
+            } else {
+                None
+            }
+        })
+        .collect()
 }
 
 impl Drop for TestContext {

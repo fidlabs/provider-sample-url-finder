@@ -50,6 +50,7 @@ pub struct Config {
     pub bms_url: String,
     pub bms_default_worker_count: i64,
     pub bms_test_interval_days: i64,
+    pub max_concurrent_providers: usize,
 }
 
 impl Config {
@@ -81,6 +82,10 @@ impl Config {
             bms_url: env::var("BMS_URL").expect("BMS_URL must be set"),
             bms_default_worker_count: parse_positive_i64_or_default("BMS_WORKER_COUNT", 10),
             bms_test_interval_days: parse_positive_i64_or_default("BMS_TEST_INTERVAL_DAYS", 7),
+            max_concurrent_providers: env::var("MAX_CONCURRENT_PROVIDERS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(10),
         })
     }
 
@@ -100,6 +105,7 @@ impl Config {
             bms_url: "http://localhost:8080".to_string(),
             bms_default_worker_count: 10,
             bms_test_interval_days: 7,
+            max_concurrent_providers: 10,
         }
     }
 }

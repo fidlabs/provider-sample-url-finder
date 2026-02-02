@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE\n                    storage_providers\n               SET\n                    peer_id = $2,\n                    cached_http_endpoints = $3,\n                    endpoints_fetched_at = NOW(),\n                    next_url_discovery_at = NOW(),\n                    updated_at = NOW()\n               WHERE\n                    provider_id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a52eb2d1d8fc48d93dde64fd7e307fe6761b17f56a57bb8aa54e998c0eac50e4"
+}
