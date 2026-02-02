@@ -14,7 +14,7 @@ fn setup_discovery_params(
     ClientAddress,
     DealRepository,
     Config,
-    String,
+    Vec<String>,
 ) {
     let provider_address = fixture.provider_address.clone();
     let client_address = test_client_address();
@@ -22,8 +22,14 @@ fn setup_discovery_params(
     let lotus_url = ctx.mocks.lotus_url();
     let lotus_base = lotus_url.trim_end_matches('/');
     let config = Config::new_for_test(format!("{lotus_base}/rpc/v1"), ctx.mocks.cid_contact_url());
-    let peer_id = fixture.peer_id.clone();
-    (provider_address, client_address, deal_repo, config, peer_id)
+    let endpoints = fixture.endpoints.clone();
+    (
+        provider_address,
+        client_address,
+        deal_repo,
+        config,
+        endpoints,
+    )
 }
 
 #[tokio::test]
@@ -42,7 +48,7 @@ async fn test_url_discovery_success() {
         )
         .await;
 
-    let (provider_address, client_address, deal_repo, config, peer_id) =
+    let (provider_address, client_address, deal_repo, config, endpoints) =
         setup_discovery_params(&ctx, &fixture);
 
     let result = discover_url(
@@ -50,7 +56,7 @@ async fn test_url_discovery_success() {
         &provider_address,
         Some(client_address),
         &deal_repo,
-        Some(peer_id),
+        endpoints,
     )
     .await;
 
@@ -85,7 +91,7 @@ async fn test_url_discovery_partial_retrievability() {
         )
         .await;
 
-    let (provider_address, client_address, deal_repo, config, peer_id) =
+    let (provider_address, client_address, deal_repo, config, endpoints) =
         setup_discovery_params(&ctx, &fixture);
 
     let result = discover_url(
@@ -93,7 +99,7 @@ async fn test_url_discovery_partial_retrievability() {
         &provider_address,
         Some(client_address),
         &deal_repo,
-        Some(peer_id),
+        endpoints,
     )
     .await;
 
