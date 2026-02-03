@@ -285,14 +285,13 @@ async fn process_single_provider(
 ) -> Result<ProviderOutcome> {
     let provider_id = &provider.provider_id;
 
-    // Skip providers without cached endpoints - they'll be picked up by endpoint_scheduler
     if provider.cached_http_endpoints.is_none() {
-        debug!(
-            "Skipping provider {} - no cached endpoints, rescheduling for 1 hour",
+        warn!(
+            "Provider {} has no cached endpoints but was picked up by URL discovery - scheduling mismatch",
             provider_id
         );
         sp_repo
-            .reschedule_url_discovery_delayed(provider_id, 3600)
+            .reschedule_url_discovery_delayed(provider_id, 86400)
             .await?;
         return Ok(ProviderOutcome::Skipped);
     }

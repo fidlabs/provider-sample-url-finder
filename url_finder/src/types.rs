@@ -287,6 +287,7 @@ impl PgHasArrayType for DiscoveryType {
 /// Result codes for URL discovery operations
 #[derive(Debug, Serialize, Deserialize, ToSchema, Clone, PartialEq)]
 pub enum ResultCode {
+    NoPeerId,
     NoCidContactData,
     MissingAddrFromCidContact,
     MissingHttpAddrFromCidContact,
@@ -302,6 +303,7 @@ impl ResultCode {
     pub fn message(&self) -> Option<&'static str> {
         match self {
             Self::Success => None,
+            Self::NoPeerId => Some("No peer ID found for this provider"),
             Self::NoCidContactData => Some("No data available from cid.contact for this provider"),
             Self::MissingAddrFromCidContact => {
                 Some("No address information found from cid.contact")
@@ -320,6 +322,7 @@ impl ResultCode {
 impl fmt::Display for ResultCode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
+            ResultCode::NoPeerId => "NoPeerId",
             ResultCode::NoCidContactData => "NoCidContactData",
             ResultCode::MissingAddrFromCidContact => "MissingAddrFromCidContact",
             ResultCode::MissingHttpAddrFromCidContact => "MissingHttpAddrFromCidContact",
@@ -338,6 +341,7 @@ impl FromStr for ResultCode {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
+            "NoPeerId" => Ok(Self::NoPeerId),
             "NoCidContactData" => Ok(Self::NoCidContactData),
             "MissingAddrFromCidContact" => Ok(Self::MissingAddrFromCidContact),
             "MissingHttpAddrFromCidContact" => Ok(Self::MissingHttpAddrFromCidContact),

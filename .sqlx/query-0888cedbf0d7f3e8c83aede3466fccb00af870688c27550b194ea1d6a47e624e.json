@@ -41,6 +41,7 @@
             "name": "result_code",
             "kind": {
               "Enum": [
+                "NoPeerId",
                 "NoCidContactData",
                 "MissingAddrFromCidContact",
                 "MissingHttpAddrFromCidContact",

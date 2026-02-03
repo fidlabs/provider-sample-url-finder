@@ -82,9 +82,10 @@ async fn main() -> Result<()> {
     let endpoint_scheduler_handle: JoinHandle<()> = tokio::spawn({
         let config = config.clone();
         let sp_repo = sp_repo.clone();
+        let url_repo = url_repo.clone();
         let shutdown = shutdown_token.clone();
         async move {
-            background::run_endpoint_scheduler(config, sp_repo, shutdown).await;
+            background::run_endpoint_scheduler(config, sp_repo, url_repo, shutdown).await;
         }
     });
 

@@ -1,17 +1,19 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use chrono::Utc;
 use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info};
+use uuid::Uuid;
 
-use crate::cid_contact::{self, CidContactError};
 use crate::config::Config;
 use crate::lotus_rpc;
-use crate::multiaddr_parser;
-use crate::provider_endpoints::valid_curio_provider;
-use crate::repository::{StorageProvider, StorageProviderRepository};
-use crate::types::ProviderAddress;
+use crate::provider_endpoints::{get_provider_endpoints, valid_curio_provider};
+use crate::repository::{
+    StorageProvider, StorageProviderRepository, UrlResult, UrlResultRepository,
+};
+use crate::types::{DiscoveryType, ProviderAddress, ResultCode};
 
 const SCHEDULER_INTERVAL: Duration = Duration::from_secs(300);
 const CATCHUP_INTERVAL: Duration = Duration::from_secs(5);
@@ -21,12 +23,13 @@ const RATE_LIMIT_DELAY: Duration = Duration::from_millis(100);
 pub async fn run_endpoint_scheduler(
     config: Arc<Config>,
     sp_repo: Arc<StorageProviderRepository>,
+    url_repo: Arc<UrlResultRepository>,
     shutdown: CancellationToken,
 ) {
     info!("Starting endpoint scheduler");
 
     loop {
-        match refresh_endpoints(&config, &sp_repo, &shutdown).await {
+        match refresh_endpoints(&config, &sp_repo, &url_repo, &shutdown).await {
             Ok((count, more_pending)) => {
                 if count > 0 {
                     info!("Endpoint refresh: {} providers updated", count);
@@ -57,6 +60,7 @@ pub async fn run_endpoint_scheduler(
 async fn refresh_endpoints(
     config: &Config,
     sp_repo: &StorageProviderRepository,
+    url_repo: &UrlResultRepository,
     shutdown: &CancellationToken,
 ) -> color_eyre::Result<(usize, bool)> {
     let providers = sp_repo.get_providers_needing_endpoints(BATCH_SIZE).await?;
@@ -74,7 +78,7 @@ async fn refresh_endpoints(
         );
     }
 
-    let count = process_provider_batch(config, sp_repo, providers, shutdown).await;
+    let count = process_provider_batch(config, sp_repo, url_repo, providers, shutdown).await;
 
     Ok((count, batch_was_full))
 }
@@ -82,6 +86,7 @@ async fn refresh_endpoints(
 async fn process_provider_batch(
     config: &Config,
     sp_repo: &StorageProviderRepository,
+    url_repo: &UrlResultRepository,
     providers: Vec<StorageProvider>,
     shutdown: &CancellationToken,
 ) -> usize {
@@ -93,12 +98,14 @@ async fn process_provider_batch(
             break;
         }
 
-        match fetch_and_cache_endpoints(config, sp_repo, &provider).await {
-            Ok(true) => {
+        match fetch_and_cache_endpoints(config, sp_repo, url_repo, &provider).await {
+            Ok(None) => {
                 debug!("Cached endpoints for {}", provider.provider_id);
                 count += 1;
             }
-            Ok(false) => debug!("No endpoints found for {}", provider.provider_id),
+            Ok(Some(result_code)) => {
+                debug!("No endpoints for {}: {}", provider.provider_id, result_code)
+            }
             Err(e) => debug!(
                 "Failed to fetch endpoints for {}: {:?}",
                 provider.provider_id, e
@@ -111,14 +118,14 @@ async fn process_provider_batch(
     count
 }
 
-/// Get peer_id from lotus
-/// Get multiaddr from cid.contact
-/// Parse and cache HTTP endpoints for storage_provider
+/// Phase 1 of URL discovery: resolve peer_id, fetch endpoints, cache or record failure.
+/// Returns None on success (endpoints cached), Some(ResultCode) on failure (result recorded).
 async fn fetch_and_cache_endpoints(
     config: &Config,
     sp_repo: &StorageProviderRepository,
+    url_repo: &UrlResultRepository,
     provider: &StorageProvider,
-) -> color_eyre::Result<bool> {
+) -> color_eyre::Result<Option<ResultCode>> {
     let provider_id = &provider.provider_id;
     let address: ProviderAddress = provider_id.clone().into();
 
@@ -133,54 +140,75 @@ async fn fetch_and_cache_endpoints(
                 Ok(pid) => pid,
                 Err(e) => {
                     debug!("Lotus lookup failed for {}: {:?}", provider_id, e);
-                    sp_repo.mark_endpoint_fetch_failed(provider_id).await?;
-                    return Ok(false);
+                    return record_failure(
+                        sp_repo,
+                        url_repo,
+                        provider_id,
+                        ResultCode::NoPeerId,
+                        None,
+                    )
+                    .await;
                 }
             }
         }
     };
 
-    let cid_contact_res = match cid_contact::get_contact(config, &peer_id).await {
-        Ok(res) => res,
-        Err(CidContactError::NoData) => {
-            debug!("No cid.contact data for {}", provider_id);
-            sp_repo.mark_endpoint_fetch_failed(provider_id).await?;
-            return Ok(false);
+    match get_provider_endpoints(config, &address, Some(peer_id.clone())).await {
+        Ok((ResultCode::Success, Some(endpoints))) => {
+            sp_repo
+                .update_cached_endpoints(provider_id, &peer_id, &endpoints)
+                .await?;
+            debug!(
+                "Cached {} endpoints for {} (peer_id: {})",
+                endpoints.len(),
+                provider_id,
+                peer_id
+            );
+            Ok(None)
         }
-        Err(e) => {
-            debug!("cid.contact failed for {}: {}", provider_id, e);
-            sp_repo.mark_endpoint_fetch_failed(provider_id).await?;
-            return Ok(false);
+        Ok((result_code, _)) => {
+            record_failure(sp_repo, url_repo, provider_id, result_code, None).await
         }
+        Err(error_code) => {
+            debug!("get_provider_endpoints failed for {provider_id}: {error_code}");
+            record_failure(
+                sp_repo,
+                url_repo,
+                provider_id,
+                ResultCode::Error,
+                Some(error_code),
+            )
+            .await
+        }
+    }
+}
+
+async fn record_failure(
+    sp_repo: &StorageProviderRepository,
+    url_repo: &UrlResultRepository,
+    provider_id: &crate::types::ProviderId,
+    result_code: ResultCode,
+    error_code: Option<crate::types::ErrorCode>,
+) -> color_eyre::Result<Option<ResultCode>> {
+    sp_repo.mark_endpoint_fetch_failed(provider_id).await?;
+
+    let url_result = UrlResult {
+        id: Uuid::new_v4(),
+        provider_id: provider_id.clone(),
+        client_id: None,
+        result_type: DiscoveryType::Provider,
+        working_url: None,
+        retrievability_percent: 0.0,
+        result_code: result_code.clone(),
+        error_code,
+        tested_at: Utc::now(),
+        is_consistent: None,
+        is_reliable: None,
+        url_metadata: None,
+        sector_utilization_percent: None,
     };
 
-    let addrs = cid_contact::get_all_addresses_from_response(cid_contact_res);
-    if addrs.is_empty() {
-        debug!("No addresses in cid.contact response for {}", provider_id);
-        sp_repo.mark_endpoint_fetch_failed(provider_id).await?;
-        return Ok(false);
-    }
+    url_repo.insert_batch(&[url_result]).await?;
 
-    let mut endpoints = multiaddr_parser::parse(addrs);
-    if endpoints.is_empty() {
-        debug!("No HTTP endpoints parsed for {}", provider_id);
-        sp_repo.mark_endpoint_fetch_failed(provider_id).await?;
-        return Ok(false);
-    }
-
-    endpoints.sort();
-    endpoints.dedup();
-
-    sp_repo
-        .update_cached_endpoints(provider_id, &peer_id, &endpoints)
-        .await?;
-
-    debug!(
-        "Cached {} endpoints for {} (peer_id: {})",
-        endpoints.len(),
-        provider_id,
-        peer_id
-    );
-
-    Ok(true)
+    Ok(Some(result_code))
 }

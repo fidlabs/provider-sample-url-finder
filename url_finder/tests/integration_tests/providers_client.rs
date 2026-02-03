@@ -46,6 +46,24 @@ async fn test_get_provider_client_not_found() {
     let ctx = TestContext::new().await;
 
     seed_provider(&ctx.dbs.app_pool, TEST_PROVIDER_1_DB).await;
+
+    // No url_results at all — true not found
+    let response = ctx
+        .app
+        .get(&format!(
+            "/providers/{}/clients/{}",
+            TEST_PROVIDER_1_API, TEST_CLIENT_ID_API
+        ))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn test_get_provider_client_falls_back_to_provider_result() {
+    let ctx = TestContext::new().await;
+
+    seed_provider(&ctx.dbs.app_pool, TEST_PROVIDER_1_DB).await;
     seed_url_result(
         &ctx.dbs.app_pool,
         TEST_PROVIDER_1_DB,
@@ -56,6 +74,7 @@ async fn test_get_provider_client_not_found() {
     )
     .await;
 
+    // No client row exists, but provider row does — fallback returns provider data
     let response = ctx
         .app
         .get(&format!(
@@ -64,7 +83,16 @@ async fn test_get_provider_client_not_found() {
         ))
         .await;
 
-    assert_eq!(response.status_code(), StatusCode::NOT_FOUND);
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: serde_json::Value = response.json();
+    assert_json_include!(
+        actual: body,
+        expected: json!({
+            "provider_id": TEST_PROVIDER_1_API,
+            "working_url": TEST_WORKING_URL,
+            "retrievability_percent": 80.0
+        })
+    );
 }
 
 #[tokio::test]

@@ -428,7 +428,7 @@ impl StorageProviderRepository {
                     storage_providers
                WHERE
                     endpoints_fetched_at IS NULL
-                    OR endpoints_fetched_at < NOW() - INTERVAL '2 days'
+                    OR endpoints_fetched_at < NOW() - INTERVAL '1 day'
                ORDER BY
                     COALESCE(endpoints_fetched_at, '1970-01-01'::timestamptz) ASC
                LIMIT $1
@@ -473,6 +473,7 @@ impl StorageProviderRepository {
                SET
                     endpoints_fetched_at = NOW(),
                     cached_http_endpoints = NULL,
+                    next_url_discovery_at = NOW() + INTERVAL '1 day',
                     updated_at = NOW()
                WHERE
                     provider_id = $1

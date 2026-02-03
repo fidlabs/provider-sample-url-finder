@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT\n                    id,\n                    provider_id AS \"provider_id: ProviderId\",\n                    peer_id,\n                    next_url_discovery_at,\n                    url_discovery_status,\n                    url_discovery_pending_since,\n                    last_working_url,\n                    next_bms_test_at,\n                    bms_test_status,\n                    bms_routing_key,\n                    last_bms_region_discovery_at,\n                    is_consistent,\n                    is_reliable,\n                    url_metadata,\n                    cached_http_endpoints,\n                    endpoints_fetched_at,\n                    created_at,\n                    updated_at\n               FROM\n                    storage_providers\n               WHERE\n                    endpoints_fetched_at IS NULL\n                    OR endpoints_fetched_at < NOW() - INTERVAL '2 days'\n               ORDER BY\n                    COALESCE(endpoints_fetched_at, '1970-01-01'::timestamptz) ASC\n               LIMIT $1\n            ",
+  "query": "SELECT\n                    id,\n                    provider_id AS \"provider_id: ProviderId\",\n                    peer_id,\n                    next_url_discovery_at,\n                    url_discovery_status,\n                    url_discovery_pending_since,\n                    last_working_url,\n                    next_bms_test_at,\n                    bms_test_status,\n                    bms_routing_key,\n                    last_bms_region_discovery_at,\n                    is_consistent,\n                    is_reliable,\n                    url_metadata,\n                    cached_http_endpoints,\n                    endpoints_fetched_at,\n                    created_at,\n                    updated_at\n               FROM\n                    storage_providers\n               WHERE\n                    endpoints_fetched_at IS NULL\n                    OR endpoints_fetched_at < NOW() - INTERVAL '1 day'\n               ORDER BY\n                    COALESCE(endpoints_fetched_at, '1970-01-01'::timestamptz) ASC\n               LIMIT $1\n            ",
   "describe": {
     "columns": [
       {
@@ -120,5 +120,5 @@
       false
     ]
   },
-  "hash": "d1dd6c83d0a4bd5b4a62698a46d6980ba1c8ddf84f5d39fa49f905fb863e8c2d"
+  "hash": "f68c64ad0281fbb6aaf65b1efa3c541d9435b0d516ba945442e42450ea09c899"
 }
