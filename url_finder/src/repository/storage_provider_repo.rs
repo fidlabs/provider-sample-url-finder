@@ -20,8 +20,8 @@ pub struct StorageProvider {
     pub bms_test_status: Option<String>,
     pub bms_routing_key: Option<String>,
     pub last_bms_region_discovery_at: Option<DateTime<Utc>>,
-    pub is_consistent: bool,
-    pub is_reliable: bool,
+    pub is_consistent: Option<bool>,
+    pub is_reliable: Option<bool>,
     pub url_metadata: Option<serde_json::Value>,
     pub cached_http_endpoints: Option<Vec<String>>,
     pub endpoints_fetched_at: Option<DateTime<Utc>>,
@@ -165,12 +165,29 @@ impl StorageProviderRepository {
         Ok(())
     }
 
+    pub async fn reset_url_discovery_pending(&self, provider_id: &ProviderId) -> Result<()> {
+        sqlx::query!(
+            r#"UPDATE
+                    storage_providers
+               SET
+                    url_discovery_status = NULL,
+                    url_discovery_pending_since = NULL
+               WHERE
+                    provider_id = $1
+            "#,
+            provider_id as &ProviderId,
+        )
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
     pub async fn update_after_url_discovery(
         &self,
         provider_id: &ProviderId,
         last_working_url: Option<String>,
-        is_consistent: bool,
-        is_reliable: bool,
+        is_consistent: Option<bool>,
+        is_reliable: Option<bool>,
         url_metadata: Option<serde_json::Value>,
     ) -> Result<()> {
         sqlx::query!(

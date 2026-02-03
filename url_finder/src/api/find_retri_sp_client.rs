@@ -28,7 +28,7 @@ pub struct FindRetriByClientAndSpPath {
 #[derive(Serialize, ToSchema)]
 pub struct FindRetriByClientAndSpResponse {
     pub result: ResultCode,
-    pub retrievability_percent: f64,
+    pub retrievability_percent: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 }
@@ -47,7 +47,7 @@ impl FindRetriByClientAndSpResponse {
     fn not_indexed() -> Self {
         Self {
             result: ResultCode::Error,
-            retrievability_percent: 0.0,
+            retrievability_percent: None,
             message: Some(
                 "Provider/client pair has not been indexed yet. Please try again later."
                     .to_string(),

@@ -14,7 +14,7 @@ async fn test_get_provider_success() {
         TEST_PROVIDER_1_DB,
         None,
         Some(TEST_WORKING_URL),
-        85.5,
+        Some(85.5),
         "Success",
     )
     .await;
@@ -68,7 +68,7 @@ async fn test_get_provider_without_bms() {
         TEST_PROVIDER_2_DB,
         None,
         Some(TEST_WORKING_URL),
-        75.0,
+        Some(75.0),
         "Success",
     )
     .await;

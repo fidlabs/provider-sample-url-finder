@@ -23,7 +23,7 @@ pub struct FindRetriBySpPath {
 #[derive(Serialize, Deserialize, ToSchema)]
 pub struct FindRetriBySpResponse {
     pub result: ResultCode,
-    pub retrievability_percent: f64,
+    pub retrievability_percent: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 }
@@ -42,7 +42,7 @@ impl FindRetriBySpResponse {
     fn not_indexed() -> Self {
         Self {
             result: ResultCode::Error,
-            retrievability_percent: 0.0,
+            retrievability_percent: None,
             message: Some("Provider has not been indexed yet. Please try again later.".to_string()),
         }
     }

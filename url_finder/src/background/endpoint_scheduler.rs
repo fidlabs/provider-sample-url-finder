@@ -198,7 +198,7 @@ async fn record_failure(
         client_id: None,
         result_type: DiscoveryType::Provider,
         working_url: None,
-        retrievability_percent: 0.0,
+        retrievability_percent: None,
         result_code: result_code.clone(),
         error_code,
         tested_at: Utc::now(),

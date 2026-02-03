@@ -26,7 +26,7 @@ async fn test_get_provider_standard_response_has_quality_metrics() {
         TEST_PROVIDER_1_DB,
         None,
         Some(TEST_WORKING_URL),
-        85.0,
+        Some(85.0),
         "Success",
         Utc::now(),
         Some(true), // is_consistent
@@ -75,7 +75,7 @@ async fn test_get_provider_standard_response_with_null_quality_metrics() {
         TEST_PROVIDER_1_DB,
         None,
         Some(TEST_WORKING_URL),
-        75.0,
+        Some(75.0),
         "Success",
         Utc::now(),
         None, // is_consistent not set
@@ -91,14 +91,14 @@ async fn test_get_provider_standard_response_with_null_quality_metrics() {
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: serde_json::Value = response.json();
 
-    // Fields should be absent (null -> omitted via skip_serializing_if)
+    // Fields should be present but null (no skip_serializing_if on test-result fields)
     assert!(
-        body.get("is_consistent").is_none(),
-        "is_consistent should not be present when null"
+        body["is_consistent"].is_null(),
+        "is_consistent should be null when not measured"
     );
     assert!(
-        body.get("is_reliable").is_none(),
-        "is_reliable should not be present when null"
+        body["is_reliable"].is_null(),
+        "is_reliable should be null when not measured"
     );
 
     // Extended fields still absent
@@ -116,7 +116,7 @@ async fn test_get_provider_extended_response_has_diagnostics() {
         TEST_PROVIDER_1_DB,
         None,
         Some(TEST_WORKING_URL),
-        90.0,
+        Some(90.0),
         "Success",
         Utc::now(),
         Some(true),
@@ -168,7 +168,7 @@ async fn test_get_provider_extended_response_has_scheduling() {
         TEST_PROVIDER_1_DB,
         None,
         Some(TEST_WORKING_URL),
-        80.0,
+        Some(80.0),
         "Success",
         Utc::now(),
         Some(true),
@@ -216,7 +216,7 @@ async fn test_get_provider_extended_false_explicit() {
         TEST_PROVIDER_1_DB,
         None,
         Some(TEST_WORKING_URL),
-        85.0,
+        Some(85.0),
         "Success",
         Utc::now(),
         Some(true),
@@ -256,7 +256,7 @@ async fn test_list_providers_standard_response() {
         TEST_PROVIDER_1_DB,
         None,
         Some(TEST_WORKING_URL),
-        80.0,
+        Some(80.0),
         "Success",
         Utc::now(),
         Some(true),
@@ -301,7 +301,7 @@ async fn test_list_providers_extended_response() {
         TEST_PROVIDER_1_DB,
         None,
         Some(TEST_WORKING_URL),
-        85.0,
+        Some(85.0),
         "Success",
         Utc::now(),
         Some(true),
@@ -353,7 +353,7 @@ async fn test_list_providers_extended_multiple() {
         TEST_PROVIDER_1_DB,
         None,
         Some(TEST_WORKING_URL),
-        90.0,
+        Some(90.0),
         "Success",
         Utc::now(),
         Some(true),
@@ -368,7 +368,7 @@ async fn test_list_providers_extended_multiple() {
         TEST_PROVIDER_2_DB,
         None,
         Some(TEST_WORKING_URL_2),
-        50.0,
+        Some(50.0),
         "Success",
         Utc::now(),
         Some(false),
@@ -407,7 +407,7 @@ async fn test_bulk_providers_standard_response() {
         TEST_PROVIDER_1_DB,
         None,
         Some(TEST_WORKING_URL),
-        85.0,
+        Some(85.0),
         "Success",
         Utc::now(),
         Some(true),
@@ -452,7 +452,7 @@ async fn test_bulk_providers_extended_response() {
         TEST_PROVIDER_1_DB,
         None,
         Some(TEST_WORKING_URL),
-        90.0,
+        Some(90.0),
         "Success",
         Utc::now(),
         Some(true),
@@ -466,7 +466,7 @@ async fn test_bulk_providers_extended_response() {
         TEST_PROVIDER_2_DB,
         None,
         Some(TEST_WORKING_URL_2),
-        75.0,
+        Some(75.0),
         "Success",
         Utc::now(),
         Some(false),
@@ -513,7 +513,7 @@ async fn test_bulk_providers_extended_with_not_found() {
         TEST_PROVIDER_1_DB,
         None,
         Some(TEST_WORKING_URL),
-        80.0,
+        Some(80.0),
         "Success",
         Utc::now(),
         Some(true),
@@ -557,7 +557,7 @@ async fn test_get_provider_bms_extended_fields() {
         TEST_PROVIDER_1_DB,
         None,
         Some(TEST_WORKING_URL),
-        85.0,
+        Some(85.0),
         "Success",
         Utc::now(),
         Some(true),
@@ -646,7 +646,7 @@ async fn test_get_provider_extended_with_error_code() {
         TEST_PROVIDER_1_DB,
         None,
         None, // No working URL
-        0.0,
+        None,
         "NoDealsFound",
         Utc::now(),
         None,

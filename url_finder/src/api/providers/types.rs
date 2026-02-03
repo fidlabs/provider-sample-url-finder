@@ -132,17 +132,12 @@ pub struct SchedulingResponse {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ProviderResponse {
     pub provider_id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub working_url: Option<String>,
-    pub retrievability_percent: f64,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    pub retrievability_percent: Option<f64>,
     pub sector_utilization_percent: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tested_at: Option<DateTime<Utc>>,
-    // New: always returned
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub is_consistent: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub is_reliable: Option<bool>,
     #[serde(default)]
     pub performance: PerformanceResponse,
@@ -158,17 +153,12 @@ pub struct ProviderClientResponse {
     pub provider_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub client_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub working_url: Option<String>,
-    pub retrievability_percent: f64,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    pub retrievability_percent: Option<f64>,
     pub sector_utilization_percent: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tested_at: Option<DateTime<Utc>>,
-    // New: always returned
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub is_consistent: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub is_reliable: Option<bool>,
     #[serde(default)]
     pub performance: PerformanceResponse,

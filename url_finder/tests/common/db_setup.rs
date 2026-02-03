@@ -108,13 +108,15 @@ pub async fn seed_url_result(
     provider_id: &str,
     client_id: Option<&str>,
     working_url: Option<&str>,
-    retrievability: f64,
+    retrievability: Option<f64>,
     result_code: &str,
 ) {
-    assert!(
-        (0.0..=100.0).contains(&retrievability),
-        "retrievability must be in range 0..=100, got {retrievability}"
-    );
+    if let Some(r) = retrievability {
+        assert!(
+            (0.0..=100.0).contains(&r),
+            "retrievability must be in range 0..=100, got {r}"
+        );
+    }
 
     let result_type = if client_id.is_some() {
         "ProviderClient"
@@ -151,7 +153,7 @@ pub async fn seed_provider_with_url_status(
     app_pool: &PgPool,
     provider_id: &str,
     last_working_url: Option<&str>,
-    is_consistent: bool,
+    is_consistent: Option<bool>,
 ) {
     sqlx::query(
         r#"INSERT INTO
@@ -221,16 +223,18 @@ pub async fn seed_url_result_at(
     provider_id: &str,
     client_id: Option<&str>,
     working_url: Option<&str>,
-    retrievability: f64,
+    retrievability: Option<f64>,
     result_code: &str,
     tested_at: DateTime<Utc>,
     is_consistent: Option<bool>,
     is_reliable: Option<bool>,
 ) {
-    assert!(
-        (0.0..=100.0).contains(&retrievability),
-        "retrievability must be in range 0..=100, got {retrievability}"
-    );
+    if let Some(r) = retrievability {
+        assert!(
+            (0.0..=100.0).contains(&r),
+            "retrievability must be in range 0..=100, got {r}"
+        );
+    }
 
     let result_type = if client_id.is_some() {
         "ProviderClient"

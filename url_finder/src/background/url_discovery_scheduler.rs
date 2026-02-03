@@ -4,7 +4,7 @@ use crate::{
         DealRepository, StorageProvider, StorageProviderRepository, UrlResult, UrlResultRepository,
     },
     services::url_discovery_service,
-    types::{ClientAddress, ClientId, ProviderAddress, ProviderId},
+    types::{ClientAddress, ClientId, ProviderAddress, ProviderId, ResultCode},
 };
 use color_eyre::Result;
 use futures::future::join_all;
@@ -57,8 +57,8 @@ impl DiscoveryBatchStats {
                 } else {
                     self.failed += 1;
                 }
-                self.total_retrievability += retrievability;
-                if *consistent {
+                self.total_retrievability += retrievability.unwrap_or(0.0);
+                if consistent.unwrap_or(false) {
                     self.consistent += 1;
                 }
             }
@@ -94,8 +94,8 @@ impl DiscoveryBatchStats {
 enum ProviderOutcome {
     Processed {
         success: bool,
-        retrievability: f64,
-        consistent: bool,
+        retrievability: Option<f64>,
+        consistent: Option<bool>,
     },
     Skipped,
 }
@@ -326,9 +326,21 @@ async fn process_single_provider(
     .await;
 
     // Extract provider-only result for storage_providers update
-    // None case: provider-only discovery missing (panic, filtering, etc.) - default is_consistent
-    // to false since consistency was not verified
     let provider_discovery = results.iter().find(|r| r.client_id.is_none());
+
+    // System errors (infrastructure failure, not provider issue) - don't persist
+    let is_system_error = provider_discovery
+        .map(|r| r.result_code == ResultCode::Error)
+        .unwrap_or(false);
+
+    if is_system_error {
+        debug!(
+            "Skipping persistence for provider {} due to system error",
+            provider_id
+        );
+        sp_repo.reset_url_discovery_pending(provider_id).await?;
+        return Ok(ProviderOutcome::Skipped);
+    }
 
     let (last_working_url, is_consistent, is_reliable, url_metadata, outcome) =
         match provider_discovery {
@@ -345,13 +357,13 @@ async fn process_single_provider(
             ),
             None => (
                 None,
-                false,
-                false,
+                None,
+                None,
                 None,
                 ProviderOutcome::Processed {
                     success: false,
-                    retrievability: 0.0,
-                    consistent: false,
+                    retrievability: None,
+                    consistent: None,
                 },
             ),
         };
@@ -385,13 +397,18 @@ async fn process_single_provider(
         let clients_count = client_ids_for_log.len();
         if *success {
             info!(
-                "f0{} ({} clients): OK retri={:.1}% consistent={}",
-                provider_id, clients_count, retrievability, consistent
+                "f0{} ({} clients): OK retri={:.1}% consistent={:?}",
+                provider_id,
+                clients_count,
+                retrievability.unwrap_or(0.0),
+                consistent
             );
         } else {
             debug!(
                 "f0{} ({} clients): FAIL retri={:.1}%",
-                provider_id, clients_count, retrievability
+                provider_id,
+                clients_count,
+                retrievability.unwrap_or(0.0)
             );
         }
     }

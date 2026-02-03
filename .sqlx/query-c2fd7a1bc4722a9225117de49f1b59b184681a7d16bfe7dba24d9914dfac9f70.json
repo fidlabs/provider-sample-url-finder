@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT DISTINCT ON (provider_id)\n                    id,\n                    provider_id AS \"provider_id: ProviderId\",\n                    client_id AS \"client_id: ClientId\",\n                    result_type AS \"result_type: DiscoveryType\",\n                    working_url,\n                    retrievability_percent::float8 AS \"retrievability_percent!\",\n                    result_code AS \"result_code: ResultCode\",\n                    error_code AS \"error_code: ErrorCode\",\n                    tested_at,\n                    is_consistent,\n                    is_reliable,\n                    url_metadata,\n                    sector_utilization_percent::float8 AS \"sector_utilization_percent\"\n               FROM\n                    url_results\n               WHERE\n                    client_id = $1\n                    AND result_type = 'ProviderClient'\n               ORDER BY\n                    provider_id,\n                    tested_at DESC\n            ",
+  "query": "SELECT DISTINCT ON (provider_id)\n                    id,\n                    provider_id AS \"provider_id: ProviderId\",\n                    client_id AS \"client_id: ClientId\",\n                    result_type AS \"result_type: DiscoveryType\",\n                    working_url,\n                    retrievability_percent::float8 AS \"retrievability_percent\",\n                    result_code AS \"result_code: ResultCode\",\n                    error_code AS \"error_code: ErrorCode\",\n                    tested_at,\n                    is_consistent,\n                    is_reliable,\n                    url_metadata,\n                    sector_utilization_percent::float8 AS \"sector_utilization_percent\"\n               FROM\n                    url_results\n               WHERE\n                    client_id = $1\n                    AND result_type = 'ProviderClient'\n               ORDER BY\n                    provider_id,\n                    tested_at DESC\n            ",
   "describe": {
     "columns": [
       {
@@ -40,7 +40,7 @@
       },
       {
         "ordinal": 5,
-        "name": "retrievability_percent!",
+        "name": "retrievability_percent",
         "type_info": "Float8"
       },
       {
@@ -131,5 +131,5 @@
       null
     ]
   },
-  "hash": "ecc7001ffd569699cb33ec926a8f569db47e42e6a5b19699d621f889f44894d6"
+  "hash": "c2fd7a1bc4722a9225117de49f1b59b184681a7d16bfe7dba24d9914dfac9f70"
 }

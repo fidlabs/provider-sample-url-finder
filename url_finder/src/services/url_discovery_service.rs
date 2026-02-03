@@ -20,12 +20,12 @@ pub struct UrlDiscoveryResult {
     pub client_id: Option<ClientId>,
     pub result_type: DiscoveryType,
     pub working_url: Option<String>,
-    pub retrievability_percent: f64,
+    pub retrievability_percent: Option<f64>,
     pub result_code: ResultCode,
     pub error_code: Option<ErrorCode>,
     pub tested_at: DateTime<Utc>,
-    pub is_consistent: bool,
-    pub is_reliable: bool,
+    pub is_consistent: Option<bool>,
+    pub is_reliable: Option<bool>,
     pub url_metadata: Option<serde_json::Value>,
     pub sector_utilization_percent: Option<f64>,
 }
@@ -38,12 +38,12 @@ impl UrlDiscoveryResult {
             client_id: None,
             result_type: DiscoveryType::Provider,
             working_url: None,
-            retrievability_percent: 0.0,
+            retrievability_percent: None,
             result_code: ResultCode::Error,
             error_code: None,
             tested_at: Utc::now(),
-            is_consistent: false, // No verification performed yet
-            is_reliable: false,   // No verification performed yet
+            is_consistent: None,
+            is_reliable: None,
             url_metadata: None,
             sector_utilization_percent: None,
         }
@@ -56,12 +56,12 @@ impl UrlDiscoveryResult {
             client_id: Some(client_id),
             result_type: DiscoveryType::ProviderClient,
             working_url: None,
-            retrievability_percent: 0.0,
+            retrievability_percent: None,
             result_code: ResultCode::Error,
             error_code: None,
             tested_at: Utc::now(),
-            is_consistent: false, // No verification performed yet
-            is_reliable: false,   // No verification performed yet
+            is_consistent: None,
+            is_reliable: None,
             url_metadata: None,
             sector_utilization_percent: None,
         }
@@ -226,9 +226,9 @@ pub async fn discover_url(
     });
 
     result.working_url = working_url.clone();
-    result.retrievability_percent = analysis.retrievability_percent;
-    result.is_consistent = analysis.is_consistent;
-    result.is_reliable = analysis.is_reliable;
+    result.retrievability_percent = Some(analysis.retrievability_percent);
+    result.is_consistent = Some(analysis.is_consistent);
+    result.is_reliable = Some(analysis.is_reliable);
     result.url_metadata = Some(url_metadata);
     result.sector_utilization_percent = sector_utilization_percent;
 

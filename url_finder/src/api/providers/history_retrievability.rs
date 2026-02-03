@@ -56,14 +56,10 @@ pub struct RetrievabilityHistoryResponse {
 #[derive(Serialize, ToSchema)]
 pub struct RetrievabilityDataPoint {
     pub date: NaiveDate,
-    pub retrievability_percent: f64,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    pub retrievability_percent: Option<f64>,
     pub sector_utilization_percent: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub is_consistent: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub is_reliable: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub working_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub result_code: Option<ResultCode>,
@@ -78,7 +74,7 @@ pub struct RetrievabilityDataPoint {
 impl RetrievabilityDataPoint {
     fn basic(
         date: NaiveDate,
-        retrievability_percent: f64,
+        retrievability_percent: Option<f64>,
         sector_utilization_percent: Option<f64>,
     ) -> Self {
         Self {

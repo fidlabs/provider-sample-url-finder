@@ -24,7 +24,7 @@ pub struct UrlResult {
     pub client_id: Option<ClientId>,
     pub result_type: DiscoveryType,
     pub working_url: Option<String>,
-    pub retrievability_percent: f64,
+    pub retrievability_percent: Option<f64>,
     pub result_code: ResultCode,
     pub error_code: Option<ErrorCode>,
     pub tested_at: DateTime<Utc>,
@@ -46,8 +46,8 @@ impl From<UrlDiscoveryResult> for UrlResult {
             result_code: result.result_code,
             error_code: result.error_code,
             tested_at: result.tested_at,
-            is_consistent: Some(result.is_consistent),
-            is_reliable: Some(result.is_reliable),
+            is_consistent: result.is_consistent,
+            is_reliable: result.is_reliable,
             url_metadata: result.url_metadata,
             sector_utilization_percent: result.sector_utilization_percent,
         }
@@ -57,7 +57,7 @@ impl From<UrlDiscoveryResult> for UrlResult {
 #[derive(Debug, sqlx::FromRow)]
 pub struct HistoryRow {
     pub date: NaiveDate,
-    pub retrievability_percent: f64,
+    pub retrievability_percent: Option<f64>,
     pub sector_utilization_percent: Option<f64>,
     pub is_consistent: Option<bool>,
     pub is_reliable: Option<bool>,
@@ -90,7 +90,7 @@ impl UrlResultRepository {
                     client_id AS "client_id: ClientId",
                     result_type AS "result_type: DiscoveryType",
                     working_url,
-                    retrievability_percent::float8 AS "retrievability_percent!",
+                    retrievability_percent::float8 AS "retrievability_percent",
                     result_code AS "result_code: ResultCode",
                     error_code AS "error_code: ErrorCode",
                     tested_at,
@@ -128,7 +128,7 @@ impl UrlResultRepository {
                     client_id AS "client_id: ClientId",
                     result_type AS "result_type: DiscoveryType",
                     working_url,
-                    retrievability_percent::float8 AS "retrievability_percent!",
+                    retrievability_percent::float8 AS "retrievability_percent",
                     result_code AS "result_code: ResultCode",
                     error_code AS "error_code: ErrorCode",
                     tested_at,
@@ -167,7 +167,7 @@ impl UrlResultRepository {
                     client_id AS "client_id: ClientId",
                     result_type AS "result_type: DiscoveryType",
                     working_url,
-                    retrievability_percent::float8 AS "retrievability_percent!",
+                    retrievability_percent::float8 AS "retrievability_percent",
                     result_code AS "result_code: ResultCode",
                     error_code AS "error_code: ErrorCode",
                     tested_at,
@@ -206,7 +206,7 @@ impl UrlResultRepository {
                     ur.client_id AS "client_id: ClientId",
                     ur.result_type AS "result_type: DiscoveryType",
                     ur.working_url,
-                    ur.retrievability_percent::float8 AS "retrievability_percent!",
+                    ur.retrievability_percent::float8 AS "retrievability_percent",
                     ur.result_code AS "result_code: ResultCode",
                     ur.error_code AS "error_code: ErrorCode",
                     ur.tested_at,
@@ -277,7 +277,7 @@ impl UrlResultRepository {
                     client_id AS "client_id: ClientId",
                     result_type AS "result_type: DiscoveryType",
                     working_url,
-                    retrievability_percent::float8 AS "retrievability_percent!",
+                    retrievability_percent::float8 AS "retrievability_percent",
                     result_code AS "result_code: ResultCode",
                     error_code AS "error_code: ErrorCode",
                     tested_at,
@@ -313,7 +313,7 @@ impl UrlResultRepository {
         let mut client_ids: Vec<Option<String>> = Vec::with_capacity(len);
         let mut result_types: Vec<DiscoveryType> = Vec::with_capacity(len);
         let mut working_urls: Vec<Option<String>> = Vec::with_capacity(len);
-        let mut retrievability_percents: Vec<f64> = Vec::with_capacity(len);
+        let mut retrievability_percents: Vec<Option<f64>> = Vec::with_capacity(len);
         let mut result_codes: Vec<ResultCode> = Vec::with_capacity(len);
         let mut error_codes: Vec<Option<ErrorCode>> = Vec::with_capacity(len);
         let mut tested_ats: Vec<DateTime<Utc>> = Vec::with_capacity(len);
@@ -364,7 +364,7 @@ impl UrlResultRepository {
             &client_ids as &[Option<String>],
             &result_types as &[DiscoveryType],
             &working_urls as &[Option<String>],
-            &retrievability_percents as &[f64],
+            &retrievability_percents as &[Option<f64>],
             &result_codes as &[ResultCode],
             &error_codes as &[Option<ErrorCode>],
             &tested_ats as &[DateTime<Utc>],
@@ -389,7 +389,7 @@ impl UrlResultRepository {
             HistoryRow,
             r#"SELECT DISTINCT ON (DATE(tested_at))
                     DATE(tested_at) AS "date!",
-                    retrievability_percent::float8 AS "retrievability_percent!",
+                    retrievability_percent::float8 AS "retrievability_percent",
                     sector_utilization_percent::float8 AS "sector_utilization_percent",
                     is_consistent,
                     is_reliable,
@@ -430,7 +430,7 @@ impl UrlResultRepository {
             HistoryRow,
             r#"SELECT DISTINCT ON (DATE(combined.tested_at))
                     DATE(combined.tested_at) AS "date!",
-                    combined.retrievability_percent::float8 AS "retrievability_percent!",
+                    combined.retrievability_percent::float8 AS "retrievability_percent",
                     combined.sector_utilization_percent::float8 AS "sector_utilization_percent",
                     combined.is_consistent,
                     combined.is_reliable,

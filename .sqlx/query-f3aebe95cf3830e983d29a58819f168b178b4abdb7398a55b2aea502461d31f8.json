@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT\n                    id,\n                    provider_id AS \"provider_id: ProviderId\",\n                    client_id AS \"client_id: ClientId\",\n                    result_type AS \"result_type: DiscoveryType\",\n                    working_url,\n                    retrievability_percent::float8 AS \"retrievability_percent!\",\n                    result_code AS \"result_code: ResultCode\",\n                    error_code AS \"error_code: ErrorCode\",\n                    tested_at,\n                    is_consistent,\n                    is_reliable,\n                    url_metadata,\n                    sector_utilization_percent::float8 AS \"sector_utilization_percent\"\n               FROM\n                    url_results\n               WHERE\n                    provider_id = $1\n                    AND result_type = 'Provider'\n               ORDER BY\n                    tested_at DESC\n               LIMIT 1\n            ",
+  "query": "SELECT\n                    id,\n                    provider_id AS \"provider_id: ProviderId\",\n                    client_id AS \"client_id: ClientId\",\n                    result_type AS \"result_type: DiscoveryType\",\n                    working_url,\n                    retrievability_percent::float8 AS \"retrievability_percent\",\n                    result_code AS \"result_code: ResultCode\",\n                    error_code AS \"error_code: ErrorCode\",\n                    tested_at,\n                    is_consistent,\n                    is_reliable,\n                    url_metadata,\n                    sector_utilization_percent::float8 AS \"sector_utilization_percent\"\n               FROM\n                    url_results\n               WHERE\n                    provider_id = $1\n                    AND result_type = 'Provider'\n               ORDER BY\n                    tested_at DESC\n               LIMIT 1\n            ",
   "describe": {
     "columns": [
       {
@@ -40,7 +40,7 @@
       },
       {
         "ordinal": 5,
-        "name": "retrievability_percent!",
+        "name": "retrievability_percent",
         "type_info": "Float8"
       },
       {
@@ -131,5 +131,5 @@
       null
     ]
   },
-  "hash": "e38878ea83d70c39c7b6076d4951fb2d2f959a01f1daa34162aeb5fa8c844b12"
+  "hash": "f3aebe95cf3830e983d29a58819f168b178b4abdb7398a55b2aea502461d31f8"
 }

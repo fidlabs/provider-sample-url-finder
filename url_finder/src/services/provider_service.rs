@@ -18,7 +18,7 @@ pub struct ProviderData {
     pub provider_id: ProviderId,
     pub client_id: Option<ClientId>,
     pub working_url: Option<String>,
-    pub retrievability_percent: f64,
+    pub retrievability_percent: Option<f64>,
     pub tested_at: DateTime<Utc>,
     pub result_code: ResultCode,
     pub error_code: Option<ErrorCode>,
