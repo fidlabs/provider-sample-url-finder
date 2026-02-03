@@ -325,6 +325,16 @@ async fn process_single_provider(
     )
     .await;
 
+    // Shutdown interrupted mid-batch
+    if results.is_empty() && shutdown.is_cancelled() {
+        info!(
+            "Shutdown interrupted discovery for f0{}, preserving existing state",
+            provider_id
+        );
+        sp_repo.clear_pending_and_reschedule(provider_id).await?;
+        return Ok(ProviderOutcome::Skipped);
+    }
+
     // Extract provider-only result for storage_providers update
     // None case: provider-only discovery missing (panic, filtering, etc.) - default is_consistent
     // to false since consistency was not verified
