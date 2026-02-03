@@ -22,11 +22,13 @@ The `/providers/*` and `/clients/*` endpoints serve pre-computed data from the d
 The `/url/*` endpoints remain fully backward compatible.
 
 ### Result Codes
+ - **NoPeerId** - No peer ID found for this provider
  - **NoCidContactData** - No entry in cid contact
  - **MissingAddrFromCidContact** - No entry point found in cid contact
  - **MissingHttpAddrFromCidContact** - No HTTP entry point in cid contact
  - **FailedToGetWorkingUrl** - None of the tested URLs are working
  - **NoDealsFound** - No deals found for given miner
+ - **TimedOut** - Request timed out while discovering URL
  - **Success** - Found working URL
  - **Error** - Provider not indexed yet or error occurred
         "#,

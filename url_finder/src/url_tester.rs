@@ -145,7 +145,7 @@ fn is_consistent_pair(tap1: &TapResult, tap2: &TapResult) -> bool {
     }
 }
 
-/// Classifies WHY a pair is inconsistent. Only called when Small responses are involved.
+/// Classifies WHY a pair is inconsistent. Called when `is_consistent_pair` returns false.
 fn classify_inconsistency(tap1: &TapResult, tap2: &TapResult) -> InconsistencyType {
     use TapResult::*;
     match (tap1, tap2) {
