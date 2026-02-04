@@ -6,6 +6,7 @@ use crate::{
     services::url_discovery_service,
     types::{ClientAddress, ClientId, ProviderAddress, ProviderId},
 };
+use chrono::Utc;
 use color_eyre::Result;
 use futures::future::join_all;
 use std::sync::Arc;
@@ -18,6 +19,7 @@ const SCHEDULER_SLEEP_INTERVAL: Duration = Duration::from_secs(300);
 const SCHEDULER_NEXT_INTERVAL: Duration = Duration::from_secs(60);
 const BATCH_SIZE: i64 = 100;
 const MAX_CONCURRENT_CLIENT_TESTS: usize = 5;
+const RESCHEDULE_NO_ENDPOINTS_SECS: i64 = 86400;
 
 // --- Helper Structs ---
 
@@ -98,44 +100,6 @@ enum ProviderOutcome {
         consistent: bool,
     },
     Skipped,
-}
-
-#[allow(dead_code)]
-struct ProgressReporter {
-    batch_size: usize,
-    last_checkpoint: usize,
-}
-
-#[allow(dead_code)]
-impl ProgressReporter {
-    fn new(batch_size: usize) -> Self {
-        Self {
-            batch_size,
-            last_checkpoint: 0,
-        }
-    }
-
-    fn maybe_log(&mut self, stats: &DiscoveryBatchStats, current_provider_id: &ProviderId) {
-        if self.batch_size < 4 {
-            return;
-        }
-
-        let current_percent = (stats.total * 100) / self.batch_size;
-        let checkpoint = current_percent / 25;
-
-        if checkpoint > self.last_checkpoint && checkpoint < 4 {
-            info!(
-                "URL discovery: {}% ({}/{}) current: f0{} | {} ok {} fail",
-                checkpoint * 25,
-                stats.total,
-                self.batch_size,
-                current_provider_id,
-                stats.ok,
-                stats.failed
-            );
-            self.last_checkpoint = checkpoint;
-        }
-    }
 }
 
 // --- Main Scheduler ---
@@ -291,7 +255,7 @@ async fn process_single_provider(
             provider_id
         );
         sp_repo
-            .reschedule_url_discovery_delayed(provider_id, 86400)
+            .reschedule_url_discovery_delayed(provider_id, RESCHEDULE_NO_ENDPOINTS_SECS)
             .await?;
         return Ok(ProviderOutcome::Skipped);
     }
@@ -421,13 +385,24 @@ async fn test_provider_with_clients(
     let mut tasks = vec![];
     let provider_address: ProviderAddress = provider_id.clone().into();
 
+    // Provider result always has an earlier tested_at than ProviderClient 
+    let provider_tested_at = Utc::now();
+
     let provider_task = {
         let cfg = config.clone();
         let addr = provider_address.clone();
         let repo = deal_repo.clone();
         let endpoints = cached_http_endpoints.clone();
         tokio::spawn(async move {
-            url_discovery_service::discover_url(&cfg, &addr, None, &repo, endpoints).await
+            url_discovery_service::discover_url(
+                &cfg,
+                &addr,
+                None,
+                &repo,
+                endpoints,
+                Some(provider_tested_at),
+            )
+            .await
         })
     };
     tasks.push(provider_task);
@@ -450,6 +425,7 @@ async fn test_provider_with_clients(
                 Some(client_address),
                 &repo,
                 endpoints,
+                None,
             )
             .await;
             drop(permit);

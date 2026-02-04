@@ -84,7 +84,8 @@ impl Config {
             bms_test_interval_days: parse_positive_i64_or_default("BMS_TEST_INTERVAL_DAYS", 7),
             max_concurrent_providers: env::var("MAX_CONCURRENT_PROVIDERS")
                 .ok()
-                .and_then(|v| v.parse().ok())
+                .and_then(|v| v.parse::<usize>().ok())
+                .filter(|&v| v > 0 && v <= 100)
                 .unwrap_or(10),
         })
     }

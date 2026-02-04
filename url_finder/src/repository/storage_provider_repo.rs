@@ -451,7 +451,7 @@ impl StorageProviderRepository {
                     endpoints_fetched_at IS NULL
                     OR endpoints_fetched_at < NOW() - INTERVAL '1 day'
                ORDER BY
-                    COALESCE(endpoints_fetched_at, '1970-01-01'::timestamptz) ASC
+                    endpoints_fetched_at ASC NULLS FIRST
                LIMIT $1
             "#,
             limit
