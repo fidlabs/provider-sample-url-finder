@@ -385,7 +385,7 @@ async fn test_provider_with_clients(
     let mut tasks = vec![];
     let provider_address: ProviderAddress = provider_id.clone().into();
 
-    // Provider result always has an earlier tested_at than ProviderClient 
+    // Provider result always has an earlier tested_at than ProviderClient
     let provider_tested_at = Utc::now();
 
     let provider_task = {

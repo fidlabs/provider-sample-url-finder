@@ -7,7 +7,7 @@ export
 .PHONY: migration migrate-up migrate-down migrate-status init-dev init-dev-db
 
 check:
-	@-cargo fmt -- --check
+	@cargo fmt -- --check
 	@cargo clippy
 
 format:
