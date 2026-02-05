@@ -133,13 +133,20 @@ impl ProviderService {
         provider: &ProviderId,
         client: &ClientId,
     ) -> Result<Option<ProviderData>> {
-        let url_result = self
-            .url_repo
-            .get_latest_for_provider_client(provider, client)
-            .await?;
+        let (client_result, provider_result) = tokio::try_join!(
+            self.url_repo
+                .get_latest_for_provider_client(provider, client),
+            self.url_repo.get_latest_for_provider(provider),
+        )?;
 
-        let Some(url_result) = url_result else {
-            return Ok(None);
+        // Fallback: if provider-level failure is newer than client result and provider
+        // has no working URL (endpoints lost), the provider-level result takes precedence.
+        // If no client result exists, always fall back to provider result
+        let effective = match (client_result, provider_result) {
+            (Some(cr), Some(pr)) if pr.tested_at > cr.tested_at && pr.working_url.is_none() => pr,
+            (Some(cr), _) => cr,
+            (None, Some(pr)) => pr,
+            (None, None) => return Ok(None),
         };
 
         let bms_result = self
@@ -147,7 +154,7 @@ impl ProviderService {
             .get_latest_completed_for_provider(provider)
             .await?;
 
-        Ok(Some(self.enrich(url_result, bms_result)))
+        Ok(Some(self.enrich(effective, bms_result)))
     }
 
     pub async fn get_providers_for_client(&self, client: &ClientId) -> Result<Vec<ProviderData>> {

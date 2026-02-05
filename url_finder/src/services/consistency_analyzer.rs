@@ -13,12 +13,10 @@ pub fn analyze_results(results: &[UrlTestResult]) -> ProviderAnalysis {
         .filter(|r| matches!(r.error, Some(UrlTestError::Timeout)))
         .count();
 
-    // Count inconsistent results by type
     let mut inconsistent_count = 0;
     let mut warm_up = 0;
     let mut flaky = 0;
     let mut small_responses = 0;
-    let mut both_failed = 0;
     let mut size_mismatch = 0;
 
     for r in results.iter().filter(|r| !r.consistent) {
@@ -27,13 +25,11 @@ pub fn analyze_results(results: &[UrlTestResult]) -> ProviderAnalysis {
             Some(InconsistencyType::WarmUp) => warm_up += 1,
             Some(InconsistencyType::Flaky) => flaky += 1,
             Some(InconsistencyType::SmallResponses) => small_responses += 1,
-            Some(InconsistencyType::BothFailed) => both_failed += 1,
             Some(InconsistencyType::SizeMismatch) => size_mismatch += 1,
-            None => {} // Shouldn't happen if !consistent, but handle gracefully
+            None => {}
         }
     }
 
-    // Total requests = 2 per URL (double-tap)
     let total_requests = total * 2;
     let timeout_rate = timeout_count as f64 / total_requests as f64;
 
@@ -48,7 +44,6 @@ pub fn analyze_results(results: &[UrlTestResult]) -> ProviderAnalysis {
         inconsistent_warm_up: warm_up,
         inconsistent_flaky: flaky,
         inconsistent_small_responses: small_responses,
-        inconsistent_both_failed: both_failed,
         inconsistent_size_mismatch: size_mismatch,
     }
 }
@@ -149,23 +144,21 @@ mod tests {
     #[test]
     fn test_analyze_inconsistent_breakdown() {
         let results = vec![
-            make_result(true, true, None), // consistent
+            make_result(true, true, None),
             make_inconsistent(InconsistencyType::WarmUp),
             make_inconsistent(InconsistencyType::WarmUp),
             make_inconsistent(InconsistencyType::Flaky),
             make_inconsistent(InconsistencyType::SmallResponses),
-            make_inconsistent(InconsistencyType::BothFailed),
             make_inconsistent(InconsistencyType::SizeMismatch),
         ];
 
         let analysis = analyze_results(&results);
 
-        assert_eq!(analysis.sample_count, 7);
-        assert_eq!(analysis.inconsistent_count, 6);
+        assert_eq!(analysis.sample_count, 6);
+        assert_eq!(analysis.inconsistent_count, 5);
         assert_eq!(analysis.inconsistent_warm_up, 2);
         assert_eq!(analysis.inconsistent_flaky, 1);
         assert_eq!(analysis.inconsistent_small_responses, 1);
-        assert_eq!(analysis.inconsistent_both_failed, 1);
         assert_eq!(analysis.inconsistent_size_mismatch, 1);
         assert!(!analysis.is_consistent);
     }
@@ -180,7 +173,6 @@ mod tests {
         assert_eq!(analysis.inconsistent_warm_up, 0);
         assert_eq!(analysis.inconsistent_flaky, 0);
         assert_eq!(analysis.inconsistent_small_responses, 0);
-        assert_eq!(analysis.inconsistent_both_failed, 0);
         assert_eq!(analysis.inconsistent_size_mismatch, 0);
         assert!(analysis.is_consistent);
     }

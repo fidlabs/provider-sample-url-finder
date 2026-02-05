@@ -127,66 +127,40 @@ impl TapResult {
     }
 }
 
-/// Determines if two tap results indicate a consistent provider.
-/// Everything else (Small responses, failures, mismatched sizes) = inconsistent.
+/// Consistent = no evidence of bad data. Small responses prove bad data; failures don't.
 fn is_consistent_pair(tap1: &TapResult, tap2: &TapResult) -> bool {
+    use TapResult::*;
     match (tap1, tap2) {
         (
-            TapResult::Valid {
+            Valid {
                 content_length: a, ..
             },
-            TapResult::Valid {
+            Valid {
                 content_length: b, ..
             },
         ) => a == b,
-        // All other combinations are inconsistent:
-        // - VALID + SMALL: real piece vs error page
-        // - SMALL + VALID: error page vs real piece
-        // - SMALL + SMALL: both returned garbage
-        // - VALID + FAILED: gaming pattern (timeout then respond)
-        // - FAILED + VALID: gaming pattern (timeout then respond)
-        // - SMALL + FAILED: got garbage
-        // - FAILED + SMALL: got garbage
-        // - FAILED + FAILED: cannot verify, assume bad
-        _ => false,
+        (Small { .. }, _) | (_, Small { .. }) => false,
+        (Failed { .. }, Failed { .. }) => true,
+        (Failed { .. }, Valid { .. }) | (Valid { .. }, Failed { .. }) => true,
     }
 }
 
-/// Classifies WHY a pair of tap results is inconsistent.
+/// Classifies WHY a pair is inconsistent. Called when `is_consistent_pair` returns false.
 fn classify_inconsistency(tap1: &TapResult, tap2: &TapResult) -> InconsistencyType {
     use TapResult::*;
-
-    // Size mismatch: both valid but different Content-Length
-    if let (
-        Valid {
-            content_length: a, ..
-        },
-        Valid {
-            content_length: b, ..
-        },
-    ) = (tap1, tap2)
-        && a != b
-    {
-        return InconsistencyType::SizeMismatch;
+    match (tap1, tap2) {
+        (
+            Valid {
+                content_length: a, ..
+            },
+            Valid {
+                content_length: b, ..
+            },
+        ) if a != b => InconsistencyType::SizeMismatch,
+        (Small { .. }, Valid { .. }) => InconsistencyType::WarmUp,
+        (Valid { .. }, Small { .. }) => InconsistencyType::Flaky,
+        _ => InconsistencyType::SmallResponses,
     }
-
-    // WarmUp: tap2 returned valid data (tap1 was not valid)
-    if matches!(tap2, Valid { .. }) && !matches!(tap1, Valid { .. }) {
-        return InconsistencyType::WarmUp;
-    }
-
-    // Flaky: tap1 was valid but tap2 degraded
-    if matches!(tap1, Valid { .. }) && !matches!(tap2, Valid { .. }) {
-        return InconsistencyType::Flaky;
-    }
-
-    // Both failed
-    if matches!((tap1, tap2), (Failed { .. }, Failed { .. })) {
-        return InconsistencyType::BothFailed;
-    }
-
-    // Default: small/garbage responses
-    InconsistencyType::SmallResponses
 }
 
 /// Makes a range request (bytes=0-4095) and extracts total file size from Content-Range header.
@@ -209,8 +183,8 @@ async fn range_request(client: &Client, url: &str) -> Result<RangeResponse, UrlT
     let content_length = extract_total_length(&resp);
     let response_time_ms = start.elapsed().as_millis() as u64;
 
-    // Always capture body sample for CAR header parsing
-    let body_sample = resp.bytes().await.ok().map(|b| b.to_vec());
+    // Capture body sample for CAR header parsing (limited to prevent full file downloads)
+    let body_sample = read_limited_body(resp, RANGE_REQUEST_BYTES as usize).await;
 
     Ok(RangeResponse {
         content_length,
@@ -584,6 +558,34 @@ async fn drain_response_body(resp: reqwest::Response) {
     // This is acceptable since large file responses are less frequent
 }
 
+/// Reads up to `limit` bytes from response body, then stops.
+/// Prevents downloading entire files when servers ignore Range headers.
+/// Returns partial data on network errors (CAR header is in first bytes).
+async fn read_limited_body(resp: reqwest::Response, limit: usize) -> Option<Vec<u8>> {
+    let mut stream = resp.bytes_stream();
+    let mut buffer = Vec::with_capacity(limit);
+
+    while let Some(chunk) = stream.next().await {
+        match chunk {
+            Ok(bytes) => {
+                let remaining = limit.saturating_sub(buffer.len());
+                if remaining == 0 {
+                    break;
+                }
+                let take = bytes.len().min(remaining);
+                buffer.extend_from_slice(&bytes[..take]);
+            }
+            Err(_) => break,
+        }
+    }
+
+    if buffer.is_empty() {
+        None
+    } else {
+        Some(buffer)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -817,16 +819,13 @@ mod tests {
         assert_eq!(result.content_length, Some(16000000000)); // We captured the valid size
     }
 
-    /// FAIL + VALID = WarmUp pattern - THIS IS WHY DOUBLE-TAP EXISTS
-    /// First request fails/times out, second succeeds with valid data.
-    /// We still get the data, provider just needs warm-up.
+    /// FAIL + VALID = consistent (failure doesn't prove bad data, just slow startup)
     #[tokio::test]
-    async fn test_double_tap_warm_up_fail_then_valid() {
+    async fn test_double_tap_fail_then_valid_is_consistent() {
         use wiremock::matchers::header;
 
         let mock_server = MockServer::start().await;
 
-        // First request fails (simulates timeout/warm-up needed)
         Mock::given(method("GET"))
             .and(header("Range", "bytes=0-4095"))
             .respond_with(ResponseTemplate::new(500))
@@ -834,7 +833,6 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        // Second request succeeds with valid large file
         Mock::given(method("GET"))
             .and(header("Range", "bytes=0-4095"))
             .respond_with(
@@ -851,23 +849,19 @@ mod tests {
 
         let result = test_url_double_tap(&client, &mock_server.uri()).await;
 
-        assert!(result.success); // tap2 succeeded - we got the data!
-        assert!(!result.consistent);
-        assert_eq!(
-            result.inconsistency_type,
-            Some(crate::types::InconsistencyType::WarmUp)
-        );
+        assert!(result.success);
+        assert!(result.consistent);
+        assert_eq!(result.inconsistency_type, None);
         assert_eq!(result.content_length, Some(16000000000));
     }
 
-    /// VALID + FAIL = Flaky - provider served data once then stopped
+    /// VALID + FAIL = consistent (failure doesn't prove bad data, provider just went down)
     #[tokio::test]
-    async fn test_double_tap_flaky_valid_then_fail() {
+    async fn test_double_tap_valid_then_fail_is_consistent() {
         use wiremock::matchers::header;
 
         let mock_server = MockServer::start().await;
 
-        // First request succeeds
         Mock::given(method("GET"))
             .and(header("Range", "bytes=0-4095"))
             .respond_with(
@@ -878,7 +872,6 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        // Second request fails - provider degraded
         Mock::given(method("GET"))
             .and(header("Range", "bytes=0-4095"))
             .respond_with(ResponseTemplate::new(500))
@@ -892,12 +885,9 @@ mod tests {
 
         let result = test_url_double_tap(&client, &mock_server.uri()).await;
 
-        assert!(result.success); // tap1 succeeded - we got the data
-        assert!(!result.consistent);
-        assert_eq!(
-            result.inconsistency_type,
-            Some(crate::types::InconsistencyType::Flaky)
-        );
+        assert!(result.success);
+        assert!(result.consistent);
+        assert_eq!(result.inconsistency_type, None);
         assert_eq!(result.content_length, Some(16000000000));
     }
 
@@ -933,14 +923,13 @@ mod tests {
         );
     }
 
-    /// FAIL + FAIL = inconsistent (cannot verify, assume bad)
+    /// FAIL + FAIL = consistent (can't prove bad data if we never got any data)
     #[tokio::test]
-    async fn test_double_tap_both_fail() {
+    async fn test_double_tap_both_fail_is_consistent() {
         use wiremock::matchers::header;
 
         let mock_server = MockServer::start().await;
 
-        // Both requests fail
         Mock::given(method("GET"))
             .and(header("Range", "bytes=0-4095"))
             .respond_with(ResponseTemplate::new(500))
@@ -955,8 +944,9 @@ mod tests {
 
         let result = test_url_double_tap(&client, &mock_server.uri()).await;
 
-        assert!(!result.success); // Both failed
-        assert!(!result.consistent); // STRICT: FAIL + FAIL = inconsistent
+        assert!(!result.success);
+        assert!(result.consistent);
+        assert_eq!(result.inconsistency_type, None);
     }
 
     #[tokio::test]
@@ -992,13 +982,13 @@ mod tests {
         assert!(results.iter().all(|r| r.consistent));
     }
 
+    /// VALID + SMALL = Flaky (served valid data then garbage)
     #[tokio::test]
-    async fn test_classify_flaky_valid_then_fail() {
+    async fn test_classify_flaky_valid_then_small() {
         use wiremock::matchers::header;
 
         let mock_server = MockServer::start().await;
 
-        // First request succeeds with valid size
         Mock::given(method("GET"))
             .and(header("Range", "bytes=0-4095"))
             .respond_with(
@@ -1009,10 +999,11 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        // Second request fails - provider degraded
         Mock::given(method("GET"))
             .and(header("Range", "bytes=0-4095"))
-            .respond_with(ResponseTemplate::new(500))
+            .respond_with(
+                ResponseTemplate::new(206).insert_header("Content-Range", "bytes 0-500/500"),
+            )
             .mount(&mock_server)
             .await;
 
@@ -1023,7 +1014,7 @@ mod tests {
 
         let result = test_url_double_tap(&client, &mock_server.uri()).await;
 
-        assert!(result.success); // tap1 was valid
+        assert!(result.success);
         assert!(!result.consistent);
         assert_eq!(
             result.inconsistency_type,
@@ -1031,16 +1022,28 @@ mod tests {
         );
     }
 
+    /// SMALL + VALID = WarmUp (served garbage then valid data)
     #[tokio::test]
-    async fn test_classify_both_failed() {
+    async fn test_classify_warmup_small_then_valid() {
         use wiremock::matchers::header;
 
         let mock_server = MockServer::start().await;
 
         Mock::given(method("GET"))
             .and(header("Range", "bytes=0-4095"))
-            .respond_with(ResponseTemplate::new(500))
-            .expect(2)
+            .respond_with(
+                ResponseTemplate::new(206).insert_header("Content-Range", "bytes 0-500/500"),
+            )
+            .up_to_n_times(1)
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(header("Range", "bytes=0-4095"))
+            .respond_with(
+                ResponseTemplate::new(206)
+                    .insert_header("Content-Range", "bytes 0-4095/16000000000"),
+            )
             .mount(&mock_server)
             .await;
 
@@ -1051,10 +1054,11 @@ mod tests {
 
         let result = test_url_double_tap(&client, &mock_server.uri()).await;
 
+        assert!(result.success);
         assert!(!result.consistent);
         assert_eq!(
             result.inconsistency_type,
-            Some(crate::types::InconsistencyType::BothFailed)
+            Some(crate::types::InconsistencyType::WarmUp)
         );
     }
 
@@ -1155,5 +1159,57 @@ mod tests {
 
         assert!(result.consistent);
         assert_eq!(result.inconsistency_type, None);
+    }
+
+    #[tokio::test]
+    async fn test_range_request_limits_body_download() {
+        use wiremock::matchers::header;
+
+        let mock_server = MockServer::start().await;
+
+        // Server ignores Range header: returns HTTP 200 (not 206) with 50KB body
+        let large_body = vec![0xCAu8; 50_000];
+
+        Mock::given(method("GET"))
+            .and(header("Range", "bytes=0-4095"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("Content-Length", "50000")
+                    .set_body_raw(large_body, "application/octet-stream"),
+            )
+            .mount(&mock_server)
+            .await;
+
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
+            .unwrap();
+
+        let start = Instant::now();
+        let result = range_request(&client, &mock_server.uri()).await;
+        let elapsed = start.elapsed();
+
+        assert!(result.is_ok(), "Request should succeed");
+        let response = result.unwrap();
+
+        assert!(response.body_sample.is_some(), "Should have body sample");
+        let body = response.body_sample.unwrap();
+        assert_eq!(
+            body.len(),
+            RANGE_REQUEST_BYTES as usize,
+            "Body should be limited to RANGE_REQUEST_BYTES (4096), got {}",
+            body.len()
+        );
+
+        assert!(
+            body.iter().all(|&b| b == 0xCA),
+            "Should contain expected pattern"
+        );
+
+        assert!(
+            elapsed.as_millis() < 1000,
+            "Should not download full body, took {:?}",
+            elapsed
+        );
     }
 }

@@ -428,28 +428,38 @@ impl UrlResultRepository {
     ) -> Result<Vec<HistoryRow>> {
         let results = sqlx::query_as!(
             HistoryRow,
-            r#"SELECT DISTINCT ON (DATE(tested_at))
-                    DATE(tested_at) AS "date!",
-                    retrievability_percent::float8 AS "retrievability_percent!",
-                    sector_utilization_percent::float8 AS "sector_utilization_percent",
-                    is_consistent,
-                    is_reliable,
-                    working_url,
-                    result_code AS "result_code: ResultCode",
-                    error_code AS "error_code: ErrorCode",
-                    tested_at,
-                    url_metadata
-               FROM
-                    url_results
-               WHERE
-                    provider_id = $1
-                    AND client_id = $2
-                    AND result_type = 'ProviderClient'
-                    AND tested_at >= $3::date
-                    AND tested_at < ($4::date + INTERVAL '1 day')
+            r#"SELECT DISTINCT ON (DATE(combined.tested_at))
+                    DATE(combined.tested_at) AS "date!",
+                    combined.retrievability_percent::float8 AS "retrievability_percent!",
+                    combined.sector_utilization_percent::float8 AS "sector_utilization_percent",
+                    combined.is_consistent,
+                    combined.is_reliable,
+                    combined.working_url,
+                    combined.result_code AS "result_code!: ResultCode",
+                    combined.error_code AS "error_code: ErrorCode",
+                    combined.tested_at AS "tested_at!",
+                    combined.url_metadata
+               FROM (
+                    SELECT *, 1 AS priority
+                    FROM url_results
+                    WHERE provider_id = $1
+                      AND client_id = $2
+                      AND result_type = 'ProviderClient'
+                      AND tested_at >= $3::date
+                      AND tested_at < ($4::date + INTERVAL '1 day')
+                    UNION ALL
+                    SELECT *, 2 AS priority
+                    FROM url_results
+                    WHERE provider_id = $1
+                      AND result_type = 'Provider'
+                      AND working_url IS NULL
+                      AND tested_at >= $3::date
+                      AND tested_at < ($4::date + INTERVAL '1 day')
+               ) combined
                ORDER BY
-                    DATE(tested_at),
-                    tested_at DESC
+                    DATE(combined.tested_at),
+                    combined.tested_at DESC,
+                    combined.priority ASC
             "#,
             provider_id.as_str(),
             client_id.as_str(),

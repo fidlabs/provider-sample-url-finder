@@ -287,6 +287,7 @@ impl PgHasArrayType for DiscoveryType {
 /// Result codes for URL discovery operations
 #[derive(Debug, Serialize, Deserialize, ToSchema, Clone, PartialEq)]
 pub enum ResultCode {
+    NoPeerId,
     NoCidContactData,
     MissingAddrFromCidContact,
     MissingHttpAddrFromCidContact,
@@ -302,6 +303,7 @@ impl ResultCode {
     pub fn message(&self) -> Option<&'static str> {
         match self {
             Self::Success => None,
+            Self::NoPeerId => Some("No peer ID found for this provider"),
             Self::NoCidContactData => Some("No data available from cid.contact for this provider"),
             Self::MissingAddrFromCidContact => {
                 Some("No address information found from cid.contact")
@@ -320,6 +322,7 @@ impl ResultCode {
 impl fmt::Display for ResultCode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
+            ResultCode::NoPeerId => "NoPeerId",
             ResultCode::NoCidContactData => "NoCidContactData",
             ResultCode::MissingAddrFromCidContact => "MissingAddrFromCidContact",
             ResultCode::MissingHttpAddrFromCidContact => "MissingHttpAddrFromCidContact",
@@ -338,6 +341,7 @@ impl FromStr for ResultCode {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
+            "NoPeerId" => Ok(Self::NoPeerId),
             "NoCidContactData" => Ok(Self::NoCidContactData),
             "MissingAddrFromCidContact" => Ok(Self::MissingAddrFromCidContact),
             "MissingHttpAddrFromCidContact" => Ok(Self::MissingHttpAddrFromCidContact),
@@ -480,21 +484,13 @@ impl std::fmt::Display for UrlTestError {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum InconsistencyType {
-    /// (Small|Failed, Valid) - Second tap returned valid data after warm-up.
-    /// Provider CAN serve data, just needs initial request to "warm up".
-    /// This is the pattern double-tap was designed to detect and handle.
+    /// (Small, Valid) - served garbage then valid data after warm-up
     WarmUp,
-    /// (Valid, Small|Failed) - First tap valid, second degraded.
-    /// Provider is unreliable - served data once then stopped.
+    /// (Valid, Small) - served valid data then garbage
     Flaky,
-    /// (Small, Small|Failed) or (Failed, Small) - Neither tap returned valid data.
-    /// Provider consistently returns small/garbage responses.
+    /// Small response involved, neither tap valid
     SmallResponses,
-    /// (Failed, Failed) - Both taps failed completely.
-    /// Provider unreachable or broken.
-    BothFailed,
-    /// (Valid, Valid) but different Content-Length.
-    /// Data integrity issue - file size changed between requests.
+    /// Both valid but different Content-Length
     SizeMismatch,
 }
 
@@ -526,7 +522,6 @@ pub struct ProviderAnalysis {
     pub inconsistent_warm_up: usize,
     pub inconsistent_flaky: usize,
     pub inconsistent_small_responses: usize,
-    pub inconsistent_both_failed: usize,
     pub inconsistent_size_mismatch: usize,
 }
 
@@ -543,7 +538,6 @@ impl ProviderAnalysis {
             inconsistent_warm_up: 0,
             inconsistent_flaky: 0,
             inconsistent_small_responses: 0,
-            inconsistent_both_failed: 0,
             inconsistent_size_mismatch: 0,
         }
     }

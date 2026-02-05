@@ -12,7 +12,6 @@ pub struct StorageProvider {
     pub id: Uuid,
     pub provider_id: ProviderId,
     pub peer_id: Option<String>,
-    pub peer_id_fetched_at: Option<DateTime<Utc>>,
     pub next_url_discovery_at: DateTime<Utc>,
     pub url_discovery_status: Option<String>,
     pub url_discovery_pending_since: Option<DateTime<Utc>>,
@@ -24,6 +23,8 @@ pub struct StorageProvider {
     pub is_consistent: bool,
     pub is_reliable: bool,
     pub url_metadata: Option<serde_json::Value>,
+    pub cached_http_endpoints: Option<Vec<String>>,
+    pub endpoints_fetched_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -73,7 +74,6 @@ impl StorageProviderRepository {
                     id,
                     provider_id AS "provider_id: ProviderId",
                     peer_id,
-                    peer_id_fetched_at,
                     next_url_discovery_at,
                     url_discovery_status,
                     url_discovery_pending_since,
@@ -85,6 +85,8 @@ impl StorageProviderRepository {
                     is_consistent,
                     is_reliable,
                     url_metadata,
+                    cached_http_endpoints,
+                    endpoints_fetched_at,
                     created_at,
                     updated_at
                FROM
@@ -105,7 +107,6 @@ impl StorageProviderRepository {
                     id,
                     provider_id AS "provider_id: ProviderId",
                     peer_id,
-                    peer_id_fetched_at,
                     next_url_discovery_at,
                     url_discovery_status,
                     url_discovery_pending_since,
@@ -117,21 +118,26 @@ impl StorageProviderRepository {
                     is_consistent,
                     is_reliable,
                     url_metadata,
+                    cached_http_endpoints,
+                    endpoints_fetched_at,
                     created_at,
                     updated_at
                FROM
                     storage_providers
                WHERE
-                    (
-                        next_url_discovery_at <= NOW()
-                        AND url_discovery_status IS DISTINCT FROM 'pending'
-                    )
-                    OR
-                    (
-                        url_discovery_status = 'pending'
-                        AND (
-                            url_discovery_pending_since IS NULL
-                            OR url_discovery_pending_since < NOW() - INTERVAL '60 minutes'
+                    cached_http_endpoints IS NOT NULL
+                    AND (
+                        (
+                            next_url_discovery_at <= NOW()
+                            AND url_discovery_status IS DISTINCT FROM 'pending'
+                        )
+                        OR
+                        (
+                            url_discovery_status = 'pending'
+                            AND (
+                                url_discovery_pending_since IS NULL
+                                OR url_discovery_pending_since < NOW() - INTERVAL '60 minutes'
+                            )
                         )
                     )
                ORDER BY
@@ -195,6 +201,25 @@ impl StorageProviderRepository {
         Ok(())
     }
 
+    pub async fn clear_pending_and_reschedule(&self, provider_id: &ProviderId) -> Result<()> {
+        sqlx::query!(
+            r#"UPDATE
+                    storage_providers
+               SET
+                    url_discovery_status = NULL,
+                    url_discovery_pending_since = NULL,
+                    next_url_discovery_at = NOW(),
+                    updated_at = NOW()
+               WHERE
+                    provider_id = $1
+            "#,
+            provider_id as &ProviderId
+        )
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
     pub async fn reschedule_url_discovery_delayed(
         &self,
         provider_id: &ProviderId,
@@ -224,7 +249,6 @@ impl StorageProviderRepository {
                     id,
                     provider_id AS "provider_id: ProviderId",
                     peer_id,
-                    peer_id_fetched_at,
                     next_url_discovery_at,
                     url_discovery_status,
                     url_discovery_pending_since,
@@ -236,6 +260,8 @@ impl StorageProviderRepository {
                     is_consistent,
                     is_reliable,
                     url_metadata,
+                    cached_http_endpoints,
+                    endpoints_fetched_at,
                     created_at,
                     updated_at
                FROM
@@ -293,7 +319,6 @@ impl StorageProviderRepository {
                     id,
                     provider_id AS "provider_id: ProviderId",
                     peer_id,
-                    peer_id_fetched_at,
                     next_url_discovery_at,
                     url_discovery_status,
                     url_discovery_pending_since,
@@ -305,6 +330,8 @@ impl StorageProviderRepository {
                     is_consistent,
                     is_reliable,
                     url_metadata,
+                    cached_http_endpoints,
+                    endpoints_fetched_at,
                     created_at,
                     updated_at
             "#,
@@ -331,7 +358,6 @@ impl StorageProviderRepository {
                     id,
                     provider_id AS "provider_id: ProviderId",
                     peer_id,
-                    peer_id_fetched_at,
                     next_url_discovery_at,
                     url_discovery_status,
                     url_discovery_pending_since,
@@ -343,6 +369,8 @@ impl StorageProviderRepository {
                     is_consistent,
                     is_reliable,
                     url_metadata,
+                    cached_http_endpoints,
+                    endpoints_fetched_at,
                     created_at,
                     updated_at
             "#,
@@ -370,7 +398,6 @@ impl StorageProviderRepository {
                     id,
                     provider_id AS "provider_id: ProviderId",
                     peer_id,
-                    peer_id_fetched_at,
                     next_url_discovery_at,
                     url_discovery_status,
                     url_discovery_pending_since,
@@ -382,6 +409,8 @@ impl StorageProviderRepository {
                     is_consistent,
                     is_reliable,
                     url_metadata,
+                    cached_http_endpoints,
+                    endpoints_fetched_at,
                     created_at,
                     updated_at
             "#,
@@ -391,14 +420,16 @@ impl StorageProviderRepository {
         .await?)
     }
 
-    pub async fn get_providers_without_peer_id(&self, limit: i64) -> Result<Vec<StorageProvider>> {
+    pub async fn get_providers_needing_endpoints(
+        &self,
+        limit: i64,
+    ) -> Result<Vec<StorageProvider>> {
         Ok(sqlx::query_as!(
             StorageProvider,
             r#"SELECT
                     id,
                     provider_id AS "provider_id: ProviderId",
                     peer_id,
-                    peer_id_fetched_at,
                     next_url_discovery_at,
                     url_discovery_status,
                     url_discovery_pending_since,
@@ -410,14 +441,17 @@ impl StorageProviderRepository {
                     is_consistent,
                     is_reliable,
                     url_metadata,
+                    cached_http_endpoints,
+                    endpoints_fetched_at,
                     created_at,
                     updated_at
                FROM
                     storage_providers
                WHERE
-                    peer_id IS NULL
+                    endpoints_fetched_at IS NULL
+                    OR endpoints_fetched_at < NOW() - INTERVAL '1 day'
                ORDER BY
-                    created_at ASC
+                    endpoints_fetched_at ASC NULLS FIRST
                LIMIT $1
             "#,
             limit
@@ -426,60 +460,46 @@ impl StorageProviderRepository {
         .await?)
     }
 
-    pub async fn get_providers_with_stale_peer_id(
+    pub async fn update_cached_endpoints(
         &self,
-        limit: i64,
-        stale_days: i64,
-    ) -> Result<Vec<StorageProvider>> {
-        Ok(sqlx::query_as!(
-            StorageProvider,
-            r#"SELECT
-                    id,
-                    provider_id AS "provider_id: ProviderId",
-                    peer_id,
-                    peer_id_fetched_at,
-                    next_url_discovery_at,
-                    url_discovery_status,
-                    url_discovery_pending_since,
-                    last_working_url,
-                    next_bms_test_at,
-                    bms_test_status,
-                    bms_routing_key,
-                    last_bms_region_discovery_at,
-                    is_consistent,
-                    is_reliable,
-                    url_metadata,
-                    created_at,
-                    updated_at
-               FROM
-                    storage_providers
-               WHERE
-                    peer_id IS NOT NULL
-                    AND peer_id_fetched_at < NOW() - INTERVAL '1 day' * $2
-               ORDER BY
-                    peer_id_fetched_at ASC
-               LIMIT $1
-            "#,
-            limit,
-            stale_days as f64
-        )
-        .fetch_all(&self.pool)
-        .await?)
-    }
-
-    pub async fn update_peer_id(&self, provider_id: &ProviderId, peer_id: &str) -> Result<()> {
+        provider_id: &ProviderId,
+        peer_id: &str,
+        http_endpoints: &[String],
+    ) -> Result<()> {
         sqlx::query!(
             r#"UPDATE
                     storage_providers
                SET
                     peer_id = $2,
-                    peer_id_fetched_at = NOW(),
+                    cached_http_endpoints = $3,
+                    endpoints_fetched_at = NOW(),
+                    next_url_discovery_at = NOW(),
                     updated_at = NOW()
                WHERE
                     provider_id = $1
             "#,
             provider_id as &ProviderId,
-            peer_id
+            peer_id,
+            http_endpoints
+        )
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn mark_endpoint_fetch_failed(&self, provider_id: &ProviderId) -> Result<()> {
+        sqlx::query!(
+            r#"UPDATE
+                    storage_providers
+               SET
+                    endpoints_fetched_at = NOW(),
+                    cached_http_endpoints = NULL,
+                    next_url_discovery_at = NOW() + INTERVAL '1 day',
+                    updated_at = NOW()
+               WHERE
+                    provider_id = $1
+            "#,
+            provider_id as &ProviderId
         )
         .execute(&self.pool)
         .await?;

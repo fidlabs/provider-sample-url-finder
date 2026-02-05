@@ -6,6 +6,7 @@ use crate::{
     services::url_discovery_service,
     types::{ClientAddress, ClientId, ProviderAddress, ProviderId},
 };
+use chrono::Utc;
 use color_eyre::Result;
 use futures::future::join_all;
 use std::sync::Arc;
@@ -14,10 +15,11 @@ use tokio::{sync::Semaphore, time::sleep};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
-const SCHEDULER_SLEEP_INTERVAL: Duration = Duration::from_secs(3600);
+const SCHEDULER_SLEEP_INTERVAL: Duration = Duration::from_secs(300);
 const SCHEDULER_NEXT_INTERVAL: Duration = Duration::from_secs(60);
 const BATCH_SIZE: i64 = 100;
 const MAX_CONCURRENT_CLIENT_TESTS: usize = 5;
+const RESCHEDULE_NO_ENDPOINTS_SECS: i64 = 86400;
 
 // --- Helper Structs ---
 
@@ -100,42 +102,6 @@ enum ProviderOutcome {
     Skipped,
 }
 
-struct ProgressReporter {
-    batch_size: usize,
-    last_checkpoint: usize,
-}
-
-impl ProgressReporter {
-    fn new(batch_size: usize) -> Self {
-        Self {
-            batch_size,
-            last_checkpoint: 0,
-        }
-    }
-
-    fn maybe_log(&mut self, stats: &DiscoveryBatchStats, current_provider_id: &ProviderId) {
-        if self.batch_size < 4 {
-            return;
-        }
-
-        let current_percent = (stats.total * 100) / self.batch_size;
-        let checkpoint = current_percent / 25;
-
-        if checkpoint > self.last_checkpoint && checkpoint < 4 {
-            info!(
-                "URL discovery: {}% ({}/{}) current: f0{} | {} ok {} fail",
-                checkpoint * 25,
-                stats.total,
-                self.batch_size,
-                current_provider_id,
-                stats.ok,
-                stats.failed
-            );
-            self.last_checkpoint = checkpoint;
-        }
-    }
-}
-
 // --- Main Scheduler ---
 
 pub async fn run_url_discovery_scheduler(
@@ -148,11 +114,13 @@ pub async fn run_url_discovery_scheduler(
     info!("Starting URL discovery scheduler loop");
 
     loop {
-        let interval = match schedule_url_discoveries(&config, &sp_repo, &url_repo, &deal_repo)
-            .await
+        let interval = match schedule_url_discoveries(
+            &config, &sp_repo, &url_repo, &deal_repo, &shutdown,
+        )
+        .await
         {
             Ok(stats) if stats.is_empty() => {
-                debug!("No providers due for URL discovery, sleeping...");
+                info!("URL discovery: idle, sleeping 5m");
                 SCHEDULER_SLEEP_INTERVAL
             }
             Ok(stats) => {
@@ -188,38 +156,87 @@ pub async fn run_url_discovery_scheduler(
 }
 
 async fn schedule_url_discoveries(
-    config: &Config,
-    sp_repo: &StorageProviderRepository,
-    url_repo: &UrlResultRepository,
-    deal_repo: &DealRepository,
+    config: &Arc<Config>,
+    sp_repo: &Arc<StorageProviderRepository>,
+    url_repo: &Arc<UrlResultRepository>,
+    deal_repo: &Arc<DealRepository>,
+    shutdown: &CancellationToken,
 ) -> Result<DiscoveryBatchStats> {
     let providers = sp_repo.get_due_for_url_discovery(BATCH_SIZE).await?;
 
-    debug!("Found {} providers due for URL discovery", providers.len());
-
     if !providers.is_empty() {
-        info!("URL discovery: starting {} providers", providers.len());
+        let ready = providers
+            .iter()
+            .filter(|p| p.cached_http_endpoints.is_some())
+            .count();
+        let need_endpoints = providers.len() - ready;
+        if need_endpoints > 0 {
+            info!(
+                "URL discovery: starting {} providers ({} ready, {} need endpoints)",
+                providers.len(),
+                ready,
+                need_endpoints
+            );
+        } else {
+            info!("URL discovery: starting {} providers", providers.len());
+        }
     }
 
-    let mut stats = DiscoveryBatchStats::new();
-    let mut progress = ProgressReporter::new(providers.len());
+    let stats = Arc::new(tokio::sync::Mutex::new(DiscoveryBatchStats::new()));
+
+    let semaphore = Arc::new(Semaphore::new(config.max_concurrent_providers));
+    let mut tasks = vec![];
 
     for provider in providers {
-        if provider.url_discovery_status.as_deref() == Some("pending") {
-            warn!(
-                "Recovering stale pending provider: {} (pending since {:?})",
-                provider.provider_id, provider.url_discovery_pending_since
-            );
+        if shutdown.is_cancelled() {
+            info!("URL discovery batch interrupted by shutdown before spawning");
+            break;
         }
 
-        let outcome =
-            process_single_provider(config, sp_repo, url_repo, deal_repo, &provider).await?;
+        let permit = semaphore.clone().acquire_owned().await?;
+        let config = config.clone();
+        let sp_repo = sp_repo.clone();
+        let url_repo = url_repo.clone();
+        let deal_repo = deal_repo.clone();
+        let shutdown = shutdown.clone();
+        let stats = stats.clone();
 
-        stats.record(&outcome);
-        progress.maybe_log(&stats, &provider.provider_id);
+        tasks.push(tokio::spawn(async move {
+            let outcome = process_single_provider(
+                &config, &sp_repo, &url_repo, &deal_repo, &provider, &shutdown,
+            )
+            .await;
+
+            if let Ok(ref o) = outcome {
+                let mut s = stats.lock().await;
+                s.record(o);
+            }
+
+            drop(permit);
+            outcome
+        }));
     }
 
-    Ok(stats)
+    let results = join_all(tasks).await;
+
+    for result in results {
+        match result {
+            Ok(Err(e)) => error!("Provider processing error: {:?}", e),
+            Err(e) => error!("Provider task panicked: {:?}", e),
+            _ => {}
+        }
+    }
+
+    let final_stats = stats.lock().await;
+    Ok(DiscoveryBatchStats {
+        total: final_stats.total,
+        ok: final_stats.ok,
+        failed: final_stats.failed,
+        skipped: final_stats.skipped,
+        total_retrievability: final_stats.total_retrievability,
+        consistent: final_stats.consistent,
+        started_at: final_stats.started_at,
+    })
 }
 
 async fn process_single_provider(
@@ -228,19 +245,26 @@ async fn process_single_provider(
     url_repo: &UrlResultRepository,
     deal_repo: &DealRepository,
     provider: &StorageProvider,
+    shutdown: &CancellationToken,
 ) -> Result<ProviderOutcome> {
     let provider_id = &provider.provider_id;
 
-    // Skip providers without cached peer_id - they'll be picked up by peer_id_scheduler
-    if provider.peer_id.is_none() {
-        debug!(
-            "Skipping provider {} - no cached peer_id, rescheduling for 1 hour",
+    if provider.cached_http_endpoints.is_none() {
+        warn!(
+            "Provider {} has no cached endpoints but was picked up by URL discovery - scheduling mismatch",
             provider_id
         );
         sp_repo
-            .reschedule_url_discovery_delayed(provider_id, 3600)
+            .reschedule_url_discovery_delayed(provider_id, RESCHEDULE_NO_ENDPOINTS_SECS)
             .await?;
         return Ok(ProviderOutcome::Skipped);
+    }
+
+    if provider.url_discovery_status.as_deref() == Some("pending") {
+        warn!(
+            "Recovering stale pending provider: {} (pending since {:?})",
+            provider.provider_id, provider.url_discovery_pending_since
+        );
     }
 
     sp_repo.set_url_discovery_pending(provider_id).await?;
@@ -254,9 +278,26 @@ async fn process_single_provider(
 
     debug!("Provider {} has {} clients", provider_id, clients.len());
 
-    let cached_peer_id = provider.peer_id.clone();
-    let results =
-        test_provider_with_clients(config, provider_id, clients, deal_repo, cached_peer_id).await;
+    let cached_endpoints = provider.cached_http_endpoints.clone().unwrap_or_default();
+    let results = test_provider_with_clients(
+        config,
+        provider_id,
+        clients,
+        deal_repo,
+        cached_endpoints,
+        shutdown,
+    )
+    .await;
+
+    // Shutdown interrupted mid-batch
+    if results.is_empty() && shutdown.is_cancelled() {
+        info!(
+            "Shutdown interrupted discovery for f0{}, preserving existing state",
+            provider_id
+        );
+        sp_repo.clear_pending_and_reschedule(provider_id).await?;
+        return Ok(ProviderOutcome::Skipped);
+    }
 
     // Extract provider-only result for storage_providers update
     // None case: provider-only discovery missing (panic, filtering, etc.) - default is_consistent
@@ -309,29 +350,24 @@ async fn process_single_provider(
         )
         .await?;
 
-    // Debug per-provider result
-    let client_display = if client_ids_for_log.is_empty() {
-        "(0 clients)".to_string()
-    } else if client_ids_for_log.len() == 1 {
-        format!("(1 client) [{}]", client_ids_for_log.join(", "))
-    } else {
-        format!(
-            "({} clients) [{}]",
-            client_ids_for_log.len(),
-            client_ids_for_log.join(", ")
-        )
-    };
     if let ProviderOutcome::Processed {
         success,
         retrievability,
         consistent,
     } = &outcome
     {
-        let result_str = if *success { "ok" } else { "failed" };
-        debug!(
-            "f0{} {}: {} retri={:.1}% consistent={}",
-            provider_id, client_display, result_str, retrievability, consistent
-        );
+        let clients_count = client_ids_for_log.len();
+        if *success {
+            info!(
+                "f0{} ({} clients): OK retri={:.1}% consistent={}",
+                provider_id, clients_count, retrievability, consistent
+            );
+        } else {
+            debug!(
+                "f0{} ({} clients): FAIL retri={:.1}%",
+                provider_id, clients_count, retrievability
+            );
+        }
     }
 
     Ok(outcome)
@@ -342,19 +378,31 @@ async fn test_provider_with_clients(
     provider_id: &ProviderId,
     client_ids: Vec<ClientId>,
     deal_repo: &DealRepository,
-    cached_peer_id: Option<String>,
+    cached_http_endpoints: Vec<String>,
+    shutdown: &CancellationToken,
 ) -> Vec<url_discovery_service::UrlDiscoveryResult> {
     let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_CLIENT_TESTS));
     let mut tasks = vec![];
     let provider_address: ProviderAddress = provider_id.clone().into();
 
+    // Provider result always has an earlier tested_at than ProviderClient
+    let provider_tested_at = Utc::now();
+
     let provider_task = {
         let cfg = config.clone();
         let addr = provider_address.clone();
         let repo = deal_repo.clone();
-        let peer_id = cached_peer_id.clone();
+        let endpoints = cached_http_endpoints.clone();
         tokio::spawn(async move {
-            url_discovery_service::discover_url(&cfg, &addr, None, &repo, peer_id).await
+            url_discovery_service::discover_url(
+                &cfg,
+                &addr,
+                None,
+                &repo,
+                endpoints,
+                Some(provider_tested_at),
+            )
+            .await
         })
     };
     tasks.push(provider_task);
@@ -369,31 +417,41 @@ async fn test_provider_with_clients(
         let provider_addr = provider_address.clone();
         let client_address: ClientAddress = client_id.into();
         let repo = deal_repo.clone();
-        let peer_id = cached_peer_id.clone();
+        let endpoints = cached_http_endpoints.clone();
         tasks.push(tokio::spawn(async move {
             let result = url_discovery_service::discover_url(
                 &cfg,
                 &provider_addr,
                 Some(client_address),
                 &repo,
-                peer_id,
+                endpoints,
+                None,
             )
             .await;
-            drop(permit); // release semaphore
+            drop(permit);
             result
         }));
     }
 
-    let results = join_all(tasks).await;
-
-    results
-        .into_iter()
-        .filter_map(|r| {
-            r.map_err(|e| {
-                error!("URL discovery task panicked: {:?}", e);
-                e
-            })
-            .ok()
-        })
-        .collect()
+    tokio::select! {
+        results = join_all(&mut tasks) => {
+            results
+                .into_iter()
+                .filter_map(|r| {
+                    r.map_err(|e| {
+                        error!("URL discovery task panicked: {:?}", e);
+                        e
+                    })
+                    .ok()
+                })
+                .collect()
+        }
+        _ = shutdown.cancelled() => {
+            info!("Aborting {} URL discovery tasks for provider {}", tasks.len(), provider_id);
+            for task in tasks {
+                task.abort();
+            }
+            vec![]
+        }
+    }
 }
