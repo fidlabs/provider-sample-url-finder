@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE\n                    storage_providers\n               SET\n                    endpoints_fetched_at = NOW(),\n                    cached_http_endpoints = NULL,\n                    next_url_discovery_at = DATE_TRUNC('day', NOW()) + INTERVAL '1 day',\n                    updated_at = NOW()\n               WHERE\n                    provider_id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6df213178b0daa4e5bd28e90ab46366dfb070d95709e23cc4c40db102766a540"
+}
