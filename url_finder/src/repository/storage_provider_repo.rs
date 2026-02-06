@@ -179,7 +179,7 @@ impl StorageProviderRepository {
             r#"UPDATE
                     storage_providers
                SET
-                    next_url_discovery_at = NOW() + INTERVAL '1 day',
+                    next_url_discovery_at = DATE_TRUNC('day', NOW()) + INTERVAL '1 day',
                     url_discovery_status = NULL,
                     url_discovery_pending_since = NULL,
                     last_working_url = $2,
@@ -220,22 +220,17 @@ impl StorageProviderRepository {
         Ok(())
     }
 
-    pub async fn reschedule_url_discovery_delayed(
-        &self,
-        provider_id: &ProviderId,
-        delay_seconds: i64,
-    ) -> Result<()> {
+    pub async fn reschedule_url_discovery_delayed(&self, provider_id: &ProviderId) -> Result<()> {
         sqlx::query!(
             r#"UPDATE
                     storage_providers
                SET
-                    next_url_discovery_at = NOW() + INTERVAL '1 second' * $2,
+                    next_url_discovery_at = DATE_TRUNC('day', NOW()) + INTERVAL '1 day',
                     updated_at = NOW()
                WHERE
                     provider_id = $1
             "#,
             provider_id as &ProviderId,
-            delay_seconds as f64
         )
         .execute(&self.pool)
         .await?;
@@ -449,7 +444,7 @@ impl StorageProviderRepository {
                     storage_providers
                WHERE
                     endpoints_fetched_at IS NULL
-                    OR endpoints_fetched_at < NOW() - INTERVAL '1 day'
+                    OR endpoints_fetched_at < DATE_TRUNC('day', NOW())
                ORDER BY
                     endpoints_fetched_at ASC NULLS FIRST
                LIMIT $1
@@ -494,7 +489,7 @@ impl StorageProviderRepository {
                SET
                     endpoints_fetched_at = NOW(),
                     cached_http_endpoints = NULL,
-                    next_url_discovery_at = NOW() + INTERVAL '1 day',
+                    next_url_discovery_at = DATE_TRUNC('day', NOW()) + INTERVAL '1 day',
                     updated_at = NOW()
                WHERE
                     provider_id = $1
