@@ -19,7 +19,6 @@ const SCHEDULER_SLEEP_INTERVAL: Duration = Duration::from_secs(300);
 const SCHEDULER_NEXT_INTERVAL: Duration = Duration::from_secs(60);
 const BATCH_SIZE: i64 = 100;
 const MAX_CONCURRENT_CLIENT_TESTS: usize = 5;
-const RESCHEDULE_NO_ENDPOINTS_SECS: i64 = 86400;
 
 // --- Helper Structs ---
 
@@ -255,7 +254,7 @@ async fn process_single_provider(
             provider_id
         );
         sp_repo
-            .reschedule_url_discovery_delayed(provider_id, RESCHEDULE_NO_ENDPOINTS_SECS)
+            .reschedule_url_discovery_delayed(provider_id)
             .await?;
         return Ok(ProviderOutcome::Skipped);
     }
