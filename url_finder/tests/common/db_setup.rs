@@ -117,19 +117,6 @@ pub async fn seed_url_result(
             "retrievability must be in range 0..=100, got {r}"
         );
     }
-    if let Some(r) = car_retrievability {
-        assert!(
-            (0.0..=100.0).contains(&r),
-            "car_retrievability must be in range 0..=100, got {r}"
-        );
-    }
-    if let Some(r) = full_piece_retrievability {
-        assert!(
-            (0.0..=100.0).contains(&r),
-            "full_piece_retrievability must be in range 0..=100, got {r}"
-        );
-    }
-
     let result_type = if client_id.is_some() {
         "ProviderClient"
     } else {
@@ -248,6 +235,18 @@ pub async fn seed_url_result_with_metadata(
         assert!(
             (0.0..=100.0).contains(&r),
             "retrievability must be in range 0..=100, got {r}"
+        );
+    }
+    if let Some(r) = car_retrievability {
+        assert!(
+            (0.0..=100.0).contains(&r),
+            "car_retrievability must be in range 0..=100, got {r}"
+        );
+    }
+    if let Some(r) = full_piece_retrievability {
+        assert!(
+            (0.0..=100.0).contains(&r),
+            "full_piece_retrievability must be in range 0..=100, got {r}"
         );
     }
 

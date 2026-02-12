@@ -318,7 +318,7 @@ async fn process_single_provider(
             provider_id
         );
         sp_repo
-            .reschedule_url_discovery_delayed(provider_id, 900)
+            .reschedule_url_discovery_delayed(provider_id)
             .await?;
         return Ok(ProviderOutcome::Skipped);
     }
