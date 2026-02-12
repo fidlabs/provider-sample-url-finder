@@ -1,6 +1,6 @@
 [package]
 name = "url_finder"
-version = "1.2.2"
+version = "1.4.0"
 edition = "2024"
 
 [lib]
