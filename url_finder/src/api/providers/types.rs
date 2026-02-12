@@ -277,6 +277,11 @@ impl ProviderResponse {
         let success_count = counts.get("success_count")?.as_u64()? as usize;
         let timeout_count = counts.get("timeout_count")?.as_u64()? as usize;
 
+        let both_failed = counts
+            .get("failed_count")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as usize;
+
         let breakdown = meta
             .get("inconsistency_breakdown")
             .map(|b| InconsistentBreakdown {
@@ -286,7 +291,7 @@ impl ProviderResponse {
                     .get("small_responses")
                     .and_then(|v| v.as_u64())
                     .unwrap_or(0) as usize,
-                both_failed: 0,
+                both_failed,
                 size_mismatch: b.get("size_mismatch").and_then(|v| v.as_u64()).unwrap_or(0)
                     as usize,
             });
