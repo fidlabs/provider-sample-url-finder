@@ -14,7 +14,15 @@ async fn test_list_providers_success() {
         (TEST_PROVIDER_3_DB, TEST_WORKING_URL),
     ] {
         seed_provider(&ctx.dbs.app_pool, db_id).await;
-        seed_url_result(&ctx.dbs.app_pool, db_id, None, Some(url), 80.0, "Success").await;
+        seed_url_result(
+            &ctx.dbs.app_pool,
+            db_id,
+            None,
+            Some(url),
+            Some(80.0),
+            "Success",
+        )
+        .await;
     }
 
     let response = ctx.app.get("/providers?limit=10&offset=0").await;
@@ -44,7 +52,7 @@ async fn test_list_providers_pagination() {
             db_id,
             None,
             Some(TEST_WORKING_URL),
-            80.0,
+            Some(80.0),
             "Success",
         )
         .await;
@@ -93,7 +101,7 @@ async fn test_list_providers_filter_has_working_url_true() {
         &ctx.dbs.app_pool,
         TEST_PROVIDER_1_DB,
         Some("http://example.com/piece/123"),
-        true,
+        Some(true),
     )
     .await;
     seed_url_result(
@@ -101,19 +109,19 @@ async fn test_list_providers_filter_has_working_url_true() {
         TEST_PROVIDER_1_DB,
         None,
         Some("http://example.com/piece/123"),
-        80.0,
+        Some(80.0),
         "Success",
     )
     .await;
 
     // Provider 2: no working URL
-    seed_provider_with_url_status(&ctx.dbs.app_pool, TEST_PROVIDER_2_DB, None, true).await;
+    seed_provider_with_url_status(&ctx.dbs.app_pool, TEST_PROVIDER_2_DB, None, Some(true)).await;
     seed_url_result(
         &ctx.dbs.app_pool,
         TEST_PROVIDER_2_DB,
         None,
         None,
-        0.0,
+        None,
         "NoDealsFound",
     )
     .await;
@@ -137,7 +145,7 @@ async fn test_list_providers_filter_has_working_url_false() {
         &ctx.dbs.app_pool,
         TEST_PROVIDER_1_DB,
         Some("http://example.com/piece/123"),
-        true,
+        Some(true),
     )
     .await;
     seed_url_result(
@@ -145,19 +153,19 @@ async fn test_list_providers_filter_has_working_url_false() {
         TEST_PROVIDER_1_DB,
         None,
         Some("http://example.com/piece/123"),
-        80.0,
+        Some(80.0),
         "Success",
     )
     .await;
 
     // Provider 2: no working URL
-    seed_provider_with_url_status(&ctx.dbs.app_pool, TEST_PROVIDER_2_DB, None, true).await;
+    seed_provider_with_url_status(&ctx.dbs.app_pool, TEST_PROVIDER_2_DB, None, Some(true)).await;
     seed_url_result(
         &ctx.dbs.app_pool,
         TEST_PROVIDER_2_DB,
         None,
         None,
-        0.0,
+        None,
         "NoDealsFound",
     )
     .await;
@@ -181,7 +189,7 @@ async fn test_list_providers_filter_is_consistent() {
         &ctx.dbs.app_pool,
         TEST_PROVIDER_1_DB,
         Some("http://example.com/piece/123"),
-        true,
+        Some(true),
     )
     .await;
     seed_url_result(
@@ -189,7 +197,7 @@ async fn test_list_providers_filter_is_consistent() {
         TEST_PROVIDER_1_DB,
         None,
         Some("http://example.com/piece/123"),
-        80.0,
+        Some(80.0),
         "Success",
     )
     .await;
@@ -199,7 +207,7 @@ async fn test_list_providers_filter_is_consistent() {
         &ctx.dbs.app_pool,
         TEST_PROVIDER_2_DB,
         Some("http://example.com/piece/456"),
-        false,
+        Some(false),
     )
     .await;
     seed_url_result(
@@ -207,7 +215,7 @@ async fn test_list_providers_filter_is_consistent() {
         TEST_PROVIDER_2_DB,
         None,
         Some("http://example.com/piece/456"),
-        60.0,
+        Some(60.0),
         "Success",
     )
     .await;
@@ -230,7 +238,7 @@ async fn test_list_providers_filter_combined() {
         &ctx.dbs.app_pool,
         TEST_PROVIDER_1_DB,
         Some("http://example.com/piece/123"),
-        true,
+        Some(true),
     )
     .await;
     seed_url_result(
@@ -238,7 +246,7 @@ async fn test_list_providers_filter_combined() {
         TEST_PROVIDER_1_DB,
         None,
         Some("http://example.com/piece/123"),
-        80.0,
+        Some(80.0),
         "Success",
     )
     .await;
@@ -248,7 +256,7 @@ async fn test_list_providers_filter_combined() {
         &ctx.dbs.app_pool,
         TEST_PROVIDER_2_DB,
         Some("http://example.com/piece/456"),
-        false,
+        Some(false),
     )
     .await;
     seed_url_result(
@@ -256,19 +264,19 @@ async fn test_list_providers_filter_combined() {
         TEST_PROVIDER_2_DB,
         None,
         Some("http://example.com/piece/456"),
-        60.0,
+        Some(60.0),
         "Success",
     )
     .await;
 
     // Provider 3: no URL
-    seed_provider_with_url_status(&ctx.dbs.app_pool, TEST_PROVIDER_3_DB, None, true).await;
+    seed_provider_with_url_status(&ctx.dbs.app_pool, TEST_PROVIDER_3_DB, None, Some(true)).await;
     seed_url_result(
         &ctx.dbs.app_pool,
         TEST_PROVIDER_3_DB,
         None,
         None,
-        0.0,
+        None,
         "NoDealsFound",
     )
     .await;

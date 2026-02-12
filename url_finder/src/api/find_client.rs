@@ -29,7 +29,7 @@ pub struct ProviderResult {
     pub provider: ProviderAddress,
     pub result: ResultCode,
     pub working_url: Option<String>,
-    pub retrievability_percent: f64,
+    pub retrievability_percent: Option<f64>,
 }
 
 impl From<ProviderData> for ProviderResult {

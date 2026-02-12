@@ -4,7 +4,7 @@ use crate::{
         DealRepository, StorageProvider, StorageProviderRepository, UrlResult, UrlResultRepository,
     },
     services::url_discovery_service,
-    types::{ClientAddress, ClientId, ProviderAddress, ProviderId},
+    types::{ClientAddress, ClientId, ProviderAddress, ProviderId, ResultCode},
 };
 use chrono::Utc;
 use color_eyre::Result;
@@ -28,6 +28,7 @@ struct DiscoveryBatchStats {
     failed: usize,
     skipped: usize,
     total_retrievability: f64,
+    measured_count: usize,
     consistent: usize,
     started_at: Instant,
 }
@@ -40,6 +41,7 @@ impl DiscoveryBatchStats {
             failed: 0,
             skipped: 0,
             total_retrievability: 0.0,
+            measured_count: 0,
             consistent: 0,
             started_at: Instant::now(),
         }
@@ -58,8 +60,11 @@ impl DiscoveryBatchStats {
                 } else {
                     self.failed += 1;
                 }
-                self.total_retrievability += retrievability;
-                if *consistent {
+                if let Some(r) = retrievability {
+                    self.total_retrievability += r;
+                    self.measured_count += 1;
+                }
+                if consistent.unwrap_or(false) {
                     self.consistent += 1;
                 }
             }
@@ -68,8 +73,8 @@ impl DiscoveryBatchStats {
     }
 
     fn avg_retrievability(&self) -> f64 {
-        if self.total > 0 {
-            self.total_retrievability / self.total as f64
+        if self.measured_count > 0 {
+            self.total_retrievability / self.measured_count as f64
         } else {
             0.0
         }
@@ -95,8 +100,8 @@ impl DiscoveryBatchStats {
 enum ProviderOutcome {
     Processed {
         success: bool,
-        retrievability: f64,
-        consistent: bool,
+        retrievability: Option<f64>,
+        consistent: Option<bool>,
     },
     Skipped,
 }
@@ -233,6 +238,7 @@ async fn schedule_url_discoveries(
         failed: final_stats.failed,
         skipped: final_stats.skipped,
         total_retrievability: final_stats.total_retrievability,
+        measured_count: final_stats.measured_count,
         consistent: final_stats.consistent,
         started_at: final_stats.started_at,
     })
@@ -299,9 +305,23 @@ async fn process_single_provider(
     }
 
     // Extract provider-only result for storage_providers update
-    // None case: provider-only discovery missing (panic, filtering, etc.) - default is_consistent
-    // to false since consistency was not verified
     let provider_discovery = results.iter().find(|r| r.client_id.is_none());
+
+    // System errors (infrastructure failure, not provider issue) - don't persist
+    let is_system_error = provider_discovery
+        .map(|r| r.result_code == ResultCode::Error)
+        .unwrap_or(false);
+
+    if is_system_error {
+        warn!(
+            "System error for provider {} - delaying retry by 15m",
+            provider_id
+        );
+        sp_repo
+            .reschedule_url_discovery_delayed(provider_id)
+            .await?;
+        return Ok(ProviderOutcome::Skipped);
+    }
 
     let (last_working_url, is_consistent, is_reliable, url_metadata, outcome) =
         match provider_discovery {
@@ -318,13 +338,13 @@ async fn process_single_provider(
             ),
             None => (
                 None,
-                false,
-                false,
+                None,
+                None,
                 None,
                 ProviderOutcome::Processed {
                     success: false,
-                    retrievability: 0.0,
-                    consistent: false,
+                    retrievability: None,
+                    consistent: None,
                 },
             ),
         };
@@ -358,13 +378,18 @@ async fn process_single_provider(
         let clients_count = client_ids_for_log.len();
         if *success {
             info!(
-                "f0{} ({} clients): OK retri={:.1}% consistent={}",
-                provider_id, clients_count, retrievability, consistent
+                "f0{} ({} clients): OK retri={:.1}% consistent={:?}",
+                provider_id,
+                clients_count,
+                retrievability.unwrap_or(0.0),
+                consistent
             );
         } else {
             debug!(
                 "f0{} ({} clients): FAIL retri={:.1}%",
-                provider_id, clients_count, retrievability
+                provider_id,
+                clients_count,
+                retrievability.unwrap_or(0.0)
             );
         }
     }

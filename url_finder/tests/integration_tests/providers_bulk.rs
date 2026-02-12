@@ -14,7 +14,7 @@ async fn test_bulk_providers_mixed() {
         TEST_PROVIDER_1_DB,
         None,
         Some(TEST_WORKING_URL),
-        90.0,
+        Some(90.0),
         "Success",
     )
     .await;
@@ -25,7 +25,7 @@ async fn test_bulk_providers_mixed() {
         TEST_PROVIDER_2_DB,
         None,
         Some(TEST_WORKING_URL_2),
-        85.0,
+        Some(85.0),
         "Success",
     )
     .await;

@@ -108,14 +108,15 @@ pub async fn seed_url_result(
     provider_id: &str,
     client_id: Option<&str>,
     working_url: Option<&str>,
-    retrievability: f64,
+    retrievability: Option<f64>,
     result_code: &str,
 ) {
-    assert!(
-        (0.0..=100.0).contains(&retrievability),
-        "retrievability must be in range 0..=100, got {retrievability}"
-    );
-
+    if let Some(r) = retrievability {
+        assert!(
+            (0.0..=100.0).contains(&r),
+            "retrievability must be in range 0..=100, got {r}"
+        );
+    }
     let result_type = if client_id.is_some() {
         "ProviderClient"
     } else {
@@ -151,7 +152,7 @@ pub async fn seed_provider_with_url_status(
     app_pool: &PgPool,
     provider_id: &str,
     last_working_url: Option<&str>,
-    is_consistent: bool,
+    is_consistent: Option<bool>,
 ) {
     sqlx::query(
         r#"INSERT INTO
@@ -216,21 +217,99 @@ pub async fn seed_bms_bandwidth_result(
 }
 
 #[allow(clippy::too_many_arguments)]
+pub async fn seed_url_result_with_metadata(
+    app_pool: &PgPool,
+    provider_id: &str,
+    client_id: Option<&str>,
+    working_url: Option<&str>,
+    retrievability: Option<f64>,
+    car_retrievability: Option<f64>,
+    full_piece_retrievability: Option<f64>,
+    result_code: &str,
+    tested_at: DateTime<Utc>,
+    is_consistent: Option<bool>,
+    is_reliable: Option<bool>,
+    url_metadata: Option<serde_json::Value>,
+) {
+    if let Some(r) = retrievability {
+        assert!(
+            (0.0..=100.0).contains(&r),
+            "retrievability must be in range 0..=100, got {r}"
+        );
+    }
+    if let Some(r) = car_retrievability {
+        assert!(
+            (0.0..=100.0).contains(&r),
+            "car_retrievability must be in range 0..=100, got {r}"
+        );
+    }
+    if let Some(r) = full_piece_retrievability {
+        assert!(
+            (0.0..=100.0).contains(&r),
+            "full_piece_retrievability must be in range 0..=100, got {r}"
+        );
+    }
+
+    let result_type = if client_id.is_some() {
+        "ProviderClient"
+    } else {
+        "Provider"
+    };
+
+    sqlx::query(
+        r#"INSERT INTO
+                url_results (
+                    provider_id,
+                    client_id,
+                    result_type,
+                    working_url,
+                    retrievability_percent,
+                    car_files_percent,
+                    large_files_percent,
+                    result_code,
+                    tested_at,
+                    is_consistent,
+                    is_reliable,
+                    url_metadata
+                )
+           VALUES
+                ($1, $2, $3::discovery_type, $4, $5, $6, $7, $8::result_code, $9, $10, $11, $12)"#,
+    )
+    .bind(provider_id)
+    .bind(client_id)
+    .bind(result_type)
+    .bind(working_url)
+    .bind(retrievability)
+    .bind(car_retrievability)
+    .bind(full_piece_retrievability)
+    .bind(result_code)
+    .bind(tested_at)
+    .bind(is_consistent)
+    .bind(is_reliable)
+    .bind(url_metadata)
+    .execute(app_pool)
+    .await
+    .expect("Failed to insert url_result with metadata");
+}
+
+#[allow(clippy::too_many_arguments)]
 pub async fn seed_url_result_at(
     app_pool: &PgPool,
     provider_id: &str,
     client_id: Option<&str>,
     working_url: Option<&str>,
-    retrievability: f64,
+    retrievability: Option<f64>,
     result_code: &str,
     tested_at: DateTime<Utc>,
     is_consistent: Option<bool>,
     is_reliable: Option<bool>,
 ) {
-    assert!(
-        (0.0..=100.0).contains(&retrievability),
-        "retrievability must be in range 0..=100, got {retrievability}"
-    );
+    if let Some(r) = retrievability {
+        assert!(
+            (0.0..=100.0).contains(&r),
+            "retrievability must be in range 0..=100, got {r}"
+        );
+    }
 
     let result_type = if client_id.is_some() {
         "ProviderClient"

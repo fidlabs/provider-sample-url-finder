@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT DISTINCT ON (ur.provider_id)\n                    ur.id,\n                    ur.provider_id AS \"provider_id: ProviderId\",\n                    ur.client_id AS \"client_id: ClientId\",\n                    ur.result_type AS \"result_type: DiscoveryType\",\n                    ur.working_url,\n                    ur.retrievability_percent::float8 AS \"retrievability_percent!\",\n                    ur.result_code AS \"result_code: ResultCode\",\n                    ur.error_code AS \"error_code: ErrorCode\",\n                    ur.tested_at,\n                    ur.is_consistent,\n                    ur.is_reliable,\n                    ur.url_metadata,\n                    ur.sector_utilization_percent::float8 AS \"sector_utilization_percent\"\n               FROM\n                    url_results ur\n               JOIN\n                    storage_providers sp ON ur.provider_id = sp.provider_id\n               WHERE\n                    ur.result_type = 'Provider'\n                    AND ($3::bool IS NULL OR (sp.last_working_url IS NOT NULL) = $3)\n                    AND ($4::bool IS NULL OR sp.is_consistent = $4)\n               ORDER BY\n                    ur.provider_id,\n                    ur.tested_at DESC\n               LIMIT $1\n               OFFSET $2\n            ",
+  "query": "SELECT DISTINCT ON (ur.provider_id)\n                    ur.id,\n                    ur.provider_id AS \"provider_id: ProviderId\",\n                    ur.client_id AS \"client_id: ClientId\",\n                    ur.result_type AS \"result_type: DiscoveryType\",\n                    ur.working_url,\n                    ur.retrievability_percent::float8 AS \"retrievability_percent\",\n                    ur.result_code AS \"result_code: ResultCode\",\n                    ur.error_code AS \"error_code: ErrorCode\",\n                    ur.tested_at,\n                    ur.is_consistent,\n                    ur.is_reliable,\n                    ur.url_metadata,\n                    ur.sector_utilization_percent::float8 AS \"sector_utilization_percent\",\n                    ur.car_files_percent::float8 AS \"car_files_percent\",\n                    ur.large_files_percent::float8 AS \"large_files_percent\"\n               FROM\n                    url_results ur\n               JOIN\n                    storage_providers sp ON ur.provider_id = sp.provider_id\n               WHERE\n                    ur.result_type = 'Provider'\n                    AND ($3::bool IS NULL OR (sp.last_working_url IS NOT NULL) = $3)\n                    AND ($4::bool IS NULL OR sp.is_consistent = $4)\n               ORDER BY\n                    ur.provider_id,\n                    ur.tested_at DESC\n               LIMIT $1\n               OFFSET $2\n            ",
   "describe": {
     "columns": [
       {
@@ -40,7 +40,7 @@
       },
       {
         "ordinal": 5,
-        "name": "retrievability_percent!",
+        "name": "retrievability_percent",
         "type_info": "Float8"
       },
       {
@@ -108,6 +108,16 @@
         "ordinal": 12,
         "name": "sector_utilization_percent",
         "type_info": "Float8"
+      },
+      {
+        "ordinal": 13,
+        "name": "car_files_percent",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 14,
+        "name": "large_files_percent",
+        "type_info": "Float8"
       }
     ],
     "parameters": {
@@ -131,8 +141,10 @@
       true,
       true,
       true,
+      null,
+      null,
       null
     ]
   },
-  "hash": "5baace3095ee5cd3774b7533c4c17244fa1be1730bc055fa49e167f597c619b0"
+  "hash": "6788783d7ceb35d9dd6ac82521d062007a1721df983165e45266dc15ca3c5028"
 }
