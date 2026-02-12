@@ -80,6 +80,7 @@ pub async fn discover_url(
     client_address: Option<ClientAddress>,
     deal_repo: &DealRepository,
     endpoints: Vec<String>,
+    tested_at: Option<DateTime<Utc>>,
 ) -> UrlDiscoveryResult {
     let provider_id: ProviderId = provider_address.clone().into();
     let client_id: Option<ClientId> = client_address.clone().map(|c| c.into());
@@ -93,6 +94,9 @@ pub async fn discover_url(
         Some(c) => UrlDiscoveryResult::new_provider_client(provider_id.clone(), c.clone()),
         None => UrlDiscoveryResult::new_provider_only(provider_id.clone()),
     };
+    if let Some(ts) = tested_at {
+        result.tested_at = ts;
+    }
 
     if endpoints.is_empty() {
         result.result_code = ResultCode::MissingHttpAddrFromCidContact;

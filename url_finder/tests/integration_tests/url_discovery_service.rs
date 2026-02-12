@@ -57,6 +57,7 @@ async fn test_url_discovery_success() {
         Some(client_address),
         &deal_repo,
         endpoints,
+        None,
     )
     .await;
 
@@ -101,6 +102,7 @@ async fn test_url_discovery_partial_retrievability() {
         Some(client_address),
         &deal_repo,
         endpoints,
+        None,
     )
     .await;
 

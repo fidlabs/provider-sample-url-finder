@@ -200,6 +200,7 @@ impl TestContext {
             client_address,
             &deal_repo,
             fixture.endpoints.clone(),
+            None,
         )
         .await;
 

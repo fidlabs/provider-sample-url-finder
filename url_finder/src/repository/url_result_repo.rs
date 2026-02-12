@@ -486,8 +486,8 @@ impl UrlResultRepository {
                ) combined
                ORDER BY
                     DATE(combined.tested_at),
-                    combined.priority ASC,
-                    combined.tested_at DESC
+                    combined.tested_at DESC,
+                    combined.priority ASC
             "#,
             provider_id.as_str(),
             client_id.as_str(),
