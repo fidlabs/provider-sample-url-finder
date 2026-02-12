@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT DISTINCT ON (provider_id)\n                    id,\n                    provider_id AS \"provider_id: ProviderId\",\n                    client_id AS \"client_id: ClientId\",\n                    result_type AS \"result_type: DiscoveryType\",\n                    working_url,\n                    retrievability_percent::float8 AS \"retrievability_percent\",\n                    result_code AS \"result_code: ResultCode\",\n                    error_code AS \"error_code: ErrorCode\",\n                    tested_at,\n                    is_consistent,\n                    is_reliable,\n                    url_metadata,\n                    sector_utilization_percent::float8 AS \"sector_utilization_percent\"\n               FROM\n                    url_results\n               WHERE\n                    provider_id = ANY($1)\n                    AND result_type = 'Provider'\n               ORDER BY\n                    provider_id,\n                    tested_at DESC\n            ",
+  "query": "SELECT DISTINCT ON (ur.provider_id)\n                    ur.id,\n                    ur.provider_id AS \"provider_id: ProviderId\",\n                    ur.client_id AS \"client_id: ClientId\",\n                    ur.result_type AS \"result_type: DiscoveryType\",\n                    ur.working_url,\n                    ur.retrievability_percent::float8 AS \"retrievability_percent\",\n                    ur.result_code AS \"result_code: ResultCode\",\n                    ur.error_code AS \"error_code: ErrorCode\",\n                    ur.tested_at,\n                    ur.is_consistent,\n                    ur.is_reliable,\n                    ur.url_metadata,\n                    ur.sector_utilization_percent::float8 AS \"sector_utilization_percent\",\n                    ur.car_files_percent::float8 AS \"car_files_percent\",\n                    ur.large_files_percent::float8 AS \"large_files_percent\"\n               FROM\n                    url_results ur\n               JOIN\n                    storage_providers sp ON ur.provider_id = sp.provider_id\n               WHERE\n                    ur.result_type = 'Provider'\n                    AND ($3::bool IS NULL OR (sp.last_working_url IS NOT NULL) = $3)\n                    AND ($4::bool IS NULL OR sp.is_consistent = $4)\n               ORDER BY\n                    ur.provider_id,\n                    ur.tested_at DESC\n               LIMIT $1\n               OFFSET $2\n            ",
   "describe": {
     "columns": [
       {
@@ -108,11 +108,24 @@
         "ordinal": 12,
         "name": "sector_utilization_percent",
         "type_info": "Float8"
+      },
+      {
+        "ordinal": 13,
+        "name": "car_files_percent",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 14,
+        "name": "large_files_percent",
+        "type_info": "Float8"
       }
     ],
     "parameters": {
       "Left": [
-        "TextArray"
+        "Int8",
+        "Int8",
+        "Bool",
+        "Bool"
       ]
     },
     "nullable": [
@@ -128,8 +141,10 @@
       true,
       true,
       true,
+      null,
+      null,
       null
     ]
   },
-  "hash": "8dd5da6b75ec6aa07a238fbc0b1f3cfdbd2d79c9ab531c1c3b9e89a18be157a8"
+  "hash": "6788783d7ceb35d9dd6ac82521d062007a1721df983165e45266dc15ca3c5028"
 }

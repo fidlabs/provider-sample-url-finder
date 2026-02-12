@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT\n                    id,\n                    provider_id AS \"provider_id: ProviderId\",\n                    client_id AS \"client_id: ClientId\",\n                    result_type AS \"result_type: DiscoveryType\",\n                    working_url,\n                    retrievability_percent::float8 AS \"retrievability_percent\",\n                    result_code AS \"result_code: ResultCode\",\n                    error_code AS \"error_code: ErrorCode\",\n                    tested_at,\n                    is_consistent,\n                    is_reliable,\n                    url_metadata,\n                    sector_utilization_percent::float8 AS \"sector_utilization_percent\"\n               FROM\n                    url_results\n               WHERE\n                    provider_id = $1\n                    AND client_id = $2\n                    AND result_type = 'ProviderClient'\n               ORDER BY\n                    tested_at DESC\n               LIMIT 1\n            ",
+  "query": "SELECT\n                    id,\n                    provider_id AS \"provider_id: ProviderId\",\n                    client_id AS \"client_id: ClientId\",\n                    result_type AS \"result_type: DiscoveryType\",\n                    working_url,\n                    retrievability_percent::float8 AS \"retrievability_percent\",\n                    result_code AS \"result_code: ResultCode\",\n                    error_code AS \"error_code: ErrorCode\",\n                    tested_at,\n                    is_consistent,\n                    is_reliable,\n                    url_metadata,\n                    sector_utilization_percent::float8 AS \"sector_utilization_percent\",\n                    car_files_percent::float8 AS \"car_files_percent\",\n                    large_files_percent::float8 AS \"large_files_percent\"\n               FROM\n                    url_results\n               WHERE\n                    provider_id = $1\n                    AND result_type = 'Provider'\n               ORDER BY\n                    tested_at DESC\n               LIMIT 1\n            ",
   "describe": {
     "columns": [
       {
@@ -108,11 +108,20 @@
         "ordinal": 12,
         "name": "sector_utilization_percent",
         "type_info": "Float8"
+      },
+      {
+        "ordinal": 13,
+        "name": "car_files_percent",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 14,
+        "name": "large_files_percent",
+        "type_info": "Float8"
       }
     ],
     "parameters": {
       "Left": [
-        "Text",
         "Text"
       ]
     },
@@ -129,8 +138,10 @@
       true,
       true,
       true,
+      null,
+      null,
       null
     ]
   },
-  "hash": "36eeb9df24cc0f901706886d6dc9d039dff8c325c964e11fa1a9fd527e66e838"
+  "hash": "9fa889a4c0c360c96cb33a6dd771a771b9527f7e1beb3e2617b7fee0b11a8caa"
 }

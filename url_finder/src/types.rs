@@ -513,6 +513,8 @@ pub struct UrlTestResult {
 #[derive(Debug, Clone)]
 pub struct ProviderAnalysis {
     pub retrievability_percent: f64,
+    pub car_files_percent: f64,
+    pub large_files_percent: f64,
     pub is_consistent: bool,
     pub is_reliable: bool,
     pub sample_count: usize,
@@ -523,12 +525,18 @@ pub struct ProviderAnalysis {
     pub inconsistent_flaky: usize,
     pub inconsistent_small_responses: usize,
     pub inconsistent_size_mismatch: usize,
+    pub http_responded_count: usize,
+    pub failed_count: usize,
+    pub valid_car_count: usize,
+    pub small_car_count: usize,
 }
 
 impl ProviderAnalysis {
     pub fn empty() -> Self {
         Self {
             retrievability_percent: 0.0,
+            car_files_percent: 0.0,
+            large_files_percent: 0.0,
             is_consistent: false,
             is_reliable: false,
             sample_count: 0,
@@ -539,6 +547,10 @@ impl ProviderAnalysis {
             inconsistent_flaky: 0,
             inconsistent_small_responses: 0,
             inconsistent_size_mismatch: 0,
+            http_responded_count: 0,
+            failed_count: 0,
+            valid_car_count: 0,
+            small_car_count: 0,
         }
     }
 }

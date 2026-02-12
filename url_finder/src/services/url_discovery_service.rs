@@ -28,6 +28,8 @@ pub struct UrlDiscoveryResult {
     pub is_reliable: Option<bool>,
     pub url_metadata: Option<serde_json::Value>,
     pub sector_utilization_percent: Option<f64>,
+    pub car_files_percent: Option<f64>,
+    pub large_files_percent: Option<f64>,
 }
 
 impl UrlDiscoveryResult {
@@ -46,6 +48,8 @@ impl UrlDiscoveryResult {
             is_reliable: None,
             url_metadata: None,
             sector_utilization_percent: None,
+            car_files_percent: None,
+            large_files_percent: None,
         }
     }
 
@@ -64,6 +68,8 @@ impl UrlDiscoveryResult {
             is_reliable: None,
             url_metadata: None,
             sector_utilization_percent: None,
+            car_files_percent: None,
+            large_files_percent: None,
         }
     }
 }
@@ -164,14 +170,6 @@ pub async fn discover_url(
         .filter(|(_, r)| r.is_valid_car && r.content_length.unwrap_or(0) < MIN_VALID_CONTENT_LENGTH)
         .count();
 
-    let working_url_car_info = working_url_result.map(|(_, r)| {
-        serde_json::json!({
-            "is_valid_car": r.is_valid_car,
-            "root_cid": r.root_cid,
-            "content_length": r.content_length,
-        })
-    });
-
     // Calculate sector utilization
     let utilization_samples: Vec<f64> = test_results
         .iter()
@@ -195,34 +193,31 @@ pub async fn discover_url(
     };
 
     // Build metadata
+    let http_responded_count = analysis.http_responded_count;
+    let failed_count = analysis.failed_count;
+
     let url_metadata = serde_json::json!({
-        "analysis": {
+        "counts": {
             "sample_count": analysis.sample_count,
+            "http_responded_count": http_responded_count,
             "success_count": analysis.success_count,
+            "valid_car_count": valid_car_count,
+            "small_car_count": small_car_count,
             "timeout_count": analysis.timeout_count,
-            "inconsistent_count": analysis.inconsistent_count,
-            "inconsistent_breakdown": {
-                "warm_up": analysis.inconsistent_warm_up,
-                "flaky": analysis.inconsistent_flaky,
-                "small_responses": analysis.inconsistent_small_responses,
-                "size_mismatch": analysis.inconsistent_size_mismatch,
-            },
-            "retrievability_percent": analysis.retrievability_percent,
-            "is_consistent": analysis.is_consistent,
-            "is_reliable": analysis.is_reliable,
+            "failed_count": failed_count,
         },
-        "car_diagnostics": {
-            "responses_parsed": test_results.len(),
-            "valid_car_headers": valid_car_count,
-            "small_car_responses": small_car_count,
-            "working_url_car_info": working_url_car_info,
+        "inconsistency_breakdown": {
+            "total": analysis.inconsistent_count,
+            "warm_up": analysis.inconsistent_warm_up,
+            "flaky": analysis.inconsistent_flaky,
+            "small_responses": analysis.inconsistent_small_responses,
+            "size_mismatch": analysis.inconsistent_size_mismatch,
         },
         "sector_utilization": {
             "sample_count": utilization_samples.len(),
             "min_percent": utilization_samples.iter().cloned().reduce(f64::min),
             "max_percent": utilization_samples.iter().cloned().reduce(f64::max),
         },
-        "validated_at": Utc::now().to_rfc3339(),
     });
 
     result.working_url = working_url.clone();
@@ -231,6 +226,8 @@ pub async fn discover_url(
     result.is_reliable = Some(analysis.is_reliable);
     result.url_metadata = Some(url_metadata);
     result.sector_utilization_percent = sector_utilization_percent;
+    result.car_files_percent = Some(analysis.car_files_percent);
+    result.large_files_percent = Some(analysis.large_files_percent);
 
     result.result_code = if working_url.is_some() {
         ResultCode::Success

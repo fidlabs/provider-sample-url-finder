@@ -632,6 +632,82 @@ async fn test_get_provider_bms_extended_fields() {
 }
 
 // =============================================================================
+// Multi-level retrievability in extended diagnostics
+// =============================================================================
+
+#[tokio::test]
+async fn test_get_provider_extended_has_multi_level_retri_in_analysis() {
+    let ctx = TestContext::new().await;
+
+    seed_provider(&ctx.dbs.app_pool, TEST_PROVIDER_1_DB).await;
+    seed_url_result_with_metadata(
+        &ctx.dbs.app_pool,
+        TEST_PROVIDER_1_DB,
+        None,
+        Some(TEST_WORKING_URL),
+        Some(90.0),
+        Some(60.0), // car_retrievability
+        Some(80.0), // full_piece_retrievability
+        "Success",
+        Utc::now(),
+        Some(true),
+        Some(true),
+        Some(json!({
+            "counts": {
+                "sample_count": 10,
+                "http_responded_count": 9,
+                "success_count": 8,
+                "valid_car_count": 6,
+                "small_car_count": 0,
+                "timeout_count": 0,
+                "failed_count": 1
+            },
+            "inconsistency_breakdown": {
+                "total": 1,
+                "warm_up": 1,
+                "flaky": 0,
+                "small_responses": 0,
+                "size_mismatch": 0
+            },
+            "sector_utilization": {
+                "sample_count": 8,
+                "min_percent": 85.0,
+                "max_percent": 98.0
+            }
+        })),
+    )
+    .await;
+
+    let response = ctx
+        .app
+        .get(&format!("/providers/{TEST_PROVIDER_1_API}?extended=true"))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: serde_json::Value = response.json();
+
+    // Top-level retri fields
+    assert_json_include!(
+        actual: body,
+        expected: json!({
+            "retrievability_percent": 90.0,
+            "large_files_percent": 80.0,
+            "car_files_percent": 60.0
+        })
+    );
+
+    // Extended analysis has counts but NOT retri percentages (those are top-level only)
+    let analysis = body["diagnostics"]["analysis"]
+        .as_object()
+        .expect("analysis should be present");
+
+    assert!(analysis.get("car_files_percent").is_none());
+    assert!(analysis.get("large_files_percent").is_none());
+    assert_eq!(analysis["sample_count"], 10);
+    assert_eq!(analysis["success_count"], 8);
+}
+
+// =============================================================================
 // Error code in diagnostics tests
 // =============================================================================
 

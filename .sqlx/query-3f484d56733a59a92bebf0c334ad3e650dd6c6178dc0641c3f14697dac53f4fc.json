@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT DISTINCT ON (DATE(tested_at))\n                    DATE(tested_at) AS \"date!\",\n                    retrievability_percent::float8 AS \"retrievability_percent\",\n                    sector_utilization_percent::float8 AS \"sector_utilization_percent\",\n                    is_consistent,\n                    is_reliable,\n                    working_url,\n                    result_code AS \"result_code: ResultCode\",\n                    error_code AS \"error_code: ErrorCode\",\n                    tested_at,\n                    url_metadata\n               FROM\n                    url_results\n               WHERE\n                    provider_id = $1\n                    AND result_type = 'Provider'\n                    AND tested_at >= $2::date\n                    AND tested_at < ($3::date + INTERVAL '1 day')\n               ORDER BY\n                    DATE(tested_at),\n                    tested_at DESC\n            ",
+  "query": "SELECT DISTINCT ON (DATE(tested_at))\n                    DATE(tested_at) AS \"date!\",\n                    retrievability_percent::float8 AS \"retrievability_percent\",\n                    sector_utilization_percent::float8 AS \"sector_utilization_percent\",\n                    is_consistent,\n                    is_reliable,\n                    working_url,\n                    result_code AS \"result_code: ResultCode\",\n                    error_code AS \"error_code: ErrorCode\",\n                    tested_at,\n                    url_metadata,\n                    car_files_percent::float8 AS \"car_files_percent\",\n                    large_files_percent::float8 AS \"large_files_percent\"\n               FROM\n                    url_results\n               WHERE\n                    provider_id = $1\n                    AND result_type = 'Provider'\n                    AND tested_at >= $2::date\n                    AND tested_at < ($3::date + INTERVAL '1 day')\n               ORDER BY\n                    DATE(tested_at),\n                    tested_at DESC\n            ",
   "describe": {
     "columns": [
       {
@@ -83,6 +83,16 @@
         "ordinal": 9,
         "name": "url_metadata",
         "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 10,
+        "name": "car_files_percent",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 11,
+        "name": "large_files_percent",
+        "type_info": "Float8"
       }
     ],
     "parameters": {
@@ -102,8 +112,10 @@
       false,
       true,
       false,
-      true
+      true,
+      null,
+      null
     ]
   },
-  "hash": "a50ee26a93ce7b03824695148da8f22411167b71d6ff117f3ecda237667d86b4"
+  "hash": "3f484d56733a59a92bebf0c334ad3e650dd6c6178dc0641c3f14697dac53f4fc"
 }

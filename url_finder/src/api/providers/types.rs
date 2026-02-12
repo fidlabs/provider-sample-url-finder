@@ -89,8 +89,6 @@ pub struct AnalysisResponse {
     /// Breakdown of inconsistency causes
     #[serde(skip_serializing_if = "Option::is_none")]
     pub inconsistent_breakdown: Option<InconsistentBreakdown>,
-    /// When this analysis was performed
-    pub validated_at: DateTime<Utc>,
 }
 
 /// Diagnostic information (extended only)
@@ -134,6 +132,10 @@ pub struct ProviderResponse {
     pub provider_id: String,
     pub working_url: Option<String>,
     pub retrievability_percent: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub large_files_percent: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub car_files_percent: Option<f64>,
     pub sector_utilization_percent: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tested_at: Option<DateTime<Utc>>,
@@ -155,6 +157,10 @@ pub struct ProviderClientResponse {
     pub client_id: Option<String>,
     pub working_url: Option<String>,
     pub retrievability_percent: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub large_files_percent: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub car_files_percent: Option<f64>,
     pub sector_utilization_percent: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tested_at: Option<DateTime<Utc>>,
@@ -240,6 +246,8 @@ impl ProviderResponse {
             provider_id: provider_address.to_string(),
             working_url: data.working_url,
             retrievability_percent: data.retrievability_percent,
+            large_files_percent: data.large_files_percent,
+            car_files_percent: data.car_files_percent,
             sector_utilization_percent: data.sector_utilization_percent,
             tested_at: Some(data.tested_at),
             is_consistent: data.is_consistent,
@@ -252,31 +260,79 @@ impl ProviderResponse {
 
     fn parse_analysis(metadata: &Option<serde_json::Value>) -> Option<AnalysisResponse> {
         let meta = metadata.as_ref()?;
-        let analysis = meta.get("analysis")?;
 
-        let breakdown = analysis.get("inconsistent_breakdown").and_then(|b| {
-            Some(InconsistentBreakdown {
-                warm_up: b.get("warm_up")?.as_u64()? as usize,
-                flaky: b.get("flaky")?.as_u64()? as usize,
-                small_responses: b.get("small_responses")?.as_u64()? as usize,
-                both_failed: b.get("both_failed")?.as_u64()? as usize,
-                size_mismatch: b.get("size_mismatch")?.as_u64()? as usize,
-            })
-        });
+        if let Some(counts) = meta.get("counts") {
+            return Self::parse_analysis_new_format(meta, counts);
+        }
+
+        let analysis = meta.get("analysis")?;
+        Self::parse_analysis_old_format(analysis)
+    }
+
+    fn parse_analysis_new_format(
+        meta: &serde_json::Value,
+        counts: &serde_json::Value,
+    ) -> Option<AnalysisResponse> {
+        let sample_count = counts.get("sample_count")?.as_u64()? as usize;
+        let success_count = counts.get("success_count")?.as_u64()? as usize;
+        let timeout_count = counts.get("timeout_count")?.as_u64()? as usize;
+
+        let breakdown = meta
+            .get("inconsistency_breakdown")
+            .map(|b| InconsistentBreakdown {
+                warm_up: b.get("warm_up").and_then(|v| v.as_u64()).unwrap_or(0) as usize,
+                flaky: b.get("flaky").and_then(|v| v.as_u64()).unwrap_or(0) as usize,
+                small_responses: b
+                    .get("small_responses")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0) as usize,
+                both_failed: 0,
+                size_mismatch: b.get("size_mismatch").and_then(|v| v.as_u64()).unwrap_or(0)
+                    as usize,
+            });
+
+        let inconsistent_count = meta
+            .get("inconsistency_breakdown")
+            .and_then(|b| b.get("total"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as usize;
 
         Some(AnalysisResponse {
-            sample_count: analysis.get("sample_count")?.as_u64()? as usize,
-            success_count: analysis.get("success_count")?.as_u64()? as usize,
+            sample_count,
+            success_count,
+            timeout_count,
+            inconsistent_count,
+            inconsistent_breakdown: breakdown,
+        })
+    }
+
+    fn parse_analysis_old_format(analysis: &serde_json::Value) -> Option<AnalysisResponse> {
+        let sample_count = analysis.get("sample_count")?.as_u64()? as usize;
+        let success_count = analysis.get("success_count")?.as_u64()? as usize;
+
+        let breakdown = analysis
+            .get("inconsistent_breakdown")
+            .map(|b| InconsistentBreakdown {
+                warm_up: b.get("warm_up").and_then(|v| v.as_u64()).unwrap_or(0) as usize,
+                flaky: b.get("flaky").and_then(|v| v.as_u64()).unwrap_or(0) as usize,
+                small_responses: b
+                    .get("small_responses")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0) as usize,
+                both_failed: b.get("both_failed").and_then(|v| v.as_u64()).unwrap_or(0) as usize,
+                size_mismatch: b.get("size_mismatch").and_then(|v| v.as_u64()).unwrap_or(0)
+                    as usize,
+            });
+
+        Some(AnalysisResponse {
+            sample_count,
+            success_count,
             timeout_count: analysis.get("timeout_count")?.as_u64()? as usize,
             inconsistent_count: analysis
                 .get("inconsistent_count")
                 .and_then(|v| v.as_u64())
                 .unwrap_or(0) as usize,
             inconsistent_breakdown: breakdown,
-            validated_at: {
-                let ts = meta.get("validated_at")?.as_str()?;
-                DateTime::parse_from_rfc3339(ts).ok()?.with_timezone(&Utc)
-            },
         })
     }
 }
@@ -334,6 +390,8 @@ impl ProviderClientResponse {
             client_id,
             working_url: data.working_url,
             retrievability_percent: data.retrievability_percent,
+            large_files_percent: data.large_files_percent,
+            car_files_percent: data.car_files_percent,
             sector_utilization_percent: data.sector_utilization_percent,
             tested_at: Some(data.tested_at),
             is_consistent: data.is_consistent,

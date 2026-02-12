@@ -25,6 +25,8 @@ pub struct FindRetriBySpResponse {
     pub result: ResultCode,
     pub retrievability_percent: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub large_files_percent: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 }
 
@@ -33,6 +35,7 @@ impl From<ProviderData> for FindRetriBySpResponse {
         Self {
             result: data.result_code,
             retrievability_percent: data.retrievability_percent,
+            large_files_percent: data.large_files_percent,
             message: None,
         }
     }
@@ -43,6 +46,7 @@ impl FindRetriBySpResponse {
         Self {
             result: ResultCode::Error,
             retrievability_percent: None,
+            large_files_percent: None,
             message: Some("Provider has not been indexed yet. Please try again later.".to_string()),
         }
     }

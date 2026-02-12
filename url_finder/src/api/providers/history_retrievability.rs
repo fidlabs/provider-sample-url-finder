@@ -57,6 +57,10 @@ pub struct RetrievabilityHistoryResponse {
 pub struct RetrievabilityDataPoint {
     pub date: NaiveDate,
     pub retrievability_percent: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub large_files_percent: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub car_files_percent: Option<f64>,
     pub sector_utilization_percent: Option<f64>,
     pub is_consistent: Option<bool>,
     pub is_reliable: Option<bool>,
@@ -75,11 +79,15 @@ impl RetrievabilityDataPoint {
     fn basic(
         date: NaiveDate,
         retrievability_percent: Option<f64>,
+        large_files_percent: Option<f64>,
+        car_files_percent: Option<f64>,
         sector_utilization_percent: Option<f64>,
     ) -> Self {
         Self {
             date,
             retrievability_percent,
+            large_files_percent,
+            car_files_percent,
             sector_utilization_percent,
             is_consistent: None,
             is_reliable: None,
@@ -97,6 +105,8 @@ impl From<HistoryRow> for RetrievabilityDataPoint {
         Self {
             date: row.date,
             retrievability_percent: row.retrievability_percent,
+            large_files_percent: row.large_files_percent,
+            car_files_percent: row.car_files_percent,
             sector_utilization_percent: row.sector_utilization_percent,
             is_consistent: row.is_consistent,
             is_reliable: row.is_reliable,
@@ -190,6 +200,8 @@ pub async fn handle_history_retrievability(
                 RetrievabilityDataPoint::basic(
                     row.date,
                     row.retrievability_percent,
+                    row.large_files_percent,
+                    row.car_files_percent,
                     row.sector_utilization_percent,
                 )
             }
@@ -266,6 +278,8 @@ pub async fn handle_history_retrievability_client(
                 RetrievabilityDataPoint::basic(
                     row.date,
                     row.retrievability_percent,
+                    row.large_files_percent,
+                    row.car_files_percent,
                     row.sector_utilization_percent,
                 )
             }

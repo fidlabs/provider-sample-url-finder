@@ -206,6 +206,8 @@ async fn record_failure(
         is_reliable: None,
         url_metadata: None,
         sector_utilization_percent: None,
+        car_files_percent: None,
+        large_files_percent: None,
     };
 
     url_repo.insert_batch(&[url_result]).await?;

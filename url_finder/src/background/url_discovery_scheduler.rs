@@ -27,6 +27,7 @@ struct DiscoveryBatchStats {
     failed: usize,
     skipped: usize,
     total_retrievability: f64,
+    measured_count: usize,
     consistent: usize,
     started_at: Instant,
 }
@@ -39,6 +40,7 @@ impl DiscoveryBatchStats {
             failed: 0,
             skipped: 0,
             total_retrievability: 0.0,
+            measured_count: 0,
             consistent: 0,
             started_at: Instant::now(),
         }
@@ -57,7 +59,10 @@ impl DiscoveryBatchStats {
                 } else {
                     self.failed += 1;
                 }
-                self.total_retrievability += retrievability.unwrap_or(0.0);
+                if let Some(r) = retrievability {
+                    self.total_retrievability += r;
+                    self.measured_count += 1;
+                }
                 if consistent.unwrap_or(false) {
                     self.consistent += 1;
                 }
@@ -67,8 +72,8 @@ impl DiscoveryBatchStats {
     }
 
     fn avg_retrievability(&self) -> f64 {
-        if self.total > 0 {
-            self.total_retrievability / self.total as f64
+        if self.measured_count > 0 {
+            self.total_retrievability / self.measured_count as f64
         } else {
             0.0
         }
@@ -270,6 +275,7 @@ async fn schedule_url_discoveries(
         failed: final_stats.failed,
         skipped: final_stats.skipped,
         total_retrievability: final_stats.total_retrievability,
+        measured_count: final_stats.measured_count,
         consistent: final_stats.consistent,
         started_at: final_stats.started_at,
     })
@@ -334,11 +340,13 @@ async fn process_single_provider(
         .unwrap_or(false);
 
     if is_system_error {
-        debug!(
-            "Skipping persistence for provider {} due to system error",
+        warn!(
+            "System error for provider {} - delaying retry by 15m",
             provider_id
         );
-        sp_repo.reset_url_discovery_pending(provider_id).await?;
+        sp_repo
+            .reschedule_url_discovery_delayed(provider_id, 900)
+            .await?;
         return Ok(ProviderOutcome::Skipped);
     }
 
