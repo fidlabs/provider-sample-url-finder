@@ -14,7 +14,7 @@ async fn test_get_provider_client_success() {
         TEST_PROVIDER_1_DB,
         Some(TEST_CLIENT_ID_DB),
         Some(TEST_WORKING_URL),
-        92.5,
+        Some(92.5),
         "Success",
     )
     .await;
@@ -69,7 +69,7 @@ async fn test_get_provider_client_falls_back_to_provider_result() {
         TEST_PROVIDER_1_DB,
         None,
         Some(TEST_WORKING_URL),
-        80.0,
+        Some(80.0),
         "Success",
     )
     .await;

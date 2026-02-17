@@ -19,7 +19,7 @@ async fn test_history_returns_latest_per_day() {
         TEST_PROVIDER_1_DB,
         None,
         Some(TEST_WORKING_URL),
-        75.0,
+        Some(75.0),
         "Success",
         yesterday - Duration::hours(2),
         Some(true),
@@ -31,7 +31,7 @@ async fn test_history_returns_latest_per_day() {
         TEST_PROVIDER_1_DB,
         None,
         Some(TEST_WORKING_URL),
-        85.5,
+        Some(85.5),
         "Success",
         yesterday,
         Some(true),
@@ -66,7 +66,7 @@ async fn test_history_date_range_filtering() {
         TEST_PROVIDER_1_DB,
         None,
         Some(TEST_WORKING_URL),
-        80.0,
+        Some(80.0),
         "Success",
         now - Duration::days(5),
         Some(true),
@@ -80,7 +80,7 @@ async fn test_history_date_range_filtering() {
         TEST_PROVIDER_1_DB,
         None,
         Some(TEST_WORKING_URL),
-        90.0,
+        Some(90.0),
         "Success",
         now - Duration::days(2),
         Some(true),
@@ -117,7 +117,7 @@ async fn test_history_extended_fields() {
         TEST_PROVIDER_1_DB,
         None,
         Some(TEST_WORKING_URL),
-        85.5,
+        Some(85.5),
         "Success",
         now - Duration::days(1),
         Some(true),
@@ -159,7 +159,7 @@ async fn test_history_minimal_omits_extended() {
         TEST_PROVIDER_1_DB,
         None,
         Some(TEST_WORKING_URL),
-        85.5,
+        Some(85.5),
         "Success",
         now - Duration::days(1),
         Some(true),
@@ -177,9 +177,11 @@ async fn test_history_minimal_omits_extended() {
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: serde_json::Value = response.json();
 
-    // Minimal should NOT have extended fields
-    assert!(body["data"][0].get("is_consistent").is_none());
-    assert!(body["data"][0].get("working_url").is_none());
+    // Minimal: test-result fields present as null (always serialized)
+    assert!(body["data"][0]["is_consistent"].is_null());
+    assert!(body["data"][0]["working_url"].is_null());
+
+    // Extended-only fields still absent (skip_serializing_if)
     assert!(body["data"][0].get("tested_at").is_none());
 
     // Should have minimal fields
@@ -268,7 +270,7 @@ async fn test_history_provider_client() {
         TEST_PROVIDER_1_DB,
         Some(TEST_CLIENT_ID_DB),
         Some(TEST_WORKING_URL),
-        92.0,
+        Some(92.0),
         "Success",
         now - Duration::days(1),
         Some(true),

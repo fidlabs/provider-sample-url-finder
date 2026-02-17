@@ -24,7 +24,7 @@ pub struct UrlResult {
     pub client_id: Option<ClientId>,
     pub result_type: DiscoveryType,
     pub working_url: Option<String>,
-    pub retrievability_percent: f64,
+    pub retrievability_percent: Option<f64>,
     pub result_code: ResultCode,
     pub error_code: Option<ErrorCode>,
     pub tested_at: DateTime<Utc>,
@@ -32,6 +32,8 @@ pub struct UrlResult {
     pub is_reliable: Option<bool>,
     pub url_metadata: Option<serde_json::Value>,
     pub sector_utilization_percent: Option<f64>,
+    pub car_files_percent: Option<f64>,
+    pub large_files_percent: Option<f64>,
 }
 
 impl From<UrlDiscoveryResult> for UrlResult {
@@ -46,10 +48,12 @@ impl From<UrlDiscoveryResult> for UrlResult {
             result_code: result.result_code,
             error_code: result.error_code,
             tested_at: result.tested_at,
-            is_consistent: Some(result.is_consistent),
-            is_reliable: Some(result.is_reliable),
+            is_consistent: result.is_consistent,
+            is_reliable: result.is_reliable,
             url_metadata: result.url_metadata,
             sector_utilization_percent: result.sector_utilization_percent,
+            car_files_percent: result.car_files_percent,
+            large_files_percent: result.large_files_percent,
         }
     }
 }
@@ -57,7 +61,7 @@ impl From<UrlDiscoveryResult> for UrlResult {
 #[derive(Debug, sqlx::FromRow)]
 pub struct HistoryRow {
     pub date: NaiveDate,
-    pub retrievability_percent: f64,
+    pub retrievability_percent: Option<f64>,
     pub sector_utilization_percent: Option<f64>,
     pub is_consistent: Option<bool>,
     pub is_reliable: Option<bool>,
@@ -66,6 +70,8 @@ pub struct HistoryRow {
     pub error_code: Option<ErrorCode>,
     pub tested_at: DateTime<Utc>,
     pub url_metadata: Option<serde_json::Value>,
+    pub car_files_percent: Option<f64>,
+    pub large_files_percent: Option<f64>,
 }
 
 #[derive(Clone)]
@@ -90,14 +96,16 @@ impl UrlResultRepository {
                     client_id AS "client_id: ClientId",
                     result_type AS "result_type: DiscoveryType",
                     working_url,
-                    retrievability_percent::float8 AS "retrievability_percent!",
+                    retrievability_percent::float8 AS "retrievability_percent",
                     result_code AS "result_code: ResultCode",
                     error_code AS "error_code: ErrorCode",
                     tested_at,
                     is_consistent,
                     is_reliable,
                     url_metadata,
-                    sector_utilization_percent::float8 AS "sector_utilization_percent"
+                    sector_utilization_percent::float8 AS "sector_utilization_percent",
+                    car_files_percent::float8 AS "car_files_percent",
+                    large_files_percent::float8 AS "large_files_percent"
                FROM
                     url_results
                WHERE
@@ -128,14 +136,16 @@ impl UrlResultRepository {
                     client_id AS "client_id: ClientId",
                     result_type AS "result_type: DiscoveryType",
                     working_url,
-                    retrievability_percent::float8 AS "retrievability_percent!",
+                    retrievability_percent::float8 AS "retrievability_percent",
                     result_code AS "result_code: ResultCode",
                     error_code AS "error_code: ErrorCode",
                     tested_at,
                     is_consistent,
                     is_reliable,
                     url_metadata,
-                    sector_utilization_percent::float8 AS "sector_utilization_percent"
+                    sector_utilization_percent::float8 AS "sector_utilization_percent",
+                    car_files_percent::float8 AS "car_files_percent",
+                    large_files_percent::float8 AS "large_files_percent"
                FROM
                     url_results
                WHERE
@@ -167,14 +177,16 @@ impl UrlResultRepository {
                     client_id AS "client_id: ClientId",
                     result_type AS "result_type: DiscoveryType",
                     working_url,
-                    retrievability_percent::float8 AS "retrievability_percent!",
+                    retrievability_percent::float8 AS "retrievability_percent",
                     result_code AS "result_code: ResultCode",
                     error_code AS "error_code: ErrorCode",
                     tested_at,
                     is_consistent,
                     is_reliable,
                     url_metadata,
-                    sector_utilization_percent::float8 AS "sector_utilization_percent"
+                    sector_utilization_percent::float8 AS "sector_utilization_percent",
+                    car_files_percent::float8 AS "car_files_percent",
+                    large_files_percent::float8 AS "large_files_percent"
                FROM
                     url_results
                WHERE
@@ -206,14 +218,16 @@ impl UrlResultRepository {
                     ur.client_id AS "client_id: ClientId",
                     ur.result_type AS "result_type: DiscoveryType",
                     ur.working_url,
-                    ur.retrievability_percent::float8 AS "retrievability_percent!",
+                    ur.retrievability_percent::float8 AS "retrievability_percent",
                     ur.result_code AS "result_code: ResultCode",
                     ur.error_code AS "error_code: ErrorCode",
                     ur.tested_at,
                     ur.is_consistent,
                     ur.is_reliable,
                     ur.url_metadata,
-                    ur.sector_utilization_percent::float8 AS "sector_utilization_percent"
+                    ur.sector_utilization_percent::float8 AS "sector_utilization_percent",
+                    ur.car_files_percent::float8 AS "car_files_percent",
+                    ur.large_files_percent::float8 AS "large_files_percent"
                FROM
                     url_results ur
                JOIN
@@ -277,14 +291,16 @@ impl UrlResultRepository {
                     client_id AS "client_id: ClientId",
                     result_type AS "result_type: DiscoveryType",
                     working_url,
-                    retrievability_percent::float8 AS "retrievability_percent!",
+                    retrievability_percent::float8 AS "retrievability_percent",
                     result_code AS "result_code: ResultCode",
                     error_code AS "error_code: ErrorCode",
                     tested_at,
                     is_consistent,
                     is_reliable,
                     url_metadata,
-                    sector_utilization_percent::float8 AS "sector_utilization_percent"
+                    sector_utilization_percent::float8 AS "sector_utilization_percent",
+                    car_files_percent::float8 AS "car_files_percent",
+                    large_files_percent::float8 AS "large_files_percent"
                FROM
                     url_results
                WHERE
@@ -313,7 +329,7 @@ impl UrlResultRepository {
         let mut client_ids: Vec<Option<String>> = Vec::with_capacity(len);
         let mut result_types: Vec<DiscoveryType> = Vec::with_capacity(len);
         let mut working_urls: Vec<Option<String>> = Vec::with_capacity(len);
-        let mut retrievability_percents: Vec<f64> = Vec::with_capacity(len);
+        let mut retrievability_percents: Vec<Option<f64>> = Vec::with_capacity(len);
         let mut result_codes: Vec<ResultCode> = Vec::with_capacity(len);
         let mut error_codes: Vec<Option<ErrorCode>> = Vec::with_capacity(len);
         let mut tested_ats: Vec<DateTime<Utc>> = Vec::with_capacity(len);
@@ -321,6 +337,8 @@ impl UrlResultRepository {
         let mut is_reliables: Vec<Option<bool>> = Vec::with_capacity(len);
         let mut url_metadatas: Vec<Option<serde_json::Value>> = Vec::with_capacity(len);
         let mut sector_utilization_percents: Vec<Option<f64>> = Vec::with_capacity(len);
+        let mut car_files_percents: Vec<Option<f64>> = Vec::with_capacity(len);
+        let mut large_files_percents: Vec<Option<f64>> = Vec::with_capacity(len);
 
         for result in results {
             ids.push(result.id);
@@ -336,13 +354,15 @@ impl UrlResultRepository {
             is_reliables.push(result.is_reliable);
             url_metadatas.push(result.url_metadata.clone());
             sector_utilization_percents.push(result.sector_utilization_percent);
+            car_files_percents.push(result.car_files_percent);
+            large_files_percents.push(result.large_files_percent);
         }
 
         let result = sqlx::query!(
             r#"INSERT INTO
-                    url_results (id, provider_id, client_id, result_type, working_url, retrievability_percent, result_code, error_code, tested_at, is_consistent, is_reliable, url_metadata, sector_utilization_percent)
+                    url_results (id, provider_id, client_id, result_type, working_url, retrievability_percent, result_code, error_code, tested_at, is_consistent, is_reliable, url_metadata, sector_utilization_percent, car_files_percent, large_files_percent)
                SELECT
-                    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13
+                    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15
                FROM UNNEST(
                     $1::uuid[],
                     $2::text[],
@@ -356,22 +376,26 @@ impl UrlResultRepository {
                     $10::bool[],
                     $11::bool[],
                     $12::jsonb[],
-                    $13::double precision[]
-               ) AS t(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13)
+                    $13::double precision[],
+                    $14::double precision[],
+                    $15::double precision[]
+               ) AS t(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15)
             "#,
             &ids as &[Uuid],
             &provider_ids as &[String],
             &client_ids as &[Option<String>],
             &result_types as &[DiscoveryType],
             &working_urls as &[Option<String>],
-            &retrievability_percents as &[f64],
+            &retrievability_percents as &[Option<f64>],
             &result_codes as &[ResultCode],
             &error_codes as &[Option<ErrorCode>],
             &tested_ats as &[DateTime<Utc>],
             &is_consistents as &[Option<bool>],
             &is_reliables as &[Option<bool>],
             &url_metadatas as &[Option<serde_json::Value>],
-            &sector_utilization_percents as &[Option<f64>]
+            &sector_utilization_percents as &[Option<f64>],
+            &car_files_percents as &[Option<f64>],
+            &large_files_percents as &[Option<f64>]
         )
         .execute(&self.pool)
         .await?;
@@ -389,7 +413,7 @@ impl UrlResultRepository {
             HistoryRow,
             r#"SELECT DISTINCT ON (DATE(tested_at))
                     DATE(tested_at) AS "date!",
-                    retrievability_percent::float8 AS "retrievability_percent!",
+                    retrievability_percent::float8 AS "retrievability_percent",
                     sector_utilization_percent::float8 AS "sector_utilization_percent",
                     is_consistent,
                     is_reliable,
@@ -397,7 +421,9 @@ impl UrlResultRepository {
                     result_code AS "result_code: ResultCode",
                     error_code AS "error_code: ErrorCode",
                     tested_at,
-                    url_metadata
+                    url_metadata,
+                    car_files_percent::float8 AS "car_files_percent",
+                    large_files_percent::float8 AS "large_files_percent"
                FROM
                     url_results
                WHERE
@@ -430,7 +456,7 @@ impl UrlResultRepository {
             HistoryRow,
             r#"SELECT DISTINCT ON (DATE(combined.tested_at))
                     DATE(combined.tested_at) AS "date!",
-                    combined.retrievability_percent::float8 AS "retrievability_percent!",
+                    combined.retrievability_percent::float8 AS "retrievability_percent",
                     combined.sector_utilization_percent::float8 AS "sector_utilization_percent",
                     combined.is_consistent,
                     combined.is_reliable,
@@ -438,7 +464,9 @@ impl UrlResultRepository {
                     combined.result_code AS "result_code!: ResultCode",
                     combined.error_code AS "error_code: ErrorCode",
                     combined.tested_at AS "tested_at!",
-                    combined.url_metadata
+                    combined.url_metadata,
+                    combined.car_files_percent::float8 AS "car_files_percent",
+                    combined.large_files_percent::float8 AS "large_files_percent"
                FROM (
                     SELECT *, 1 AS priority
                     FROM url_results

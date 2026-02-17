@@ -44,7 +44,7 @@ async fn test_find_retri_sp_client_not_indexed() {
         response,
         json!({
             "result": "Error",
-            "retrievability_percent": 0.0
+            "retrievability_percent": null
         }),
     );
     assert_message_contains(&body, "not been indexed");
@@ -73,7 +73,7 @@ async fn test_find_retri_sp_client_no_deals() {
         response,
         json!({
             "result": "NoDealsFound",
-            "retrievability_percent": 0.0
+            "retrievability_percent": null
         }),
     );
 }

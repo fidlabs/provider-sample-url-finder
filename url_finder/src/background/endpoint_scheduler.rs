@@ -198,7 +198,7 @@ async fn record_failure(
         client_id: None,
         result_type: DiscoveryType::Provider,
         working_url: None,
-        retrievability_percent: 0.0,
+        retrievability_percent: None,
         result_code: result_code.clone(),
         error_code,
         tested_at: Utc::now(),
@@ -206,6 +206,8 @@ async fn record_failure(
         is_reliable: None,
         url_metadata: None,
         sector_utilization_percent: None,
+        car_files_percent: None,
+        large_files_percent: None,
     };
 
     url_repo.insert_batch(&[url_result]).await?;

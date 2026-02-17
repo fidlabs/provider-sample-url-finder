@@ -74,7 +74,8 @@ async fn test_url_discovery_success() {
     assert!(url.contains(piece_cid), "URL should contain piece CID");
 
     assert_eq!(
-        result.retrievability_percent, 100.0,
+        result.retrievability_percent,
+        Some(100.0),
         "Should have 100% retrievability"
     );
 }
@@ -125,7 +126,8 @@ async fn test_url_discovery_partial_retrievability() {
     );
 
     assert_eq!(
-        result.retrievability_percent, 50.0,
+        result.retrievability_percent,
+        Some(50.0),
         "Should have 50% retrievability (1 of 2 pieces)"
     );
 }

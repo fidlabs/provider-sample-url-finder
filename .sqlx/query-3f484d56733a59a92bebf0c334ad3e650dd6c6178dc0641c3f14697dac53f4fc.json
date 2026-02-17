@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT DISTINCT ON (DATE(combined.tested_at))\n                    DATE(combined.tested_at) AS \"date!\",\n                    combined.retrievability_percent::float8 AS \"retrievability_percent!\",\n                    combined.sector_utilization_percent::float8 AS \"sector_utilization_percent\",\n                    combined.is_consistent,\n                    combined.is_reliable,\n                    combined.working_url,\n                    combined.result_code AS \"result_code!: ResultCode\",\n                    combined.error_code AS \"error_code: ErrorCode\",\n                    combined.tested_at AS \"tested_at!\",\n                    combined.url_metadata\n               FROM (\n                    SELECT *, 1 AS priority\n                    FROM url_results\n                    WHERE provider_id = $1\n                      AND client_id = $2\n                      AND result_type = 'ProviderClient'\n                      AND tested_at >= $3::date\n                      AND tested_at < ($4::date + INTERVAL '1 day')\n                    UNION ALL\n                    SELECT *, 2 AS priority\n                    FROM url_results\n                    WHERE provider_id = $1\n                      AND result_type = 'Provider'\n                      AND working_url IS NULL\n                      AND tested_at >= $3::date\n                      AND tested_at < ($4::date + INTERVAL '1 day')\n               ) combined\n               ORDER BY\n                    DATE(combined.tested_at),\n                    combined.tested_at DESC,\n                    combined.priority ASC\n            ",
+  "query": "SELECT DISTINCT ON (DATE(tested_at))\n                    DATE(tested_at) AS \"date!\",\n                    retrievability_percent::float8 AS \"retrievability_percent\",\n                    sector_utilization_percent::float8 AS \"sector_utilization_percent\",\n                    is_consistent,\n                    is_reliable,\n                    working_url,\n                    result_code AS \"result_code: ResultCode\",\n                    error_code AS \"error_code: ErrorCode\",\n                    tested_at,\n                    url_metadata,\n                    car_files_percent::float8 AS \"car_files_percent\",\n                    large_files_percent::float8 AS \"large_files_percent\"\n               FROM\n                    url_results\n               WHERE\n                    provider_id = $1\n                    AND result_type = 'Provider'\n                    AND tested_at >= $2::date\n                    AND tested_at < ($3::date + INTERVAL '1 day')\n               ORDER BY\n                    DATE(tested_at),\n                    tested_at DESC\n            ",
   "describe": {
     "columns": [
       {
@@ -10,7 +10,7 @@
       },
       {
         "ordinal": 1,
-        "name": "retrievability_percent!",
+        "name": "retrievability_percent",
         "type_info": "Float8"
       },
       {
@@ -35,7 +35,7 @@
       },
       {
         "ordinal": 6,
-        "name": "result_code!: ResultCode",
+        "name": "result_code: ResultCode",
         "type_info": {
           "Custom": {
             "name": "result_code",
@@ -76,18 +76,27 @@
       },
       {
         "ordinal": 8,
-        "name": "tested_at!",
+        "name": "tested_at",
         "type_info": "Timestamptz"
       },
       {
         "ordinal": 9,
         "name": "url_metadata",
         "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 10,
+        "name": "car_files_percent",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 11,
+        "name": "large_files_percent",
+        "type_info": "Float8"
       }
     ],
     "parameters": {
       "Left": [
-        "Text",
         "Text",
         "Date",
         "Date"
@@ -97,14 +106,16 @@
       null,
       null,
       null,
-      null,
-      null,
-      null,
-      null,
-      null,
+      true,
+      true,
+      true,
+      false,
+      true,
+      false,
+      true,
       null,
       null
     ]
   },
-  "hash": "cd17dec550aebff3602253722a274f03c2a7cf121b56cf714b860c0dddd9664f"
+  "hash": "3f484d56733a59a92bebf0c334ad3e650dd6c6178dc0641c3f14697dac53f4fc"
 }
