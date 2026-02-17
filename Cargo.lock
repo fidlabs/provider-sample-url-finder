@@ -5846,7 +5846,7 @@ dependencies = [
 
 [[package]]
 name = "url_finder"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "alloy",
  "assert-json-diff",
