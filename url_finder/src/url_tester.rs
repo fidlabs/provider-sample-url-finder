@@ -56,10 +56,15 @@ impl TapResult {
             Err(e) => return TapResult::Failed { error: e },
         };
 
+        if response.body_sample.is_none() {
+            return TapResult::Failed {
+                error: UrlTestError::EmptyBody,
+            };
+        }
+
         let content_length = response.content_length.unwrap_or(0);
         let response_time_ms = response.response_time_ms;
 
-        // Parse CAR header from body sample
         let car_header = response
             .body_sample
             .as_ref()
@@ -729,7 +734,8 @@ mod tests {
             .respond_with(
                 ResponseTemplate::new(206)
                     .insert_header("Content-Range", "bytes 0-4095/19327352832")
-                    .insert_header("Content-Length", "4096"),
+                    .insert_header("Content-Length", "4096")
+                    .set_body_raw(vec![0u8; 4096], "application/octet-stream"),
             )
             .mount(&mock_server)
             .await;
@@ -756,7 +762,8 @@ mod tests {
             .and(header("Range", "bytes=0-4095"))
             .respond_with(
                 ResponseTemplate::new(206)
-                    .insert_header("Content-Range", "bytes 0-4095/16000000000"),
+                    .insert_header("Content-Range", "bytes 0-4095/16000000000")
+                    .set_body_raw(vec![0u8; 4096], "application/octet-stream"),
             )
             .expect(2)
             .mount(&mock_server)
@@ -787,7 +794,9 @@ mod tests {
         Mock::given(method("GET"))
             .and(header("Range", "bytes=0-4095"))
             .respond_with(
-                ResponseTemplate::new(206).insert_header("Content-Range", "bytes 0-252/252"),
+                ResponseTemplate::new(206)
+                    .insert_header("Content-Range", "bytes 0-252/252")
+                    .set_body_raw(vec![0u8; 252], "application/octet-stream"),
             )
             .up_to_n_times(1)
             .mount(&mock_server)
@@ -798,7 +807,8 @@ mod tests {
             .and(header("Range", "bytes=0-4095"))
             .respond_with(
                 ResponseTemplate::new(206)
-                    .insert_header("Content-Range", "bytes 0-4095/16000000000"),
+                    .insert_header("Content-Range", "bytes 0-4095/16000000000")
+                    .set_body_raw(vec![0u8; 4096], "application/octet-stream"),
             )
             .mount(&mock_server)
             .await;
@@ -837,7 +847,8 @@ mod tests {
             .and(header("Range", "bytes=0-4095"))
             .respond_with(
                 ResponseTemplate::new(206)
-                    .insert_header("Content-Range", "bytes 0-4095/16000000000"),
+                    .insert_header("Content-Range", "bytes 0-4095/16000000000")
+                    .set_body_raw(vec![0u8; 4096], "application/octet-stream"),
             )
             .mount(&mock_server)
             .await;
@@ -866,7 +877,8 @@ mod tests {
             .and(header("Range", "bytes=0-4095"))
             .respond_with(
                 ResponseTemplate::new(206)
-                    .insert_header("Content-Range", "bytes 0-4095/16000000000"),
+                    .insert_header("Content-Range", "bytes 0-4095/16000000000")
+                    .set_body_raw(vec![0u8; 4096], "application/octet-stream"),
             )
             .up_to_n_times(1)
             .mount(&mock_server)
@@ -902,7 +914,9 @@ mod tests {
         Mock::given(method("GET"))
             .and(header("Range", "bytes=0-4095"))
             .respond_with(
-                ResponseTemplate::new(206).insert_header("Content-Range", "bytes 0-500/500"),
+                ResponseTemplate::new(206)
+                    .insert_header("Content-Range", "bytes 0-500/500")
+                    .set_body_raw(vec![0u8; 500], "application/octet-stream"),
             )
             .expect(2)
             .mount(&mock_server)
@@ -959,7 +973,8 @@ mod tests {
             .and(header("Range", "bytes=0-4095"))
             .respond_with(
                 ResponseTemplate::new(206)
-                    .insert_header("Content-Range", "bytes 0-4095/16000000000"),
+                    .insert_header("Content-Range", "bytes 0-4095/16000000000")
+                    .set_body_raw(vec![0u8; 4096], "application/octet-stream"),
             )
             .mount(&mock_server)
             .await;
@@ -993,7 +1008,8 @@ mod tests {
             .and(header("Range", "bytes=0-4095"))
             .respond_with(
                 ResponseTemplate::new(206)
-                    .insert_header("Content-Range", "bytes 0-4095/16000000000"),
+                    .insert_header("Content-Range", "bytes 0-4095/16000000000")
+                    .set_body_raw(vec![0u8; 4096], "application/octet-stream"),
             )
             .up_to_n_times(1)
             .mount(&mock_server)
@@ -1002,7 +1018,9 @@ mod tests {
         Mock::given(method("GET"))
             .and(header("Range", "bytes=0-4095"))
             .respond_with(
-                ResponseTemplate::new(206).insert_header("Content-Range", "bytes 0-500/500"),
+                ResponseTemplate::new(206)
+                    .insert_header("Content-Range", "bytes 0-500/500")
+                    .set_body_raw(vec![0u8; 500], "application/octet-stream"),
             )
             .mount(&mock_server)
             .await;
@@ -1032,7 +1050,9 @@ mod tests {
         Mock::given(method("GET"))
             .and(header("Range", "bytes=0-4095"))
             .respond_with(
-                ResponseTemplate::new(206).insert_header("Content-Range", "bytes 0-500/500"),
+                ResponseTemplate::new(206)
+                    .insert_header("Content-Range", "bytes 0-500/500")
+                    .set_body_raw(vec![0u8; 500], "application/octet-stream"),
             )
             .up_to_n_times(1)
             .mount(&mock_server)
@@ -1042,7 +1062,8 @@ mod tests {
             .and(header("Range", "bytes=0-4095"))
             .respond_with(
                 ResponseTemplate::new(206)
-                    .insert_header("Content-Range", "bytes 0-4095/16000000000"),
+                    .insert_header("Content-Range", "bytes 0-4095/16000000000")
+                    .set_body_raw(vec![0u8; 4096], "application/octet-stream"),
             )
             .mount(&mock_server)
             .await;
@@ -1072,7 +1093,9 @@ mod tests {
         Mock::given(method("GET"))
             .and(header("Range", "bytes=0-4095"))
             .respond_with(
-                ResponseTemplate::new(206).insert_header("Content-Range", "bytes 0-500/500"),
+                ResponseTemplate::new(206)
+                    .insert_header("Content-Range", "bytes 0-500/500")
+                    .set_body_raw(vec![0u8; 500], "application/octet-stream"),
             )
             .expect(2)
             .mount(&mock_server)
@@ -1104,7 +1127,8 @@ mod tests {
             .and(header("Range", "bytes=0-4095"))
             .respond_with(
                 ResponseTemplate::new(206)
-                    .insert_header("Content-Range", "bytes 0-4095/16000000000"),
+                    .insert_header("Content-Range", "bytes 0-4095/16000000000")
+                    .set_body_raw(vec![0u8; 4096], "application/octet-stream"),
             )
             .up_to_n_times(1)
             .mount(&mock_server)
@@ -1115,7 +1139,8 @@ mod tests {
             .and(header("Range", "bytes=0-4095"))
             .respond_with(
                 ResponseTemplate::new(206)
-                    .insert_header("Content-Range", "bytes 0-4095/20000000000"),
+                    .insert_header("Content-Range", "bytes 0-4095/20000000000")
+                    .set_body_raw(vec![0u8; 4096], "application/octet-stream"),
             )
             .mount(&mock_server)
             .await;
@@ -1144,7 +1169,8 @@ mod tests {
             .and(header("Range", "bytes=0-4095"))
             .respond_with(
                 ResponseTemplate::new(206)
-                    .insert_header("Content-Range", "bytes 0-4095/16000000000"),
+                    .insert_header("Content-Range", "bytes 0-4095/16000000000")
+                    .set_body_raw(vec![0u8; 4096], "application/octet-stream"),
             )
             .expect(2)
             .mount(&mock_server)
@@ -1159,6 +1185,61 @@ mod tests {
 
         assert!(result.consistent);
         assert_eq!(result.inconsistency_type, None);
+    }
+
+    /// Phantom SP: server claims 18GB Content-Length but delivers 0 bytes.
+    /// TapResult must be Failed, not Valid.
+    #[test]
+    fn test_empty_body_with_large_content_length_is_failed() {
+        let response = RangeResponse {
+            content_length: Some(19_355_749_767),
+            response_time_ms: 750,
+            body_sample: None, // server sent 0 bytes
+        };
+
+        let tap = TapResult::from_range_result(Ok(response));
+
+        assert!(
+            matches!(tap, TapResult::Failed { .. }),
+            "Empty body must be Failed, got: {:?}",
+            tap
+        );
+    }
+
+    /// Double-tap where both taps have empty bodies should not be successful
+    #[test]
+    fn test_double_tap_both_empty_body_is_not_successful() {
+        let tap1 = TapResult::from_range_result(Ok(RangeResponse {
+            content_length: Some(19_355_749_767),
+            response_time_ms: 750,
+            body_sample: None,
+        }));
+        let tap2 = TapResult::from_range_result(Ok(RangeResponse {
+            content_length: Some(19_355_749_767),
+            response_time_ms: 800,
+            body_sample: None,
+        }));
+
+        assert!(!tap1.is_valid());
+        assert!(!tap2.is_valid());
+    }
+
+    /// Valid response WITH body bytes should still be classified as Valid
+    #[test]
+    fn test_response_with_body_and_large_content_length_is_valid() {
+        let response = RangeResponse {
+            content_length: Some(16_000_000_000),
+            response_time_ms: 100,
+            body_sample: Some(vec![0xCA; 4096]),
+        };
+
+        let tap = TapResult::from_range_result(Ok(response));
+
+        assert!(
+            matches!(tap, TapResult::Valid { .. }),
+            "Response with body should be Valid, got: {:?}",
+            tap
+        );
     }
 
     #[tokio::test]

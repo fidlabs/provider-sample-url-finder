@@ -463,6 +463,7 @@ pub enum UrlTestError {
     DnsFailure,
     TlsError,
     HttpError(u16),
+    EmptyBody,
     Other(String),
 }
 
@@ -475,6 +476,7 @@ impl std::fmt::Display for UrlTestError {
             Self::DnsFailure => write!(f, "dns_failure"),
             Self::TlsError => write!(f, "tls_error"),
             Self::HttpError(code) => write!(f, "http_{code}"),
+            Self::EmptyBody => write!(f, "empty_body"),
             Self::Other(msg) => write!(f, "other: {msg}"),
         }
     }
