@@ -22,4 +22,6 @@ pub use find_retri_sp_client::*;
 mod responses;
 pub use responses::*;
 
+pub mod deals;
+pub use deals::*;
 pub mod providers;

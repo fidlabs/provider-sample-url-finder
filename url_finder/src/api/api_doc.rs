@@ -1,6 +1,7 @@
 use crate::api_response::ErrorResponse;
 use utoipa::OpenApi;
 
+use crate::api::deals::*;
 use crate::api::providers::*;
 use crate::api::*;
 
@@ -51,6 +52,10 @@ The `/url/*` endpoints remain fully backward compatible.
         handle_reset_provider,
         handle_history_retrievability,
         handle_history_retrievability_client,
+        // Deal measurement shell API
+        handle_upsert_deal,
+        handle_get_deal,
+        handle_get_latest,
     ),
     components(
         schemas(
@@ -96,6 +101,16 @@ The `/url/*` endpoints remain fully backward compatible.
             DiagnosticsResponse,
             ScheduleStateResponse,
             SchedulingResponse,
+            // Deal measurement shell API
+            DealPath,
+            DealVersion,
+            MeasurementState,
+            DealSliRequirements,
+            DealPieceTarget,
+            DealTargetUpsertRequest,
+            DealTargetResponse,
+            DealPerformanceResponse,
+            DealLatestMeasurementResponse,
 
             // Misc
             HealthcheckResponse,
@@ -108,6 +123,7 @@ The `/url/*` endpoints remain fully backward compatible.
     tags(
         (name = "Providers", description = "New Providers API - pre-computed data with performance metrics"),
         (name = "Clients", description = "Client endpoints - providers for a specific client"),
+        (name = "Deals", description = "PoRep V2 deal measurement API contract"),
         (name = "URL", description = "Legacy URL Finder APIs"),
         (name = "Healthcheck", description = "Health check endpoints"),
     )
