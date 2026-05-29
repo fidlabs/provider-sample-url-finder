@@ -4,6 +4,7 @@ pub use std::sync::Arc;
 
 pub mod api;
 pub mod api_response;
+pub mod auth;
 pub mod background;
 pub mod bms_client;
 pub mod car_header;

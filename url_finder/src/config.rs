@@ -17,6 +17,8 @@ pub const MIN_VALID_CONTENT_LENGTH: u64 = 8 * 1024 * 1024 * 1024; // 8GB
 // History endpoint settings
 pub const MAX_HISTORY_DAYS: i64 = 30;
 
+const DEFAULT_AUTH_TOKEN: &str = "mysecrettokenthatdefinatelyisnotongithubpublicrepo";
+
 fn parse_positive_i64_or_default(env_var: &str, default: i64) -> i64 {
     assert!(default > 0, "default must be positive");
     match env::var(env_var) {
@@ -35,6 +37,22 @@ fn parse_positive_i64_or_default(env_var: &str, default: i64) -> i64 {
     }
 }
 
+fn require_non_empty_env_value(env_var: &str, value: String) -> String {
+    assert!(!value.trim().is_empty(), "{env_var} must not be empty");
+    value
+}
+
+fn auth_token_or_default(value: Option<String>) -> String {
+    match value {
+        Some(value) => require_non_empty_env_value("AUTH_TOKEN", value),
+        None => DEFAULT_AUTH_TOKEN.to_string(),
+    }
+}
+
+fn read_auth_token() -> String {
+    auth_token_or_default(env::var("AUTH_TOKEN").ok())
+}
+
 #[derive(Debug, Clone)]
 pub struct Config {
     pub db_url: String,
@@ -48,6 +66,7 @@ pub struct Config {
     pub proxy_ip_count: Option<u32>,
     pub proxy_default_port: Option<u32>,
     pub bms_url: String,
+    pub auth_token: String,
     pub bms_default_worker_count: i64,
     pub bms_test_interval_days: i64,
     pub max_concurrent_providers: usize,
@@ -80,6 +99,7 @@ impl Config {
                 .and_then(|s| s.parse().ok()),
             proxy_ip_count: env::var("PROXY_IP_COUNT").ok().and_then(|s| s.parse().ok()),
             bms_url: env::var("BMS_URL").expect("BMS_URL must be set"),
+            auth_token: read_auth_token(),
             bms_default_worker_count: parse_positive_i64_or_default("BMS_WORKER_COUNT", 10),
             bms_test_interval_days: parse_positive_i64_or_default("BMS_TEST_INTERVAL_DAYS", 7),
             max_concurrent_providers: env::var("MAX_CONCURRENT_PROVIDERS")
@@ -104,9 +124,48 @@ impl Config {
             proxy_ip_count: None,
             proxy_default_port: None,
             bms_url: "http://localhost:8080".to_string(),
+            auth_token: "test-token".to_string(),
             bms_default_worker_count: 10,
             bms_test_interval_days: 7,
             max_concurrent_providers: 10,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{DEFAULT_AUTH_TOKEN, auth_token_or_default, require_non_empty_env_value};
+
+    #[test]
+    fn accepts_non_empty_env_value() {
+        assert_eq!(
+            require_non_empty_env_value("AUTH_TOKEN", "test-token".to_string()),
+            "test-token"
+        );
+    }
+
+    #[test]
+    fn auth_token_uses_default_when_env_is_missing() {
+        assert_eq!(auth_token_or_default(None), DEFAULT_AUTH_TOKEN);
+    }
+
+    #[test]
+    fn auth_token_uses_non_empty_env_value() {
+        assert_eq!(
+            auth_token_or_default(Some("configured-token".to_string())),
+            "configured-token"
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "AUTH_TOKEN must not be empty")]
+    fn rejects_empty_env_value() {
+        auth_token_or_default(Some("".to_string()));
+    }
+
+    #[test]
+    #[should_panic(expected = "AUTH_TOKEN must not be empty")]
+    fn rejects_whitespace_env_value() {
+        auth_token_or_default(Some("   ".to_string()));
     }
 }
