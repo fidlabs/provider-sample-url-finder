@@ -76,6 +76,33 @@ pub async fn seed_provider(app_pool: &PgPool, provider_id: &str) {
     .expect("Failed to insert provider");
 }
 
+pub async fn seed_provider_with_cached_endpoints(
+    app_pool: &PgPool,
+    provider_id: &str,
+    cached_http_endpoints: &[String],
+) {
+    sqlx::query(
+        r#"INSERT INTO
+                storage_providers (
+                    provider_id,
+                    peer_id,
+                    cached_http_endpoints,
+                    endpoints_fetched_at
+                )
+           VALUES
+                ($1, 'test-peer-id', $2, NOW())
+           ON CONFLICT (provider_id) DO UPDATE SET
+                peer_id = EXCLUDED.peer_id,
+                cached_http_endpoints = EXCLUDED.cached_http_endpoints,
+                endpoints_fetched_at = EXCLUDED.endpoints_fetched_at"#,
+    )
+    .bind(provider_id)
+    .bind(cached_http_endpoints)
+    .execute(app_pool)
+    .await
+    .expect("Failed to insert provider with cached endpoints");
+}
+
 pub async fn seed_deals(
     app_pool: &PgPool,
     provider_id: &str,
