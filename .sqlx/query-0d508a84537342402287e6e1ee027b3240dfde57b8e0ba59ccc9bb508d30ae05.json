@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                    EXISTS (\n                        SELECT\n                            1\n                        FROM\n                            deal_sli_runs\n                        WHERE\n                            deal_id = $1\n                    ) AS \"exists!\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "exists!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "0d508a84537342402287e6e1ee027b3240dfde57b8e0ba59ccc9bb508d30ae05"
+}

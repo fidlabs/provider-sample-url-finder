@@ -62,8 +62,6 @@ pub struct DealTargetUpsertRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub manifest_location: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub requested_size_bytes: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub requirements: Option<DealSliRequirements>,
     #[serde(default)]
     pub pieces: Vec<DealPieceTarget>,
@@ -77,7 +75,6 @@ pub struct DealTargetResponse {
     pub client: Option<String>,
     pub manifest_hash: Option<String>,
     pub manifest_location: Option<String>,
-    pub requested_size_bytes: Option<String>,
     pub requirements: Option<DealSliRequirements>,
     #[serde(default)]
     pub pieces: Vec<DealPieceTarget>,
@@ -121,7 +118,6 @@ impl DealTargetResponse {
             client: None,
             manifest_hash: None,
             manifest_location: None,
-            requested_size_bytes: None,
             requirements: None,
             pieces: Vec::new(),
             created_at: None,
@@ -137,7 +133,6 @@ impl DealTargetResponse {
             client: request.client,
             manifest_hash: request.manifest_hash,
             manifest_location: request.manifest_location,
-            requested_size_bytes: request.requested_size_bytes,
             requirements: request.requirements,
             pieces: request.pieces,
             created_at: None,
@@ -148,6 +143,10 @@ impl DealTargetResponse {
 
 impl DealLatestMeasurementResponse {
     pub fn missing(deal_id: String) -> Self {
+        Self::missing_with_piece_count(deal_id, 0)
+    }
+
+    pub fn missing_with_piece_count(deal_id: String, piece_count: u32) -> Self {
         Self {
             deal_id,
             measurement_state: MeasurementState::Missing,
@@ -161,7 +160,7 @@ impl DealLatestMeasurementResponse {
             is_reliable: None,
             result_code: None,
             error_code: None,
-            piece_count: 0,
+            piece_count,
             success_count: 0,
             failed_count: 0,
             performance: DealPerformanceResponse::default(),
@@ -183,7 +182,6 @@ mod tests {
             client: Some("f05678".to_string()),
             manifest_hash: Some("bafy-manifest".to_string()),
             manifest_location: Some("https://example.com/manifest.car".to_string()),
-            requested_size_bytes: Some("2048".to_string()),
             requirements: Some(DealSliRequirements {
                 retrievability_bps: 9_500,
                 bandwidth_mbps: Some(200),
@@ -207,7 +205,6 @@ mod tests {
                 "client": "f05678",
                 "manifest_hash": "bafy-manifest",
                 "manifest_location": "https://example.com/manifest.car",
-                "requested_size_bytes": "2048",
                 "requirements": {
                     "retrievability_bps": 9500,
                     "bandwidth_mbps": 200,

@@ -45,6 +45,7 @@ async fn main() -> Result<()> {
 
     let sp_repo = Arc::new(StorageProviderRepository::new(pool.clone()));
     let deal_repo = Arc::new(DealRepository::new(dmob_pool.clone()));
+    let deal_sli_repo = Arc::new(DealSliRepository::new(pool.clone()));
     let url_repo = Arc::new(UrlResultRepository::new(pool.clone()));
     let bms_result_repo = Arc::new(BmsBandwidthResultRepository::new(pool.clone()));
     let bms_client = Arc::new(url_finder::bms_client::BmsClient::new(
@@ -58,12 +59,19 @@ async fn main() -> Result<()> {
             sp_repo.clone(),
         ),
     );
+    let deal_sli_service = Arc::new(url_finder::services::deal_sli_service::DealSliService::new(
+        deal_sli_repo.clone(),
+        sp_repo.clone(),
+        config.clone(),
+    ));
 
     let app_state = Arc::new(AppState {
         deal_repo: deal_repo.clone(),
+        deal_sli_repo: deal_sli_repo.clone(),
         storage_provider_repo: sp_repo.clone(),
         url_repo: url_repo.clone(),
         bms_repo: bms_result_repo.clone(),
+        deal_sli_service,
         provider_service,
         config: config.clone(),
     });

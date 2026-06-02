@@ -1,0 +1,82 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                    deal_id,\n                    deal_version,\n                    provider_id,\n                    client_id,\n                    manifest_hash,\n                    manifest_location,\n                    retrievability_bps,\n                    bandwidth_mbps,\n                    latency_ms,\n                    created_at,\n                    updated_at\n               FROM\n                    deal_sli_targets\n               WHERE\n                    deal_id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "deal_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "deal_version",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "provider_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "client_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "manifest_hash",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "manifest_location",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "retrievability_bps",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 7,
+        "name": "bandwidth_mbps",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 8,
+        "name": "latency_ms",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 9,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 10,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "c203d535cf5f178ea92e18f42e247ba03dad69376afa54bd97cc325b1e781b5f"
+}

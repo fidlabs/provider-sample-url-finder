@@ -66,10 +66,11 @@ The `/url/*` endpoints remain fully backward compatible.
         handle_reset_provider,
         handle_history_retrievability,
         handle_history_retrievability_client,
-        // Deal measurement shell API
+        // Deal SLI API
         handle_upsert_deal,
         handle_get_deal,
         handle_get_latest,
+        handle_create_run,
     ),
     components(
         schemas(
@@ -115,7 +116,7 @@ The `/url/*` endpoints remain fully backward compatible.
             DiagnosticsResponse,
             ScheduleStateResponse,
             SchedulingResponse,
-            // Deal measurement shell API
+            // Deal SLI API
             DealPath,
             DealVersion,
             MeasurementState,

@@ -27,9 +27,11 @@ pub use types::{ErrorCode, ResultCode};
 
 pub struct AppState {
     pub deal_repo: Arc<repository::DealRepository>,
+    pub deal_sli_repo: Arc<repository::DealSliRepository>,
     pub storage_provider_repo: Arc<repository::StorageProviderRepository>,
     pub url_repo: Arc<repository::UrlResultRepository>,
     pub bms_repo: Arc<repository::BmsBandwidthResultRepository>,
+    pub deal_sli_service: Arc<services::deal_sli_service::DealSliService>,
     pub provider_service: Arc<services::provider_service::ProviderService>,
     pub config: Arc<config::Config>,
 }

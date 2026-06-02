@@ -110,6 +110,7 @@ pub fn create_routes() -> Router<Arc<AppState>> {
         .route("/deals/{deal_id}", put(deals::handle_upsert_deal))
         .route("/deals/{deal_id}", get(deals::handle_get_deal))
         .route("/deals/{deal_id}/latest", get(deals::handle_get_latest))
+        .route("/deals/{deal_id}/runs", post(deals::handle_create_run))
         .layer(
             GovernorLayer::new(governor_config.clone())
                 .error_handler(too_many_requests_error_handler),
