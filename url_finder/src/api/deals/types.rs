@@ -13,9 +13,10 @@ pub struct DealPath {
     pub deal_id: String,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, ToSchema, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum DealVersion {
+    #[default]
     V2,
 }
 
@@ -109,12 +110,6 @@ pub struct DealLatestMeasurementResponse {
     pub failed_count: u32,
     #[serde(default)]
     pub performance: DealPerformanceResponse,
-}
-
-impl Default for DealVersion {
-    fn default() -> Self {
-        Self::V2
-    }
 }
 
 impl DealTargetResponse {
