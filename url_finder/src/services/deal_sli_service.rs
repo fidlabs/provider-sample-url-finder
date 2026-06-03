@@ -370,6 +370,16 @@ fn u32_to_i32(value: u32, field: &str) -> std::result::Result<i32, DealSliServic
     })
 }
 
+fn retrievability_bps_to_i32(value: u16) -> std::result::Result<i32, DealSliServiceError> {
+    if value > 10_000 {
+        return Err(DealSliServiceError::InvalidRequest(
+            "retrievability_bps must be less than or equal to 10000".to_string(),
+        ));
+    }
+
+    Ok(i32::from(value))
+}
+
 fn map_upsert_request(
     deal_id: &str,
     request: DealTargetUpsertRequest,
@@ -404,7 +414,7 @@ fn map_upsert_request(
 
     let requirements = match request.requirements {
         Some(requirements) => DealSliRequirementValues {
-            retrievability_bps: Some(i32::from(requirements.retrievability_bps)),
+            retrievability_bps: Some(retrievability_bps_to_i32(requirements.retrievability_bps)?),
             bandwidth_mbps: requirements
                 .bandwidth_mbps
                 .map(|value| u32_to_i32(value, "bandwidth_mbps"))

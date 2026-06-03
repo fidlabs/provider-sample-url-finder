@@ -194,6 +194,29 @@ async fn test_put_deal_with_overflowing_requirement_returns_bad_request() {
 }
 
 #[tokio::test]
+async fn test_put_deal_with_invalid_retrievability_requirement_returns_bad_request() {
+    let ctx = TestContext::new().await;
+    let mut request = deal_request();
+    request["requirements"]["retrievability_bps"] = json!(10_001);
+
+    let response = ctx
+        .app
+        .put("/deals/123")
+        .authorization_bearer("test-token")
+        .json(&request)
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
+    let body: Value = response.json();
+    assert_json_include!(
+        actual: body,
+        expected: json!({
+            "error_code": "INVALID_REQUEST"
+        })
+    );
+}
+
+#[tokio::test]
 async fn test_get_deal_returns_not_found_when_target_missing() {
     let ctx = TestContext::new().await;
 
