@@ -21,7 +21,18 @@ The Random Piece Availability (or RPA) is a microservice designed to test the re
 
 ### Environment Variables
 
-- `DATABASE_URL` - The URL of the DMOB database
+- `DATABASE_URL` - writable RPA application database. Migrations, provider cache,
+  URL results, BMS results, and `deal_sli_*` tables use this database.
+- `DMOB_DATABASE_URL` - read-only DMOB deal source database used for deal lookup.
+  For local fake-DMOB development it may point at the same local Postgres as
+  `DATABASE_URL`. For testing against a host SSH tunnel, run Postgres in Docker
+  and run `cargo run --bin url_finder` on the host so
+  `DMOB_DATABASE_URL=postgres://...@localhost:<tunnel-port>/...` resolves
+  through the tunnel.
+
+The Docker app service is for local fake-DMOB development and points both
+database URLs at the Compose Postgres service. For SSH-tunneled DMOB testing,
+start only Postgres with `make run-db` and run the Rust binary on the host.
 
 ### Result Codes
 

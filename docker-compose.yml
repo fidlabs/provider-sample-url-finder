@@ -36,7 +36,9 @@ services:
     command: cargo watch --poll -x 'run --bin url_finder'
     environment:
       - LOG_LEVEL=debug
-      - DATABASE_URL=${DMOB_DATABASE_URL}
+      - DATABASE_URL=postgres://postgres:pgpassword@postgres:5432/uf
+      - DMOB_DATABASE_URL=postgres://postgres:pgpassword@postgres:5432/uf
+      - BMS_URL=${BMS_URL:-https://bms.allocator.tech}
     volumes:
       - .:/app                                      # bind current directory to /app
       - /dev/null:/app/.env                         # do not use .env file
