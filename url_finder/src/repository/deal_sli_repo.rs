@@ -390,7 +390,8 @@ impl DealSliRepository {
                     AND state = 'completed'
                ORDER BY
                     completed_at DESC NULLS LAST,
-                    started_at DESC
+                    started_at DESC,
+                    id DESC
                LIMIT
                     1
             "#,

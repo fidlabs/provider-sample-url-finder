@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT\n                    deal_id,\n                    measurement_state,\n                    tested_at,\n                    working_url,\n                    retrievability_percent,\n                    large_files_percent,\n                    car_files_percent,\n                    sector_utilization_percent,\n                    is_consistent,\n                    is_reliable,\n                    result_code AS \"result_code: ResultCode\",\n                    error_code AS \"error_code: ErrorCode\",\n                    piece_count,\n                    success_count,\n                    failed_count\n               FROM\n                    deal_sli_runs\n               WHERE\n                    deal_id = $1\n                    AND state = 'completed'\n               ORDER BY\n                    completed_at DESC NULLS LAST,\n                    started_at DESC\n               LIMIT\n                    1\n            ",
+  "query": "SELECT\n                    deal_id,\n                    measurement_state,\n                    tested_at,\n                    working_url,\n                    retrievability_percent,\n                    large_files_percent,\n                    car_files_percent,\n                    sector_utilization_percent,\n                    is_consistent,\n                    is_reliable,\n                    result_code AS \"result_code: ResultCode\",\n                    error_code AS \"error_code: ErrorCode\",\n                    piece_count,\n                    success_count,\n                    failed_count\n               FROM\n                    deal_sli_runs\n               WHERE\n                    deal_id = $1\n                    AND state = 'completed'\n               ORDER BY\n                    completed_at DESC NULLS LAST,\n                    started_at DESC,\n                    id DESC\n               LIMIT\n                    1\n            ",
   "describe": {
     "columns": [
       {
@@ -133,5 +133,5 @@
       false
     ]
   },
-  "hash": "82d41cbe1dee6039e58727b6c05b49af713f009efb4bc0ecb79bbd95a426d1d5"
+  "hash": "62a42d0aba63d19d79a152808746c8655f11c5f1ce2eebc6c1ffbd90d796c97f"
 }

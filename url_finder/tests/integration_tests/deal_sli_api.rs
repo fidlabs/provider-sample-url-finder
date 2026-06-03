@@ -104,6 +104,46 @@ async fn test_put_deal_persists_and_get_deal_returns_stored_target() {
 }
 
 #[tokio::test]
+async fn test_put_deal_accepts_provider_address_and_stores_provider_id() {
+    let ctx = TestContext::new().await;
+    let mut request = deal_request();
+    request["provider_id"] = json!("f01234");
+
+    let put_response = ctx
+        .app
+        .put("/deals/123")
+        .authorization_bearer("test-token")
+        .json(&request)
+        .await;
+
+    assert_eq!(put_response.status_code(), StatusCode::OK);
+    let put_body: Value = put_response.json();
+    assert_json_include!(
+        actual: put_body,
+        expected: json!({
+            "provider_id": "1234"
+        })
+    );
+
+    seed_provider(&ctx.dbs.app_pool, "1234").await;
+    let run_response = ctx
+        .app
+        .post("/deals/123/runs")
+        .authorization_bearer("test-token")
+        .await;
+
+    assert_eq!(run_response.status_code(), StatusCode::OK);
+    let run_body: Value = run_response.json();
+    assert_json_include!(
+        actual: run_body,
+        expected: json!({
+            "measurement_state": "failed",
+            "result_code": "MissingHttpAddrFromCidContact"
+        })
+    );
+}
+
+#[tokio::test]
 async fn test_put_deal_with_invalid_decimal_deal_id_returns_bad_request() {
     let ctx = TestContext::new().await;
 
@@ -112,6 +152,29 @@ async fn test_put_deal_with_invalid_decimal_deal_id_returns_bad_request() {
         .put("/deals/not-a-decimal")
         .authorization_bearer("test-token")
         .json(&deal_request())
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
+    let body: Value = response.json();
+    assert_json_include!(
+        actual: body,
+        expected: json!({
+            "error_code": "INVALID_REQUEST"
+        })
+    );
+}
+
+#[tokio::test]
+async fn test_put_deal_with_invalid_provider_id_returns_bad_request() {
+    let ctx = TestContext::new().await;
+    let mut request = deal_request();
+    request["provider_id"] = json!("f01abc");
+
+    let response = ctx
+        .app
+        .put("/deals/123")
+        .authorization_bearer("test-token")
+        .json(&request)
         .await;
 
     assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
@@ -272,6 +335,57 @@ async fn test_get_latest_returns_not_found_when_target_missing() {
         actual: body,
         expected: json!({
             "error_code": "NOT_FOUND"
+        })
+    );
+}
+
+#[tokio::test]
+async fn test_get_latest_uses_stable_tie_breaker_for_matching_timestamps() {
+    let ctx = TestContext::new().await;
+
+    ctx.app
+        .put("/deals/123")
+        .authorization_bearer("test-token")
+        .json(&deal_request())
+        .await
+        .assert_status_ok();
+
+    sqlx::query(
+        r#"INSERT INTO
+                deal_sli_runs (
+                    id,
+                    deal_id,
+                    state,
+                    measurement_state,
+                    started_at,
+                    completed_at,
+                    tested_at,
+                    provider_id,
+                    result_code,
+                    piece_count,
+                    success_count,
+                    failed_count
+                )
+           VALUES
+                ('00000000-0000-0000-0000-000000000001', '123', 'completed', 'failed', '2026-06-03 10:00:00+00', '2026-06-03 10:00:00+00', '2026-06-03 10:00:00+00', '1234', 'FailedToGetWorkingUrl', 2, 0, 2),
+                ('00000000-0000-0000-0000-000000000002', '123', 'completed', 'fresh', '2026-06-03 10:00:00+00', '2026-06-03 10:00:00+00', '2026-06-03 10:00:00+00', '1234', 'Success', 2, 2, 0)
+        "#,
+    )
+    .execute(&ctx.dbs.app_pool)
+    .await
+    .expect("tied runs should insert");
+
+    let response = ctx.app.get("/deals/123/latest").await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    assert_json_include!(
+        actual: body,
+        expected: json!({
+            "measurement_state": "fresh",
+            "result_code": "Success",
+            "success_count": 2,
+            "failed_count": 0
         })
     );
 }

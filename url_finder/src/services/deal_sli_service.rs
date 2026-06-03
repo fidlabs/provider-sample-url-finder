@@ -15,7 +15,7 @@ use crate::{
         DealSliRunPieceSnapshot, DealSliTargetWithPieces, NewCompletedDealSliRun, NewDealSliPiece,
         NewDealSliPieceResult, NewDealSliTarget, StorageProviderRepository,
     },
-    types::{ErrorCode, ProviderId, ResultCode, UrlTestResult},
+    types::{ErrorCode, ProviderAddress, ProviderId, ResultCode, UrlTestResult},
     url_tester::test_urls_double_tap,
 };
 
@@ -380,6 +380,19 @@ fn retrievability_bps_to_i32(value: u16) -> std::result::Result<i32, DealSliServ
     Ok(i32::from(value))
 }
 
+fn normalize_provider_id(value: String) -> std::result::Result<String, DealSliServiceError> {
+    if value.starts_with("f0") {
+        let address = ProviderAddress::new(value)
+            .map_err(|error| DealSliServiceError::InvalidRequest(format!("{error}")))?;
+        let id: ProviderId = address.into();
+        return Ok(id.as_str().to_string());
+    }
+
+    ProviderId::new(value)
+        .map(|id| id.as_str().to_string())
+        .map_err(|error| DealSliServiceError::InvalidRequest(format!("{error}")))
+}
+
 fn map_upsert_request(
     deal_id: &str,
     request: DealTargetUpsertRequest,
@@ -432,7 +445,7 @@ fn map_upsert_request(
         deal_version: match request.deal_version {
             DealVersion::V2 => "v2".to_string(),
         },
-        provider_id: request.provider_id,
+        provider_id: normalize_provider_id(request.provider_id)?,
         client_id: request.client,
         manifest_hash: request.manifest_hash,
         manifest_location: request.manifest_location,
