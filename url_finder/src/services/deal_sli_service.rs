@@ -19,7 +19,7 @@ use crate::{
     url_tester::test_urls_double_tap,
 };
 
-const MAX_MANUAL_RUN_URL_TESTS: usize = 512;
+const MAX_MANUAL_RUN_URL_TESTS: usize = 2_048;
 
 #[derive(Debug)]
 pub enum DealSliServiceError {
@@ -206,11 +206,6 @@ impl DealSliService {
         let piece_count = stored.pieces.len() as i32;
         let success_count = successful_piece_indexes.len() as i32;
         let failed_count = piece_count - success_count;
-        let result_code = if success_count == piece_count {
-            ResultCode::Success
-        } else {
-            ResultCode::FailedToGetWorkingUrl
-        };
         let piece_results = test_contexts
             .iter()
             .zip(url_results.iter())
@@ -221,6 +216,11 @@ impl DealSliService {
             .filter(|result| result.success)
             .max_by_key(|result| result.content_length)
             .map(|result| result.url.clone());
+        let result_code = if working_url.is_some() {
+            ResultCode::Success
+        } else {
+            ResultCode::FailedToGetWorkingUrl
+        };
 
         self.repo
             .insert_completed_run_with_piece_results(&NewCompletedDealSliRun {

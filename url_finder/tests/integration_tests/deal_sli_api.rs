@@ -52,6 +52,30 @@ fn deal_request() -> Value {
     })
 }
 
+fn many_piece_deal_request(piece_count: usize) -> Value {
+    let pieces = (0..piece_count)
+        .map(|index| {
+            json!({
+                "piece_cid": format!("baga6ea4seaq{index:04}"),
+                "piece_size_bytes": "34359738368"
+            })
+        })
+        .collect::<Vec<_>>();
+
+    json!({
+        "deal_version": "v2",
+        "provider_id": "1234",
+        "client": "5678",
+        "manifest_location": "https://example.com/large-manifest.json",
+        "requirements": {
+            "retrievability_bps": 9500,
+            "bandwidth_mbps": 200,
+            "latency_ms": 150
+        },
+        "pieces": pieces
+    })
+}
+
 #[tokio::test]
 async fn test_put_deal_persists_and_get_deal_returns_stored_target() {
     let ctx = TestContext::new().await;
@@ -508,7 +532,7 @@ async fn test_post_run_with_cached_endpoint_tests_target_pieces_and_stores_piece
             "piece_count": 2,
             "success_count": 1,
             "failed_count": 1,
-            "result_code": "FailedToGetWorkingUrl"
+            "result_code": "Success"
         })
     );
     assert!(
@@ -557,6 +581,56 @@ async fn test_post_run_with_cached_endpoint_tests_target_pieces_and_stores_piece
 }
 
 #[tokio::test]
+async fn test_post_run_allows_large_single_endpoint_deal() {
+    let ctx = TestContext::new().await;
+
+    ctx.app
+        .put("/deals/123")
+        .authorization_bearer("test-token")
+        .json(&many_piece_deal_request(1_499))
+        .await
+        .assert_status_ok();
+
+    seed_provider_with_cached_endpoints(&ctx.dbs.app_pool, "1234", &[ctx.mocks.piece_server_url()])
+        .await;
+
+    let response = ctx
+        .app
+        .post("/deals/123/runs")
+        .authorization_bearer("test-token")
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    assert_json_include!(
+        actual: body,
+        expected: json!({
+            "deal_id": "123",
+            "measurement_state": "fresh",
+            "piece_count": 1499,
+            "success_count": 0,
+            "failed_count": 1499,
+            "result_code": "FailedToGetWorkingUrl"
+        })
+    );
+
+    let piece_result_count: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM
+                deal_sli_piece_results
+           WHERE
+                deal_id = $1
+        "#,
+    )
+    .bind("123")
+    .fetch_one(&ctx.dbs.app_pool)
+    .await
+    .expect("piece result count should load");
+
+    assert_eq!(piece_result_count, 1_499);
+}
+
+#[tokio::test]
 async fn test_post_run_rejects_oversized_synchronous_fanout() {
     let ctx = TestContext::new().await;
 
@@ -567,7 +641,7 @@ async fn test_post_run_rejects_oversized_synchronous_fanout() {
         .await
         .assert_status_ok();
 
-    let endpoints = (0..257)
+    let endpoints = (0..1025)
         .map(|index| format!("http://127.0.0.1:{}/", 10_000 + index))
         .collect::<Vec<_>>();
     seed_provider_with_cached_endpoints(&ctx.dbs.app_pool, "1234", &endpoints).await;
