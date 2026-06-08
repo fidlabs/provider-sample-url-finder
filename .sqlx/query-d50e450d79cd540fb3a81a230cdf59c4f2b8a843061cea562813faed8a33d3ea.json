@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE\n                    deal_sli_targets\n               SET\n                    active_manifest_snapshot_id = $2,\n                    updated_at = NOW()\n               WHERE\n                    deal_id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d50e450d79cd540fb3a81a230cdf59c4f2b8a843061cea562813faed8a33d3ea"
+}

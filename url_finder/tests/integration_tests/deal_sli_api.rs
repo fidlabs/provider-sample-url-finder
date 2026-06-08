@@ -1,6 +1,8 @@
 use assert_json_diff::assert_json_include;
 use axum::http::StatusCode;
 use serde_json::{Value, json};
+use wiremock::matchers::{header, method, path};
+use wiremock::{Mock, ResponseTemplate};
 
 use crate::common::*;
 
@@ -23,68 +25,103 @@ struct StoredDealSliPieceResult {
     result_code: Option<url_finder::ResultCode>,
 }
 
-fn deal_request() -> Value {
+fn manifest_piece(piece_cid: &str, piece_size: u64, file_size: u64) -> Value {
     json!({
-        "deal_version": "v2",
-        "provider_id": "1234",
-        "client": "5678",
-        "manifest_hash": "bafy-manifest",
-        "manifest_location": "https://example.com/manifest.car",
-        "requirements": {
-            "retrievability_bps": 9500,
-            "bandwidth_mbps": 200,
-            "latency_ms": 150
-        },
-        "pieces": [
-            {
-                "piece_cid": "baga6ea4seaq",
-                "piece_size_bytes": "1024",
-                "allocation_id": "44",
-                "claim_id": "44"
-            },
-            {
-                "piece_cid": "baga6ea4sear",
-                "piece_size_bytes": "2048",
-                "allocation_id": "55",
-                "claim_id": "55"
-            }
-        ]
+        "pieceType": "dag",
+        "pieceCid": piece_cid,
+        "pieceSize": piece_size,
+        "fileSize": file_size,
+        "rootCid": format!("bafy-{piece_cid}"),
+        "storagePath": format!("{piece_cid}.car")
     })
 }
 
-fn many_piece_deal_request(piece_count: usize) -> Value {
-    let pieces = (0..piece_count)
-        .map(|index| {
-            json!({
-                "piece_cid": format!("baga6ea4seaq{index:04}"),
-                "piece_size_bytes": "34359738368"
-            })
-        })
-        .collect::<Vec<_>>();
+fn default_manifest_pieces() -> Vec<Value> {
+    vec![
+        manifest_piece("baga6ea4seaq", 1024, 16_000_000_000),
+        manifest_piece("baga6ea4sear", 2048, 2048),
+    ]
+}
+
+async fn deal_request(ctx: &TestContext) -> Value {
+    deal_request_with_manifest(ctx, "/manifest.json", "3072", default_manifest_pieces()).await
+}
+
+async fn deal_request_with_manifest(
+    ctx: &TestContext,
+    manifest_path: &str,
+    deal_size_bytes: &str,
+    pieces: Vec<Value>,
+) -> Value {
+    let manifest = json!([{ "pieces": pieces }]);
+    let manifest_body = manifest.to_string();
+    Mock::given(method("GET"))
+        .and(path(manifest_path))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_string(manifest_body.clone()),
+        )
+        .mount(&ctx.mocks.piece_server)
+        .await;
 
     json!({
         "deal_version": "v2",
         "provider_id": "1234",
         "client": "5678",
-        "manifest_location": "https://example.com/large-manifest.json",
+        "deal_size_bytes": deal_size_bytes,
+        "manifest_hash": url_finder::services::deal_manifest::compute_manifest_hash(manifest_body.as_bytes()),
+        "manifest_location": format!("{}{}", ctx.mocks.piece_server_url(), manifest_path),
         "requirements": {
             "retrievability_bps": 9500,
             "bandwidth_mbps": 200,
             "latency_ms": 150
-        },
-        "pieces": pieces
+        }
     })
+}
+
+async fn many_piece_deal_request(ctx: &TestContext, piece_count: usize) -> Value {
+    let pieces = (0..piece_count)
+        .map(|index| {
+            manifest_piece(
+                &format!("baga6ea4seaq{index:04}"),
+                34_359_738_368,
+                34_359_738_368,
+            )
+        })
+        .collect::<Vec<_>>();
+    let deal_size = (34_359_738_368_u128 * piece_count as u128).to_string();
+    deal_request_with_manifest(ctx, "/large-manifest.json", &deal_size, pieces).await
+}
+
+async fn setup_piece_retrieval_with_total_size(
+    ctx: &TestContext,
+    piece_cid: &str,
+    total_size: u64,
+) {
+    Mock::given(method("GET"))
+        .and(path(format!("/piece/{piece_cid}")))
+        .and(header("Range", "bytes=0-4095"))
+        .respond_with(
+            ResponseTemplate::new(206)
+                .insert_header("etag", "\"mock-etag-12345\"")
+                .insert_header("Content-Range", format!("bytes 0-4095/{total_size}"))
+                .set_body_raw(vec![0u8; 4096], "application/piece"),
+        )
+        .mount(&ctx.mocks.piece_server)
+        .await;
 }
 
 #[tokio::test]
 async fn test_put_deal_persists_and_get_deal_returns_stored_target() {
     let ctx = TestContext::new().await;
+    let request = deal_request(&ctx).await;
 
     let put_response = ctx
         .app
         .put("/deals/123")
         .authorization_bearer("test-token")
-        .json(&deal_request())
+        .json(&request)
         .await;
 
     assert_eq!(put_response.status_code(), StatusCode::OK);
@@ -100,8 +137,9 @@ async fn test_put_deal_persists_and_get_deal_returns_stored_target() {
             "deal_version": "v2",
             "provider_id": "1234",
             "client": "5678",
-            "manifest_hash": "bafy-manifest",
-            "manifest_location": "https://example.com/manifest.car",
+            "deal_size_bytes": "3072",
+            "manifest_hash": request["manifest_hash"].as_str().unwrap(),
+            "manifest_location": request["manifest_location"].as_str().unwrap(),
             "requirements": {
                 "retrievability_bps": 9500,
                 "bandwidth_mbps": 200,
@@ -111,14 +149,18 @@ async fn test_put_deal_persists_and_get_deal_returns_stored_target() {
                 {
                     "piece_cid": "baga6ea4seaq",
                     "piece_size_bytes": "1024",
-                    "allocation_id": "44",
-                    "claim_id": "44"
+                    "file_size_bytes": "16000000000",
+                    "root_cid": "bafy-baga6ea4seaq",
+                    "storage_path": "baga6ea4seaq.car",
+                    "piece_type": "dag"
                 },
                 {
                     "piece_cid": "baga6ea4sear",
                     "piece_size_bytes": "2048",
-                    "allocation_id": "55",
-                    "claim_id": "55"
+                    "file_size_bytes": "2048",
+                    "root_cid": "bafy-baga6ea4sear",
+                    "storage_path": "baga6ea4sear.car",
+                    "piece_type": "dag"
                 }
             ]
         })
@@ -130,7 +172,7 @@ async fn test_put_deal_persists_and_get_deal_returns_stored_target() {
 #[tokio::test]
 async fn test_put_deal_accepts_provider_address_and_stores_provider_id() {
     let ctx = TestContext::new().await;
-    let mut request = deal_request();
+    let mut request = deal_request(&ctx).await;
     request["provider_id"] = json!("f01234");
 
     let put_response = ctx
@@ -170,12 +212,13 @@ async fn test_put_deal_accepts_provider_address_and_stores_provider_id() {
 #[tokio::test]
 async fn test_put_deal_with_invalid_decimal_deal_id_returns_bad_request() {
     let ctx = TestContext::new().await;
+    let request = deal_request(&ctx).await;
 
     let response = ctx
         .app
         .put("/deals/not-a-decimal")
         .authorization_bearer("test-token")
-        .json(&deal_request())
+        .json(&request)
         .await;
 
     assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
@@ -191,8 +234,31 @@ async fn test_put_deal_with_invalid_decimal_deal_id_returns_bad_request() {
 #[tokio::test]
 async fn test_put_deal_with_invalid_provider_id_returns_bad_request() {
     let ctx = TestContext::new().await;
-    let mut request = deal_request();
+    let mut request = deal_request(&ctx).await;
     request["provider_id"] = json!("f01abc");
+
+    let response = ctx
+        .app
+        .put("/deals/123")
+        .authorization_bearer("test-token")
+        .json(&request)
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
+    let body: Value = response.json();
+    assert_json_include!(
+        actual: body,
+        expected: json!({
+            "error_code": "INVALID_REQUEST"
+        })
+    );
+}
+
+#[tokio::test]
+async fn test_put_deal_with_unicode_numeric_provider_id_returns_bad_request() {
+    let ctx = TestContext::new().await;
+    let mut request = deal_request(&ctx).await;
+    request["provider_id"] = json!("١٢٣٤");
 
     let response = ctx
         .app
@@ -214,8 +280,8 @@ async fn test_put_deal_with_invalid_provider_id_returns_bad_request() {
 #[tokio::test]
 async fn test_put_deal_with_empty_pieces_returns_bad_request() {
     let ctx = TestContext::new().await;
-    let mut request = deal_request();
-    request["pieces"] = json!([]);
+    let mut request = deal_request(&ctx).await;
+    request["pieces"] = json!([{ "piece_cid": "caller-owned-piece" }]);
 
     let response = ctx
         .app
@@ -237,8 +303,31 @@ async fn test_put_deal_with_empty_pieces_returns_bad_request() {
 #[tokio::test]
 async fn test_put_deal_with_fractional_piece_size_returns_bad_request() {
     let ctx = TestContext::new().await;
-    let mut request = deal_request();
-    request["pieces"][0]["piece_size_bytes"] = json!("1024.5");
+    let mut request = deal_request(&ctx).await;
+    request["deal_size_bytes"] = json!("1024.5");
+
+    let response = ctx
+        .app
+        .put("/deals/123")
+        .authorization_bearer("test-token")
+        .json(&request)
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
+    let body: Value = response.json();
+    assert_json_include!(
+        actual: body,
+        expected: json!({
+            "error_code": "INVALID_REQUEST"
+        })
+    );
+}
+
+#[tokio::test]
+async fn test_put_deal_with_oversized_deal_size_returns_bad_request() {
+    let ctx = TestContext::new().await;
+    let mut request = deal_request(&ctx).await;
+    request["deal_size_bytes"] = json!("1".repeat(79));
 
     let response = ctx
         .app
@@ -260,7 +349,7 @@ async fn test_put_deal_with_fractional_piece_size_returns_bad_request() {
 #[tokio::test]
 async fn test_put_deal_with_overflowing_requirement_returns_bad_request() {
     let ctx = TestContext::new().await;
-    let mut request = deal_request();
+    let mut request = deal_request(&ctx).await;
     request["requirements"]["bandwidth_mbps"] = json!(u32::MAX);
 
     let response = ctx
@@ -283,8 +372,65 @@ async fn test_put_deal_with_overflowing_requirement_returns_bad_request() {
 #[tokio::test]
 async fn test_put_deal_with_invalid_retrievability_requirement_returns_bad_request() {
     let ctx = TestContext::new().await;
-    let mut request = deal_request();
+    let mut request = deal_request(&ctx).await;
     request["requirements"]["retrievability_bps"] = json!(10_001);
+
+    let response = ctx
+        .app
+        .put("/deals/123")
+        .authorization_bearer("test-token")
+        .json(&request)
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
+    let body: Value = response.json();
+    assert_json_include!(
+        actual: body,
+        expected: json!({
+            "error_code": "INVALID_REQUEST"
+        })
+    );
+}
+
+#[tokio::test]
+async fn test_put_deal_with_manifest_hash_mismatch_returns_bad_request() {
+    let ctx = TestContext::new().await;
+    let mut request = deal_request(&ctx).await;
+    request["manifest_hash"] = json!("00");
+
+    let response = ctx
+        .app
+        .put("/deals/123")
+        .authorization_bearer("test-token")
+        .json(&request)
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
+    let body: Value = response.json();
+    assert_json_include!(
+        actual: body,
+        expected: json!({
+            "error_code": "INVALID_REQUEST"
+        })
+    );
+}
+
+#[tokio::test]
+async fn test_put_deal_with_missing_manifest_file_size_returns_bad_request() {
+    let ctx = TestContext::new().await;
+    let request = deal_request_with_manifest(
+        &ctx,
+        "/missing-file-size-manifest.json",
+        "1024",
+        vec![json!({
+            "pieceType": "dag",
+            "pieceCid": "baga6ea4seaq",
+            "pieceSize": 1024,
+            "rootCid": "bafy-baga6ea4seaq",
+            "storagePath": "baga6ea4seaq.car"
+        })],
+    )
+    .await;
 
     let response = ctx
         .app
@@ -322,11 +468,12 @@ async fn test_get_deal_returns_not_found_when_target_missing() {
 #[tokio::test]
 async fn test_get_latest_returns_missing_state_with_target_piece_count_when_no_runs_exist() {
     let ctx = TestContext::new().await;
+    let request = deal_request(&ctx).await;
 
     ctx.app
         .put("/deals/123")
         .authorization_bearer("test-token")
-        .json(&deal_request())
+        .json(&request)
         .await
         .assert_status_ok();
 
@@ -366,11 +513,12 @@ async fn test_get_latest_returns_not_found_when_target_missing() {
 #[tokio::test]
 async fn test_get_latest_uses_stable_tie_breaker_for_matching_timestamps() {
     let ctx = TestContext::new().await;
+    let request = deal_request(&ctx).await;
 
     ctx.app
         .put("/deals/123")
         .authorization_bearer("test-token")
-        .json(&deal_request())
+        .json(&request)
         .await
         .assert_status_ok();
 
@@ -417,11 +565,12 @@ async fn test_get_latest_uses_stable_tie_breaker_for_matching_timestamps() {
 #[tokio::test]
 async fn test_post_run_without_cached_endpoints_persists_failed_run_and_latest_uses_it() {
     let ctx = TestContext::new().await;
+    let request = deal_request(&ctx).await;
 
     ctx.app
         .put("/deals/123")
         .authorization_bearer("test-token")
-        .json(&deal_request())
+        .json(&request)
         .await
         .assert_status_ok();
 
@@ -442,7 +591,11 @@ async fn test_post_run_without_cached_endpoints_persists_failed_run_and_latest_u
             "measurement_state": "failed",
             "piece_count": 2,
             "success_count": 0,
-            "failed_count": 2,
+            "failed_count": 0,
+            "manifest_size_bytes": "3072",
+            "deal_size_bytes": "3072",
+            "content_matches_deal": true,
+            "sampled_piece_count": 0,
             "result_code": "MissingHttpAddrFromCidContact"
         })
     );
@@ -475,7 +628,7 @@ async fn test_post_run_without_cached_endpoints_persists_failed_run_and_latest_u
     );
     assert_eq!(row.piece_count, 2);
     assert_eq!(row.success_count, 0);
-    assert_eq!(row.failed_count, 2);
+    assert_eq!(row.failed_count, 0);
 
     let latest_response = ctx.app.get("/deals/123/latest").await;
 
@@ -488,7 +641,7 @@ async fn test_post_run_without_cached_endpoints_persists_failed_run_and_latest_u
             "measurement_state": "failed",
             "piece_count": 2,
             "success_count": 0,
-            "failed_count": 2,
+            "failed_count": 0,
             "result_code": "MissingHttpAddrFromCidContact"
         })
     );
@@ -497,11 +650,12 @@ async fn test_post_run_without_cached_endpoints_persists_failed_run_and_latest_u
 #[tokio::test]
 async fn test_post_run_with_cached_endpoint_tests_target_pieces_and_stores_piece_results() {
     let ctx = TestContext::new().await;
+    let request = deal_request(&ctx).await;
 
     ctx.app
         .put("/deals/123")
         .authorization_bearer("test-token")
-        .json(&deal_request())
+        .json(&request)
         .await
         .assert_status_ok();
 
@@ -528,8 +682,13 @@ async fn test_post_run_with_cached_endpoint_tests_target_pieces_and_stores_piece
             "deal_id": "123",
             "measurement_state": "fresh",
             "retrievability_percent": 50.0,
-            "large_files_percent": 50.0,
+            "large_files_percent": null,
             "piece_count": 2,
+            "sampled_piece_count": 2,
+            "size_matched_percent": 50.0,
+            "manifest_size_bytes": "3072",
+            "deal_size_bytes": "3072",
+            "content_matches_deal": true,
             "success_count": 1,
             "failed_count": 1,
             "result_code": "Success"
@@ -581,13 +740,101 @@ async fn test_post_run_with_cached_endpoint_tests_target_pieces_and_stores_piece
 }
 
 #[tokio::test]
-async fn test_post_run_allows_large_single_endpoint_deal() {
+async fn test_post_run_measures_when_manifest_size_differs_from_deal_size() {
     let ctx = TestContext::new().await;
+    let request = deal_request_with_manifest(
+        &ctx,
+        "/mismatch-manifest.json",
+        "9999",
+        default_manifest_pieces(),
+    )
+    .await;
 
     ctx.app
         .put("/deals/123")
         .authorization_bearer("test-token")
-        .json(&many_piece_deal_request(1_499))
+        .json(&request)
+        .await
+        .assert_status_ok();
+
+    ctx.mocks
+        .setup_piece_retrieval_mock("baga6ea4seaq", true)
+        .await;
+    ctx.mocks
+        .setup_piece_retrieval_mock("baga6ea4sear", false)
+        .await;
+    seed_provider_with_cached_endpoints(&ctx.dbs.app_pool, "1234", &[ctx.mocks.piece_server_url()])
+        .await;
+
+    let run_response = ctx
+        .app
+        .post("/deals/123/runs")
+        .authorization_bearer("test-token")
+        .await;
+
+    assert_eq!(run_response.status_code(), StatusCode::OK);
+    let run_body: Value = run_response.json();
+    assert_json_include!(
+        actual: run_body,
+        expected: json!({
+            "measurement_state": "fresh",
+            "manifest_size_bytes": "3072",
+            "deal_size_bytes": "9999",
+            "content_matches_deal": false,
+            "sampled_piece_count": 2,
+            "retrievability_percent": 50.0,
+            "size_matched_percent": 50.0
+        })
+    );
+}
+
+#[tokio::test]
+async fn test_post_run_wrong_size_responses_are_retrievable_but_not_successful() {
+    let ctx = TestContext::new().await;
+    let request = deal_request(&ctx).await;
+
+    ctx.app
+        .put("/deals/123")
+        .authorization_bearer("test-token")
+        .json(&request)
+        .await
+        .assert_status_ok();
+
+    setup_piece_retrieval_with_total_size(&ctx, "baga6ea4seaq", 777).await;
+    setup_piece_retrieval_with_total_size(&ctx, "baga6ea4sear", 777).await;
+    seed_provider_with_cached_endpoints(&ctx.dbs.app_pool, "1234", &[ctx.mocks.piece_server_url()])
+        .await;
+
+    let run_response = ctx
+        .app
+        .post("/deals/123/runs")
+        .authorization_bearer("test-token")
+        .await;
+
+    assert_eq!(run_response.status_code(), StatusCode::OK);
+    let run_body: Value = run_response.json();
+    assert_json_include!(
+        actual: run_body,
+        expected: json!({
+            "measurement_state": "fresh",
+            "retrievability_percent": 100.0,
+            "size_matched_percent": 0.0,
+            "success_count": 0,
+            "failed_count": 2,
+            "result_code": "FailedToGetWorkingUrl"
+        })
+    );
+}
+
+#[tokio::test]
+async fn test_post_run_allows_large_single_endpoint_deal() {
+    let ctx = TestContext::new().await;
+    let request = many_piece_deal_request(&ctx, 1_499).await;
+
+    ctx.app
+        .put("/deals/123")
+        .authorization_bearer("test-token")
+        .json(&request)
         .await
         .assert_status_ok();
 
@@ -608,8 +855,9 @@ async fn test_post_run_allows_large_single_endpoint_deal() {
             "deal_id": "123",
             "measurement_state": "fresh",
             "piece_count": 1499,
+            "sampled_piece_count": 100,
             "success_count": 0,
-            "failed_count": 1499,
+            "failed_count": 100,
             "result_code": "FailedToGetWorkingUrl"
         })
     );
@@ -627,17 +875,18 @@ async fn test_post_run_allows_large_single_endpoint_deal() {
     .await
     .expect("piece result count should load");
 
-    assert_eq!(piece_result_count, 1_499);
+    assert_eq!(piece_result_count, 100);
 }
 
 #[tokio::test]
 async fn test_post_run_rejects_oversized_synchronous_fanout() {
     let ctx = TestContext::new().await;
+    let request = deal_request(&ctx).await;
 
     ctx.app
         .put("/deals/123")
         .authorization_bearer("test-token")
-        .json(&deal_request())
+        .json(&request)
         .await
         .assert_status_ok();
 
@@ -665,11 +914,12 @@ async fn test_post_run_rejects_oversized_synchronous_fanout() {
 #[tokio::test]
 async fn test_put_deal_rejects_piece_identity_change_after_no_endpoint_run_exists() {
     let ctx = TestContext::new().await;
+    let request = deal_request(&ctx).await;
 
     ctx.app
         .put("/deals/123")
         .authorization_bearer("test-token")
-        .json(&deal_request())
+        .json(&request)
         .await
         .assert_status_ok();
 
@@ -680,8 +930,16 @@ async fn test_put_deal_rejects_piece_identity_change_after_no_endpoint_run_exist
         .await
         .assert_status_ok();
 
-    let mut changed_request = deal_request();
-    changed_request["pieces"][0]["piece_cid"] = json!("baga6ea4seaz");
+    let changed_request = deal_request_with_manifest(
+        &ctx,
+        "/changed-manifest.json",
+        "3072",
+        vec![
+            manifest_piece("baga6ea4seaz", 1024, 16_000_000_000),
+            manifest_piece("baga6ea4sear", 2048, 2048),
+        ],
+    )
+    .await;
 
     let response = ctx
         .app
@@ -703,11 +961,12 @@ async fn test_put_deal_rejects_piece_identity_change_after_no_endpoint_run_exist
 #[tokio::test]
 async fn test_put_deal_rejects_piece_identity_change_after_piece_results_exist() {
     let ctx = TestContext::new().await;
+    let request = deal_request(&ctx).await;
 
     ctx.app
         .put("/deals/123")
         .authorization_bearer("test-token")
-        .json(&deal_request())
+        .json(&request)
         .await
         .assert_status_ok();
 
@@ -725,8 +984,16 @@ async fn test_put_deal_rejects_piece_identity_change_after_piece_results_exist()
         .await
         .assert_status_ok();
 
-    let mut changed_request = deal_request();
-    changed_request["pieces"][0]["piece_cid"] = json!("baga6ea4seaz");
+    let changed_request = deal_request_with_manifest(
+        &ctx,
+        "/changed-manifest-results.json",
+        "3072",
+        vec![
+            manifest_piece("baga6ea4seaz", 1024, 16_000_000_000),
+            manifest_piece("baga6ea4sear", 2048, 2048),
+        ],
+    )
+    .await;
 
     let response = ctx
         .app

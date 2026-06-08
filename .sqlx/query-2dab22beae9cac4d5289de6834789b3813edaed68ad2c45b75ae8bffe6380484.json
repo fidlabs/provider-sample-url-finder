@@ -1,0 +1,45 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO\n                        deal_sli_piece_results (\n                            run_id,\n                            deal_id,\n                            piece_index,\n                            piece_cid,\n                            url_tested,\n                            success,\n                            content_length,\n                            manifest_snapshot_id,\n                            file_size_bytes,\n                            observed_size_bytes,\n                            size_matched,\n                            manifest_response_time_ms,\n                            is_valid_car,\n                            result_code,\n                            tested_at\n                        )\n                   VALUES\n                        ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW())\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Int4",
+        "Text",
+        "Text",
+        "Bool",
+        "Int8",
+        "Uuid",
+        "Numeric",
+        "Int8",
+        "Bool",
+        "Int8",
+        "Bool",
+        {
+          "Custom": {
+            "name": "result_code",
+            "kind": {
+              "Enum": [
+                "NoPeerId",
+                "NoCidContactData",
+                "MissingAddrFromCidContact",
+                "MissingHttpAddrFromCidContact",
+                "FailedToGetWorkingUrl",
+                "NoDealsFound",
+                "TimedOut",
+                "Success",
+                "JobCreated",
+                "Error"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2dab22beae9cac4d5289de6834789b3813edaed68ad2c45b75ae8bffe6380484"
+}

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM\n                    deal_sli_pieces\n               WHERE\n                    deal_id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "41b58193ea5ff34a769bb9856d72b44d1a1dbda475f3332396a38c72e0bcd64f"
+}

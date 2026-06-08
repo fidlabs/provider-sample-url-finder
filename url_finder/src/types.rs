@@ -86,7 +86,7 @@ pub struct ProviderId(String);
 impl ProviderId {
     pub fn new(id: impl Into<String>) -> Result<Self> {
         let id = id.into();
-        if !id.chars().all(|c| c.is_numeric()) || id.is_empty() || id.len() > 8 {
+        if !id.chars().all(|c| c.is_ascii_digit()) || id.is_empty() || id.len() > 8 {
             return Err(eyre!("Invalid provider id: {}", id));
         }
         Ok(Self(id))
@@ -184,7 +184,7 @@ pub struct ClientId(String);
 impl ClientId {
     pub fn new(id: impl Into<String>) -> Result<Self> {
         let id = id.into();
-        if !id.chars().all(|c| c.is_numeric()) || id.is_empty() || id.len() > 8 {
+        if !id.chars().all(|c| c.is_ascii_digit()) || id.is_empty() || id.len() > 8 {
             return Err(eyre!("Invalid client id: {}", id));
         }
         Ok(Self(id))

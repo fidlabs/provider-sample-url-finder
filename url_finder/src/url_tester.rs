@@ -308,6 +308,130 @@ pub async fn test_url_double_tap(client: &Client, url: &str) -> UrlTestResult {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct ManifestUrlTestResult {
+    pub url: String,
+    pub retrievable: bool,
+    pub size_matched: bool,
+    pub observed_size_bytes: Option<i64>,
+    pub response_time_ms: Option<i64>,
+    pub error: Option<String>,
+}
+
+pub async fn test_manifest_url_double_tap(
+    client: &Client,
+    url: &str,
+    expected_file_size: i64,
+) -> ManifestUrlTestResult {
+    let r1 = range_request(client, url).await;
+    tokio::time::sleep(Duration::from_millis(DOUBLE_TAP_DELAY_MS)).await;
+    let r2 = range_request(client, url).await;
+
+    let tap1 = ManifestTap::from_range_result(r1);
+    let tap2 = ManifestTap::from_range_result(r2);
+    let observed_size_bytes = tap2.content_length().or(tap1.content_length());
+    let response_times = [tap1.response_time_ms(), tap2.response_time_ms()]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+    let response_time_ms = if response_times.is_empty() {
+        None
+    } else {
+        Some(response_times.iter().sum::<i64>() / i64::try_from(response_times.len()).unwrap_or(1))
+    };
+
+    ManifestUrlTestResult {
+        url: url.to_string(),
+        retrievable: tap1.content_length().is_some() || tap2.content_length().is_some(),
+        size_matched: tap1.content_length() == Some(expected_file_size)
+            && tap2.content_length() == Some(expected_file_size),
+        observed_size_bytes,
+        response_time_ms,
+        error: tap2.error().or_else(|| tap1.error()),
+    }
+}
+
+pub async fn test_manifest_urls_double_tap(
+    client: &Client,
+    tests: Vec<(String, i64)>,
+) -> Vec<ManifestUrlTestResult> {
+    let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_URL_TESTS));
+
+    let futures = tests
+        .into_iter()
+        .map(|(url, expected_file_size)| {
+            let client = client.clone();
+            let permit = semaphore.clone();
+
+            async move {
+                let _permit = permit.acquire().await.unwrap();
+                test_manifest_url_double_tap(&client, &url, expected_file_size).await
+            }
+        })
+        .collect::<Vec<_>>();
+
+    futures::future::join_all(futures).await
+}
+
+#[derive(Debug, Clone)]
+enum ManifestTap {
+    Responded {
+        content_length: Option<i64>,
+        response_time_ms: i64,
+        empty_body: bool,
+    },
+    Failed {
+        error: UrlTestError,
+    },
+}
+
+impl ManifestTap {
+    fn from_range_result(result: Result<RangeResponse, UrlTestError>) -> Self {
+        match result {
+            Ok(response) => Self::Responded {
+                content_length: response
+                    .content_length
+                    .and_then(|value| i64::try_from(value).ok()),
+                response_time_ms: i64::try_from(response.response_time_ms).unwrap_or(i64::MAX),
+                empty_body: response.body_sample.is_none(),
+            },
+            Err(error) => Self::Failed { error },
+        }
+    }
+
+    fn content_length(&self) -> Option<i64> {
+        match self {
+            Self::Responded {
+                content_length,
+                empty_body,
+                ..
+            } if !empty_body => *content_length,
+            Self::Responded { .. } | Self::Failed { .. } => None,
+        }
+    }
+
+    fn response_time_ms(&self) -> Option<i64> {
+        match self {
+            Self::Responded {
+                response_time_ms,
+                empty_body,
+                ..
+            } if !empty_body => Some(*response_time_ms),
+            Self::Responded { .. } | Self::Failed { .. } => None,
+        }
+    }
+
+    fn error(&self) -> Option<String> {
+        match self {
+            Self::Responded {
+                empty_body: true, ..
+            } => Some(UrlTestError::EmptyBody.to_string()),
+            Self::Failed { error } => Some(error.to_string()),
+            Self::Responded { .. } => None,
+        }
+    }
+}
+
 /// Tests multiple URLs in parallel using double-tap consistency checks.
 /// Limits concurrency to MAX_CONCURRENT_URL_TESTS to avoid overwhelming targets.
 pub async fn test_urls_double_tap(client: &Client, urls: Vec<String>) -> Vec<UrlTestResult> {
@@ -750,6 +874,74 @@ mod tests {
         assert!(result.is_ok());
         let response = result.unwrap();
         assert_eq!(response.content_length, Some(19327352832));
+    }
+
+    #[tokio::test]
+    async fn test_manifest_double_tap_matches_small_expected_size() {
+        use wiremock::matchers::header;
+
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(header("Range", "bytes=0-4095"))
+            .respond_with(
+                ResponseTemplate::new(206)
+                    .insert_header("Content-Range", "bytes 0-4095/81667561")
+                    .set_body_raw(vec![0u8; 4096], "application/octet-stream"),
+            )
+            .expect(2)
+            .mount(&mock_server)
+            .await;
+
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
+            .unwrap();
+
+        let result = test_manifest_url_double_tap(&client, &mock_server.uri(), 81_667_561).await;
+
+        assert!(result.retrievable);
+        assert!(result.size_matched);
+        assert_eq!(result.observed_size_bytes, Some(81_667_561));
+    }
+
+    #[tokio::test]
+    async fn test_manifest_double_tap_requires_both_taps_to_match_expected_size() {
+        use wiremock::matchers::header;
+
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(header("Range", "bytes=0-4095"))
+            .respond_with(
+                ResponseTemplate::new(206)
+                    .insert_header("Content-Range", "bytes 0-4095/80000000")
+                    .set_body_raw(vec![0u8; 4096], "application/octet-stream"),
+            )
+            .up_to_n_times(1)
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(header("Range", "bytes=0-4095"))
+            .respond_with(
+                ResponseTemplate::new(206)
+                    .insert_header("Content-Range", "bytes 0-4095/81667561")
+                    .set_body_raw(vec![0u8; 4096], "application/octet-stream"),
+            )
+            .mount(&mock_server)
+            .await;
+
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
+            .unwrap();
+
+        let result = test_manifest_url_double_tap(&client, &mock_server.uri(), 81_667_561).await;
+
+        assert!(result.retrievable);
+        assert!(!result.size_matched);
+        assert_eq!(result.observed_size_bytes, Some(81_667_561));
     }
 
     #[tokio::test]

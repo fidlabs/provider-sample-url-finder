@@ -1,25 +1,35 @@
-use std::{collections::BTreeSet, str::FromStr, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    str::FromStr,
+    sync::Arc,
+};
 
+use rand::Rng;
 use sqlx::types::BigDecimal;
+use uuid::Uuid;
 
 use crate::{
     api::deals::{
-        DealLatestMeasurementResponse, DealPerformanceResponse, DealPieceTarget,
-        DealSliRequirements, DealTargetResponse, DealTargetUpsertRequest, DealVersion,
-        MeasurementState,
+        DealLatestMeasurementResponse, DealManifestSnapshotResponse, DealPerformanceResponse,
+        DealPieceTarget, DealSliRequirements, DealTargetResponse, DealTargetUpsertRequest,
+        DealVersion, MeasurementState,
     },
-    config::{Config, MIN_VALID_CONTENT_LENGTH},
+    config::Config,
     http_client::build_client,
     repository::{
-        DealSliLatestRun, DealSliPiece, DealSliRepository, DealSliRequirementValues,
-        DealSliRunPieceSnapshot, DealSliTargetWithPieces, NewCompletedDealSliRun, NewDealSliPiece,
-        NewDealSliPieceResult, NewDealSliTarget, StorageProviderRepository,
+        DealSliLatestRun, DealSliManifestSnapshot, DealSliPiece, DealSliRepository,
+        DealSliRequirementValues, DealSliRunPieceSnapshot, DealSliTargetWithPieces,
+        NewCompletedDealSliRun, NewDealSliManifestSnapshot, NewDealSliPiece, NewDealSliPieceResult,
+        NewDealSliTarget, StorageProviderRepository,
     },
-    types::{ErrorCode, ProviderAddress, ProviderId, ResultCode, UrlTestResult},
-    url_tester::test_urls_double_tap,
+    services::deal_manifest::{FetchedManifestSnapshot, fetch_manifest_snapshot},
+    types::{ErrorCode, ProviderAddress, ProviderId, ResultCode},
+    url_tester::{ManifestUrlTestResult, test_manifest_urls_double_tap},
 };
 
 const MAX_MANUAL_RUN_URL_TESTS: usize = 2_048;
+const MANIFEST_SAMPLE_SIZE: i64 = 100;
+const MAX_NUMERIC_DIGITS: usize = 78;
 
 #[derive(Debug)]
 pub enum DealSliServiceError {
@@ -61,9 +71,20 @@ impl DealSliService {
     ) -> std::result::Result<DealTargetResponse, DealSliServiceError> {
         validate_deal_id(deal_id)?;
         let target = map_upsert_request(deal_id, request)?;
+        let client = build_client(&self.config)
+            .map_err(|error| DealSliServiceError::Internal(color_eyre::Report::from(error)))?;
+        let fetched_manifest = fetch_manifest_snapshot(
+            &client,
+            target.manifest_location.as_deref().unwrap_or_default(),
+            target.manifest_hash.as_deref().unwrap_or_default(),
+        )
+        .await
+        .map_err(|error| DealSliServiceError::InvalidRequest(error.to_string()))?;
+        let snapshot = map_manifest_snapshot(deal_id, &fetched_manifest);
+        let pieces = map_manifest_pieces(fetched_manifest);
 
         self.repo
-            .upsert_target(&target)
+            .upsert_manifest_target(&target, &snapshot, &pieces)
             .await
             .map_err(map_target_write_error)?;
 
@@ -133,29 +154,42 @@ impl DealSliService {
                 self.run_cached_endpoint_measurement(deal_id, &stored, endpoints)
                     .await?
             }
-            None => self
-                .repo
-                .insert_completed_run_with_piece_results(&NewCompletedDealSliRun {
-                    deal_id: deal_id.to_string(),
-                    target_pieces: target_piece_snapshots(&stored.pieces),
-                    measurement_state: MeasurementState::Failed.as_str().to_string(),
-                    provider_id: stored.target.provider_id.clone(),
-                    client_id: stored.target.client_id.clone(),
-                    working_url: None,
-                    retrievability_percent: None,
-                    large_files_percent: None,
-                    car_files_percent: None,
-                    sector_utilization_percent: None,
-                    is_consistent: None,
-                    is_reliable: None,
-                    result_code: ResultCode::MissingHttpAddrFromCidContact,
-                    piece_count: stored.pieces.len() as i32,
-                    success_count: 0,
-                    failed_count: stored.pieces.len() as i32,
-                    piece_results: Vec::new(),
-                })
-                .await
-                .map_err(map_run_insert_error)?,
+            None => {
+                let manifest_size_bytes = manifest_size_bytes(&stored.pieces);
+                let content_matches_deal = content_matches_deal(
+                    stored.target.deal_size_bytes.as_ref(),
+                    manifest_size_bytes.as_ref(),
+                );
+                self.repo
+                    .insert_completed_run_with_piece_results(&NewCompletedDealSliRun {
+                        deal_id: deal_id.to_string(),
+                        target_pieces: target_piece_snapshots(&stored.pieces),
+                        measurement_state: MeasurementState::Failed.as_str().to_string(),
+                        provider_id: stored.target.provider_id.clone(),
+                        client_id: stored.target.client_id.clone(),
+                        working_url: None,
+                        retrievability_percent: None,
+                        large_files_percent: None,
+                        car_files_percent: None,
+                        sector_utilization_percent: None,
+                        manifest_snapshot_id: stored.target.active_manifest_snapshot_id,
+                        deal_size_bytes: stored.target.deal_size_bytes.clone(),
+                        manifest_size_bytes,
+                        content_matches_deal: Some(content_matches_deal),
+                        sampled_piece_count: Some(0),
+                        size_matched_percent: None,
+                        avg_response_time_ms: None,
+                        is_consistent: None,
+                        is_reliable: None,
+                        result_code: ResultCode::MissingHttpAddrFromCidContact,
+                        piece_count: stored.pieces.len() as i32,
+                        success_count: 0,
+                        failed_count: 0,
+                        piece_results: Vec::new(),
+                    })
+                    .await
+                    .map_err(map_run_insert_error)?
+            }
         };
 
         Ok(map_latest_response(latest))
@@ -169,58 +203,72 @@ impl DealSliService {
     ) -> std::result::Result<DealSliLatestRun, DealSliServiceError> {
         let client = build_client(&self.config)
             .map_err(|error| DealSliServiceError::Internal(color_eyre::Report::from(error)))?;
-        let test_contexts = build_piece_test_contexts(&endpoints, &stored.pieces);
-        if test_contexts.len() > MAX_MANUAL_RUN_URL_TESTS {
+        let manifest_snapshot_id = stored.target.active_manifest_snapshot_id.ok_or_else(|| {
+            DealSliServiceError::InvalidRequest("missing manifest snapshot".to_string())
+        })?;
+        let total_piece_count = stored
+            .pieces
+            .iter()
+            .filter(|piece| piece.manifest_snapshot_id == Some(manifest_snapshot_id))
+            .count();
+        let sample_size = total_piece_count.min(MANIFEST_SAMPLE_SIZE as usize);
+        let sampled_pieces =
+            sample_manifest_pieces(&stored.pieces, manifest_snapshot_id, sample_size);
+        let planned_url_tests = endpoints
+            .len()
+            .checked_mul(sampled_pieces.len())
+            .ok_or_else(|| {
+                DealSliServiceError::InvalidRequest(
+                    "manual Deal SLI run URL fanout overflowed usize".to_string(),
+                )
+            })?;
+        if planned_url_tests > MAX_MANUAL_RUN_URL_TESTS {
             return Err(DealSliServiceError::InvalidRequest(format!(
-                "manual Deal SLI run would test {} URLs, limit is {}",
-                test_contexts.len(),
-                MAX_MANUAL_RUN_URL_TESTS
+                "manual Deal SLI run would test {planned_url_tests} URLs, limit is {MAX_MANUAL_RUN_URL_TESTS}"
             )));
         }
+        let test_contexts = build_piece_test_contexts(&endpoints, &sampled_pieces);
 
-        let urls = test_contexts
+        let tests = test_contexts
             .iter()
-            .map(|context| context.url.clone())
-            .collect::<Vec<_>>();
-        let url_results = test_urls_double_tap(&client, urls).await;
-
-        let successful_piece_indexes = test_contexts
-            .iter()
-            .zip(url_results.iter())
-            .filter_map(|(context, result)| result.success.then_some(context.piece_index))
-            .collect::<BTreeSet<_>>();
-        let large_piece_indexes = test_contexts
-            .iter()
-            .zip(url_results.iter())
-            .filter_map(|(context, result)| {
-                (result.content_length.unwrap_or_default() >= MIN_VALID_CONTENT_LENGTH)
-                    .then_some(context.piece_index)
+            .map(|context| {
+                (
+                    context.url.clone(),
+                    context.expected_file_size_bytes.unwrap_or(-1),
+                )
             })
-            .collect::<BTreeSet<_>>();
-        let car_piece_indexes = test_contexts
-            .iter()
-            .zip(url_results.iter())
-            .filter_map(|(context, result)| result.is_valid_car.then_some(context.piece_index))
-            .collect::<BTreeSet<_>>();
+            .collect::<Vec<_>>();
+        let url_results = test_manifest_urls_double_tap(&client, tests).await;
+        let aggregate = aggregate_manifest_results(&test_contexts, &url_results);
 
-        let piece_count = stored.pieces.len() as i32;
-        let success_count = successful_piece_indexes.len() as i32;
-        let failed_count = piece_count - success_count;
+        let piece_count = i32::try_from(total_piece_count).map_err(|_| {
+            DealSliServiceError::InvalidRequest("manifest piece count exceeds i32::MAX".to_string())
+        })?;
+        let sampled_piece_count = i32::try_from(sampled_pieces.len()).map_err(|_| {
+            DealSliServiceError::InvalidRequest("sampled piece count exceeds i32::MAX".to_string())
+        })?;
+        let success_count = aggregate.size_matched_count;
+        let failed_count = sampled_piece_count - success_count;
         let piece_results = test_contexts
             .iter()
             .zip(url_results.iter())
-            .map(|(context, result)| map_piece_result(deal_id, context, result))
+            .map(|(context, result)| map_manifest_piece_result(deal_id, context, result))
             .collect::<Vec<_>>();
         let working_url = url_results
             .iter()
-            .filter(|result| result.success)
-            .max_by_key(|result| result.content_length)
+            .filter(|result| result.size_matched)
+            .max_by_key(|result| result.observed_size_bytes)
             .map(|result| result.url.clone());
         let result_code = if working_url.is_some() {
             ResultCode::Success
         } else {
             ResultCode::FailedToGetWorkingUrl
         };
+        let manifest_size_bytes = manifest_size_bytes(&stored.pieces);
+        let content_matches_deal = content_matches_deal(
+            stored.target.deal_size_bytes.as_ref(),
+            manifest_size_bytes.as_ref(),
+        );
 
         self.repo
             .insert_completed_run_with_piece_results(&NewCompletedDealSliRun {
@@ -230,12 +278,19 @@ impl DealSliService {
                 provider_id: stored.target.provider_id.clone(),
                 client_id: stored.target.client_id.clone(),
                 working_url,
-                retrievability_percent: percent(success_count, piece_count),
-                large_files_percent: percent(large_piece_indexes.len() as i32, piece_count),
-                car_files_percent: percent(car_piece_indexes.len() as i32, piece_count),
+                retrievability_percent: percent(aggregate.retrievable_count, sampled_piece_count),
+                large_files_percent: None,
+                car_files_percent: None,
                 sector_utilization_percent: None,
-                is_consistent: Some(url_results.iter().all(|result| result.consistent)),
-                is_reliable: Some(success_count == piece_count),
+                manifest_snapshot_id: Some(manifest_snapshot_id),
+                deal_size_bytes: stored.target.deal_size_bytes.clone(),
+                manifest_size_bytes,
+                content_matches_deal: Some(content_matches_deal),
+                sampled_piece_count: Some(sampled_piece_count),
+                size_matched_percent: percent(aggregate.size_matched_count, sampled_piece_count),
+                avg_response_time_ms: average_response_time_ms(&url_results),
+                is_consistent: None,
+                is_reliable: Some(success_count == sampled_piece_count),
                 result_code,
                 piece_count,
                 success_count,
@@ -251,6 +306,9 @@ impl DealSliService {
 struct DealSliPieceTestContext {
     piece_index: i32,
     piece_cid: String,
+    manifest_snapshot_id: Option<Uuid>,
+    file_size_bytes: Option<BigDecimal>,
+    expected_file_size_bytes: Option<i64>,
     url: String,
 }
 
@@ -265,9 +323,41 @@ fn build_piece_test_contexts(
             pieces.iter().map(move |piece| DealSliPieceTestContext {
                 piece_index: piece.piece_index,
                 piece_cid: piece.piece_cid.clone(),
-                url: format!("{endpoint}/piece/{}", piece.piece_cid),
+                manifest_snapshot_id: piece.manifest_snapshot_id,
+                file_size_bytes: piece.file_size_bytes.clone(),
+                expected_file_size_bytes: piece
+                    .file_size_bytes
+                    .as_ref()
+                    .and_then(bigdecimal_to_i64),
+                url: format!("{endpoint}/piece/{}", urlencoding::encode(&piece.piece_cid)),
             })
         })
+        .collect()
+}
+
+fn sample_manifest_pieces(
+    pieces: &[DealSliPiece],
+    manifest_snapshot_id: Uuid,
+    sample_size: usize,
+) -> Vec<DealSliPiece> {
+    let candidates = pieces
+        .iter()
+        .filter(|piece| piece.manifest_snapshot_id == Some(manifest_snapshot_id))
+        .collect::<Vec<_>>();
+
+    if candidates.len() <= sample_size {
+        return candidates.into_iter().cloned().collect();
+    }
+
+    let mut rng = rand::rng();
+    let mut indexes = BTreeSet::new();
+    while indexes.len() < sample_size {
+        indexes.insert(rng.random_range(0..candidates.len()));
+    }
+
+    indexes
+        .into_iter()
+        .map(|index| candidates[index].clone())
         .collect()
 }
 
@@ -278,30 +368,65 @@ fn target_piece_snapshots(pieces: &[DealSliPiece]) -> Vec<DealSliRunPieceSnapsho
             piece_index: piece.piece_index,
             piece_cid: piece.piece_cid.clone(),
             piece_size_bytes: piece.piece_size_bytes.clone(),
+            manifest_snapshot_id: piece.manifest_snapshot_id,
+            file_size_bytes: piece.file_size_bytes.clone(),
         })
         .collect()
 }
 
-fn map_piece_result(
+fn map_manifest_piece_result(
     deal_id: &str,
     context: &DealSliPieceTestContext,
-    result: &UrlTestResult,
+    result: &ManifestUrlTestResult,
 ) -> NewDealSliPieceResult {
     NewDealSliPieceResult {
         deal_id: deal_id.to_string(),
         piece_index: context.piece_index,
         piece_cid: context.piece_cid.clone(),
         url_tested: result.url.clone(),
-        success: result.success,
-        content_length: result
-            .content_length
-            .and_then(|value| i64::try_from(value).ok()),
-        is_valid_car: result.is_valid_car,
-        result_code: if result.success {
+        success: result.size_matched,
+        content_length: result.observed_size_bytes,
+        manifest_snapshot_id: context.manifest_snapshot_id,
+        file_size_bytes: context.file_size_bytes.clone(),
+        observed_size_bytes: result.observed_size_bytes,
+        size_matched: Some(result.size_matched),
+        manifest_response_time_ms: result.response_time_ms,
+        is_valid_car: false,
+        result_code: if result.size_matched {
             ResultCode::Success
         } else {
             ResultCode::FailedToGetWorkingUrl
         },
+    }
+}
+
+#[derive(Debug, Default)]
+struct ManifestResultAggregate {
+    retrievable_count: i32,
+    size_matched_count: i32,
+}
+
+fn aggregate_manifest_results(
+    contexts: &[DealSliPieceTestContext],
+    results: &[ManifestUrlTestResult],
+) -> ManifestResultAggregate {
+    let mut by_piece = BTreeMap::<i32, (bool, bool)>::new();
+
+    for (context, result) in contexts.iter().zip(results) {
+        let entry = by_piece.entry(context.piece_index).or_default();
+        entry.0 |= result.retrievable;
+        entry.1 |= context.expected_file_size_bytes.is_some() && result.size_matched;
+    }
+
+    ManifestResultAggregate {
+        retrievable_count: by_piece
+            .values()
+            .filter(|(retrievable, _)| *retrievable)
+            .count() as i32,
+        size_matched_count: by_piece
+            .values()
+            .filter(|(_, size_matched)| *size_matched)
+            .count() as i32,
     }
 }
 
@@ -315,6 +440,48 @@ fn percent(numerator: i32, denominator: i32) -> Option<BigDecimal> {
         f64::from(numerator) * 100.0 / f64::from(denominator)
     ))
     .ok()
+}
+
+fn average_response_time_ms(results: &[ManifestUrlTestResult]) -> Option<BigDecimal> {
+    let response_times = results
+        .iter()
+        .filter_map(|result| result.response_time_ms)
+        .collect::<Vec<_>>();
+
+    if response_times.is_empty() {
+        return None;
+    }
+
+    BigDecimal::from_str(&format!(
+        "{:.2}",
+        response_times.iter().sum::<i64>() as f64 / response_times.len() as f64
+    ))
+    .ok()
+}
+
+fn manifest_size_bytes(pieces: &[DealSliPiece]) -> Option<BigDecimal> {
+    pieces.iter().try_fold(BigDecimal::from(0), |acc, piece| {
+        piece
+            .piece_size_bytes
+            .as_ref()
+            .map(|piece_size| acc + piece_size.clone())
+    })
+}
+
+fn content_matches_deal(
+    deal_size_bytes: Option<&BigDecimal>,
+    manifest_size_bytes: Option<&BigDecimal>,
+) -> bool {
+    match (deal_size_bytes, manifest_size_bytes) {
+        (Some(deal_size_bytes), Some(manifest_size_bytes)) => {
+            deal_size_bytes == manifest_size_bytes
+        }
+        _ => false,
+    }
+}
+
+fn bigdecimal_to_i64(value: &BigDecimal) -> Option<i64> {
+    value.to_string().parse().ok()
 }
 
 fn validate_deal_id(deal_id: &str) -> std::result::Result<(), DealSliServiceError> {
@@ -332,6 +499,7 @@ fn map_target_write_error(error: color_eyre::Report) -> DealSliServiceError {
     if message.contains("deal SLI pieces contain duplicate")
         || message.contains("deal SLI pieces cannot be added or removed")
         || message.contains("cid or size cannot change")
+        || message.contains("target identity cannot change")
     {
         return DealSliServiceError::InvalidRequest(message);
     }
@@ -348,16 +516,22 @@ fn map_run_insert_error(error: color_eyre::Report) -> DealSliServiceError {
     DealSliServiceError::Internal(error)
 }
 
-fn parse_piece_size_bytes(value: String) -> std::result::Result<BigDecimal, DealSliServiceError> {
-    if value.is_empty() || !value.chars().all(|c| c.is_ascii_digit()) {
-        return Err(DealSliServiceError::InvalidRequest(
-            "piece_size_bytes must be a base-10 integer string".to_string(),
-        ));
+fn parse_decimal_string(
+    value: String,
+    field: &str,
+) -> std::result::Result<BigDecimal, DealSliServiceError> {
+    if value.is_empty()
+        || value.len() > MAX_NUMERIC_DIGITS
+        || !value.chars().all(|c| c.is_ascii_digit())
+    {
+        return Err(DealSliServiceError::InvalidRequest(format!(
+            "{field} must be a base-10 integer string"
+        )));
     }
 
     value.parse::<BigDecimal>().map_err(|error| {
         DealSliServiceError::InvalidRequest(format!(
-            "piece_size_bytes must be a base-10 integer string: {error}"
+            "{field} must be a base-10 integer string: {error}"
         ))
     })
 }
@@ -397,33 +571,23 @@ fn map_upsert_request(
     deal_id: &str,
     request: DealTargetUpsertRequest,
 ) -> std::result::Result<NewDealSliTarget, DealSliServiceError> {
-    if request.pieces.is_empty() {
+    if !request.pieces.is_empty() {
         return Err(DealSliServiceError::InvalidRequest(
-            "pieces must not be empty".to_string(),
+            "pieces must not be sent for manifest-backed Deal SLI registration".to_string(),
         ));
     }
 
-    let pieces = request
-        .pieces
-        .into_iter()
-        .enumerate()
-        .map(
-            |(index, piece)| -> std::result::Result<NewDealSliPiece, DealSliServiceError> {
-                let piece_size_bytes = piece
-                    .piece_size_bytes
-                    .map(parse_piece_size_bytes)
-                    .transpose()?;
-
-                Ok(NewDealSliPiece {
-                    piece_index: index as i32,
-                    piece_cid: piece.piece_cid,
-                    piece_size_bytes,
-                    allocation_id: piece.allocation_id,
-                    claim_id: piece.claim_id,
-                })
-            },
-        )
-        .collect::<std::result::Result<Vec<_>, _>>()?;
+    if request.manifest_hash.trim().is_empty() {
+        return Err(DealSliServiceError::InvalidRequest(
+            "manifest_hash must not be empty".to_string(),
+        ));
+    }
+    if request.manifest_location.trim().is_empty() {
+        return Err(DealSliServiceError::InvalidRequest(
+            "manifest_location must not be empty".to_string(),
+        ));
+    }
+    let deal_size_bytes = parse_decimal_string(request.deal_size_bytes, "deal_size_bytes")?;
 
     let requirements = match request.requirements {
         Some(requirements) => DealSliRequirementValues {
@@ -447,21 +611,61 @@ fn map_upsert_request(
         },
         provider_id: normalize_provider_id(request.provider_id)?,
         client_id: request.client,
-        manifest_hash: request.manifest_hash,
-        manifest_location: request.manifest_location,
+        deal_size_bytes: Some(deal_size_bytes),
+        manifest_hash: Some(request.manifest_hash),
+        manifest_location: Some(request.manifest_location),
         requirements,
-        pieces,
+        pieces: Vec::new(),
     })
 }
 
+fn map_manifest_snapshot(
+    deal_id: &str,
+    fetched: &FetchedManifestSnapshot,
+) -> NewDealSliManifestSnapshot {
+    NewDealSliManifestSnapshot {
+        deal_id: deal_id.to_string(),
+        manifest_hash: fetched.manifest_hash.clone(),
+        manifest_location: fetched.manifest_location.clone(),
+        raw_content: fetched.raw_content.clone(),
+        parsed_content: fetched.parsed_content.clone(),
+        content_byte_length: fetched.content_byte_length,
+        computed_hash: fetched.computed_hash.clone(),
+    }
+}
+
+fn map_manifest_pieces(fetched: FetchedManifestSnapshot) -> Vec<NewDealSliPiece> {
+    fetched
+        .pieces
+        .into_iter()
+        .map(|piece| NewDealSliPiece {
+            piece_index: piece.piece_index,
+            piece_cid: piece.piece_cid,
+            piece_size_bytes: piece.piece_size_bytes,
+            manifest_snapshot_id: None,
+            file_size_bytes: piece.file_size_bytes,
+            root_cid: piece.root_cid,
+            storage_path: piece.storage_path,
+            piece_type: piece.piece_type,
+            allocation_id: None,
+            claim_id: None,
+        })
+        .collect()
+}
+
 fn map_target_response(stored: DealSliTargetWithPieces) -> DealTargetResponse {
+    let piece_count = stored.pieces.len() as u32;
     DealTargetResponse {
         deal_id: stored.target.deal_id,
         deal_version: DealVersion::V2,
         provider_id: Some(stored.target.provider_id),
         client: stored.target.client_id,
+        deal_size_bytes: stored.target.deal_size_bytes.map(|value| value.to_string()),
         manifest_hash: stored.target.manifest_hash,
         manifest_location: stored.target.manifest_location,
+        manifest_snapshot: stored
+            .manifest_snapshot
+            .map(|snapshot| map_manifest_snapshot_response(snapshot, piece_count)),
         requirements: map_requirements(
             stored.target.retrievability_bps,
             stored.target.bandwidth_mbps,
@@ -473,12 +677,30 @@ fn map_target_response(stored: DealSliTargetWithPieces) -> DealTargetResponse {
             .map(|piece| DealPieceTarget {
                 piece_cid: piece.piece_cid,
                 piece_size_bytes: piece.piece_size_bytes.map(|value| value.to_string()),
+                file_size_bytes: piece.file_size_bytes.map(|value| value.to_string()),
+                root_cid: piece.root_cid,
+                storage_path: piece.storage_path,
+                piece_type: piece.piece_type,
                 allocation_id: piece.allocation_id,
                 claim_id: piece.claim_id,
             })
             .collect(),
         created_at: Some(stored.target.created_at),
         updated_at: Some(stored.target.updated_at),
+    }
+}
+
+fn map_manifest_snapshot_response(
+    snapshot: DealSliManifestSnapshot,
+    piece_count: u32,
+) -> DealManifestSnapshotResponse {
+    DealManifestSnapshotResponse {
+        id: snapshot.id.to_string(),
+        manifest_hash: snapshot.manifest_hash,
+        manifest_location: snapshot.manifest_location,
+        fetched_at: snapshot.fetched_at,
+        content_byte_length: snapshot.content_byte_length,
+        piece_count,
     }
 }
 
@@ -512,6 +734,19 @@ fn map_latest_response(run: DealSliLatestRun) -> DealLatestMeasurementResponse {
         car_files_percent: run.car_files_percent.as_ref().and_then(bigdecimal_to_f64),
         sector_utilization_percent: run
             .sector_utilization_percent
+            .as_ref()
+            .and_then(bigdecimal_to_f64),
+        manifest_snapshot_id: run.manifest_snapshot_id.map(|id| id.to_string()),
+        deal_size_bytes: run.deal_size_bytes.map(|value| value.to_string()),
+        manifest_size_bytes: run.manifest_size_bytes.map(|value| value.to_string()),
+        content_matches_deal: run.content_matches_deal,
+        sampled_piece_count: run.sampled_piece_count.map(|value| value as u32),
+        size_matched_percent: run
+            .size_matched_percent
+            .as_ref()
+            .and_then(bigdecimal_to_f64),
+        avg_response_time_ms: run
+            .avg_response_time_ms
             .as_ref()
             .and_then(bigdecimal_to_f64),
         is_consistent: run.is_consistent,

@@ -1,0 +1,70 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                            id,\n                            deal_id,\n                            manifest_hash,\n                            manifest_location,\n                            raw_content,\n                            parsed_content,\n                            fetched_at,\n                            content_byte_length,\n                            computed_hash\n                       FROM\n                            deal_sli_manifest_snapshots\n                       WHERE\n                            id = $1\n                    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "deal_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "manifest_hash",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "manifest_location",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "raw_content",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "parsed_content",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 6,
+        "name": "fetched_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "content_byte_length",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 8,
+        "name": "computed_hash",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "78ade75e5ba1027b9cda44fd79f49f36934b55ff121f87ff86acbf3ab3857b45"
+}
