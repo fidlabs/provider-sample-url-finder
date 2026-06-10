@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                active_manifest_snapshot_id\n           FROM\n                deal_sli_targets\n           WHERE\n                deal_id = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "active_manifest_snapshot_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "4b564d46dfad7b1ea2595af3d89a596ee3426b41f77144db68d7d8ff6bc3eb07"
+}

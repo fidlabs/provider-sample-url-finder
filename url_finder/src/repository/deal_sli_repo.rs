@@ -30,7 +30,6 @@ pub struct NewDealSliTarget {
     pub manifest_hash: Option<String>,
     pub manifest_location: Option<String>,
     pub requirements: DealSliRequirementValues,
-    pub pieces: Vec<NewDealSliPiece>,
 }
 
 #[derive(Debug, Clone)]
@@ -108,6 +107,13 @@ pub struct DealSliTargetWithPieces {
     pub target: DealSliTarget,
     pub manifest_snapshot: Option<DealSliManifestSnapshot>,
     pub pieces: Vec<DealSliPiece>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DealSliRunTarget {
+    pub target: DealSliTarget,
+    pub manifest_piece_count: i64,
+    pub manifest_size_bytes: Option<BigDecimal>,
 }
 
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -220,181 +226,6 @@ struct InsertedDealSliRun {
 impl DealSliRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
-    }
-
-    pub async fn upsert_target(&self, target: &NewDealSliTarget) -> Result<()> {
-        let mut tx = self.pool.begin().await?;
-
-        sqlx::query_scalar!(
-            r#"SELECT
-                    deal_id
-               FROM
-                    deal_sli_targets
-               WHERE
-                    deal_id = $1
-               FOR UPDATE
-            "#,
-            &target.deal_id
-        )
-        .fetch_optional(&mut *tx)
-        .await?;
-
-        let existing_pieces = sqlx::query_as!(
-            DealSliPiece,
-            r#"SELECT
-                    deal_id,
-                    piece_index,
-                    piece_cid,
-                    piece_size_bytes,
-                    manifest_snapshot_id,
-                    file_size_bytes,
-                    root_cid,
-                    storage_path,
-                    piece_type,
-                    allocation_id,
-                    claim_id
-               FROM
-                    deal_sli_pieces
-               WHERE
-                    deal_id = $1
-               ORDER BY
-                    piece_index ASC
-            "#,
-            &target.deal_id
-        )
-        .fetch_all(&mut *tx)
-        .await?;
-
-        let has_runs = sqlx::query_scalar!(
-            r#"SELECT
-                    EXISTS (
-                        SELECT
-                            1
-                        FROM
-                            deal_sli_runs
-                        WHERE
-                            deal_id = $1
-                    ) AS "exists!"
-            "#,
-            &target.deal_id
-        )
-        .fetch_one(&mut *tx)
-        .await?;
-
-        if has_runs {
-            validate_measured_pieces_are_unchanged(&target.pieces, &existing_pieces)?;
-        }
-
-        sqlx::query!(
-            r#"INSERT INTO
-                    deal_sli_targets (
-                        deal_id,
-                        deal_version,
-                        provider_id,
-                        client_id,
-                        deal_size_bytes,
-                        manifest_hash,
-                        manifest_location,
-                        retrievability_bps,
-                        bandwidth_mbps,
-                        latency_ms
-                    )
-               VALUES
-                    ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-               ON CONFLICT (deal_id) DO UPDATE SET
-                    deal_version = EXCLUDED.deal_version,
-                    provider_id = EXCLUDED.provider_id,
-                    client_id = EXCLUDED.client_id,
-                    deal_size_bytes = EXCLUDED.deal_size_bytes,
-                    manifest_hash = EXCLUDED.manifest_hash,
-                    manifest_location = EXCLUDED.manifest_location,
-                    retrievability_bps = EXCLUDED.retrievability_bps,
-                    bandwidth_mbps = EXCLUDED.bandwidth_mbps,
-                    latency_ms = EXCLUDED.latency_ms,
-                    updated_at = NOW()
-            "#,
-            &target.deal_id,
-            &target.deal_version,
-            &target.provider_id,
-            target.client_id.as_deref(),
-            target.deal_size_bytes.as_ref(),
-            target.manifest_hash.as_deref(),
-            target.manifest_location.as_deref(),
-            target.requirements.retrievability_bps,
-            target.requirements.bandwidth_mbps,
-            target.requirements.latency_ms
-        )
-        .execute(&mut *tx)
-        .await?;
-
-        if !has_runs {
-            let piece_indexes = target
-                .pieces
-                .iter()
-                .map(|piece| piece.piece_index)
-                .collect::<Vec<_>>();
-
-            sqlx::query!(
-                r#"DELETE FROM
-                        deal_sli_pieces
-                   WHERE
-                        deal_id = $1
-                        AND NOT (piece_index = ANY($2::int4[]))
-                "#,
-                &target.deal_id,
-                &piece_indexes
-            )
-            .execute(&mut *tx)
-            .await?;
-        }
-
-        for piece in &target.pieces {
-            sqlx::query!(
-                r#"INSERT INTO
-                        deal_sli_pieces (
-                            deal_id,
-                            piece_index,
-                            piece_cid,
-                            piece_size_bytes,
-                            manifest_snapshot_id,
-                            file_size_bytes,
-                            root_cid,
-                            storage_path,
-                            piece_type,
-                            allocation_id,
-                            claim_id
-                        )
-                   VALUES
-                        ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-                   ON CONFLICT (deal_id, piece_index) DO UPDATE SET
-                        piece_cid = EXCLUDED.piece_cid,
-                        piece_size_bytes = EXCLUDED.piece_size_bytes,
-                        manifest_snapshot_id = EXCLUDED.manifest_snapshot_id,
-                        file_size_bytes = EXCLUDED.file_size_bytes,
-                        root_cid = EXCLUDED.root_cid,
-                        storage_path = EXCLUDED.storage_path,
-                        piece_type = EXCLUDED.piece_type,
-                        allocation_id = EXCLUDED.allocation_id,
-                        claim_id = EXCLUDED.claim_id
-                "#,
-                &target.deal_id,
-                piece.piece_index,
-                &piece.piece_cid,
-                piece.piece_size_bytes.as_ref(),
-                piece.manifest_snapshot_id,
-                piece.file_size_bytes.as_ref(),
-                piece.root_cid.as_deref(),
-                piece.storage_path.as_deref(),
-                piece.piece_type.as_deref(),
-                piece.allocation_id.as_deref(),
-                piece.claim_id.as_deref()
-            )
-            .execute(&mut *tx)
-            .await?;
-        }
-
-        tx.commit().await?;
-        Ok(())
     }
 
     pub async fn upsert_manifest_target(
@@ -759,6 +590,67 @@ impl DealSliRepository {
         .await?)
     }
 
+    pub async fn get_run_target(&self, deal_id: &str) -> Result<Option<DealSliRunTarget>> {
+        let Some(target) = sqlx::query_as!(
+            DealSliTarget,
+            r#"SELECT
+                    deal_id,
+                    deal_version,
+                    provider_id,
+                    client_id,
+                    deal_size_bytes,
+                    manifest_hash,
+                    manifest_location,
+                    active_manifest_snapshot_id,
+                    retrievability_bps,
+                    bandwidth_mbps,
+                    latency_ms,
+                    created_at,
+                    updated_at
+               FROM
+                    deal_sli_targets
+               WHERE
+                    deal_id = $1
+            "#,
+            deal_id
+        )
+        .fetch_optional(&self.pool)
+        .await?
+        else {
+            return Ok(None);
+        };
+
+        let Some(snapshot_id) = target.active_manifest_snapshot_id else {
+            return Ok(Some(DealSliRunTarget {
+                target,
+                manifest_piece_count: 0,
+                manifest_size_bytes: None,
+            }));
+        };
+
+        let manifest_piece_count = self.get_manifest_piece_count(deal_id, snapshot_id).await?;
+        let manifest_size_bytes = sqlx::query_scalar!(
+            r#"SELECT
+                    SUM(piece_size_bytes) AS "manifest_size_bytes"
+               FROM
+                    deal_sli_pieces
+               WHERE
+                    deal_id = $1
+                    AND manifest_snapshot_id = $2
+            "#,
+            deal_id,
+            snapshot_id
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(Some(DealSliRunTarget {
+            target,
+            manifest_piece_count,
+            manifest_size_bytes,
+        }))
+    }
+
     pub async fn get_manifest_piece_count(
         &self,
         deal_id: &str,
@@ -838,32 +730,13 @@ impl DealSliRepository {
         .fetch_one(&mut *tx)
         .await?;
 
-        let current_pieces = sqlx::query_as!(
-            DealSliPiece,
-            r#"SELECT
-                    deal_id,
-                    piece_index,
-                    piece_cid,
-                    piece_size_bytes,
-                    manifest_snapshot_id,
-                    file_size_bytes,
-                    root_cid,
-                    storage_path,
-                    piece_type,
-                    allocation_id,
-                    claim_id
-               FROM
-                    deal_sli_pieces
-               WHERE
-                    deal_id = $1
-               ORDER BY
-                    piece_index ASC
-            "#,
-            &run.deal_id
+        validate_run_sampled_pieces_are_current(
+            &mut tx,
+            &run.deal_id,
+            run.manifest_snapshot_id,
+            &run.target_pieces,
         )
-        .fetch_all(&mut *tx)
         .await?;
-        validate_run_target_pieces_are_current(&run.target_pieces, &current_pieces)?;
 
         let inserted = sqlx::query_as!(
             InsertedDealSliRun,
@@ -1084,22 +957,71 @@ fn validate_measured_target_is_unchanged(
     Ok(())
 }
 
-fn validate_run_target_pieces_are_current(
+async fn validate_run_sampled_pieces_are_current(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    deal_id: &str,
+    expected_active_manifest_snapshot_id: Option<Uuid>,
     expected_pieces: &[DealSliRunPieceSnapshot],
-    current_pieces: &[DealSliPiece],
 ) -> Result<()> {
-    if expected_pieces.len() != current_pieces.len() {
+    let active_manifest_snapshot_id = sqlx::query_scalar!(
+        r#"SELECT
+                active_manifest_snapshot_id
+           FROM
+                deal_sli_targets
+           WHERE
+                deal_id = $1
+        "#,
+        deal_id
+    )
+    .fetch_one(&mut **tx)
+    .await?;
+
+    if active_manifest_snapshot_id != expected_active_manifest_snapshot_id {
         return Err(eyre!(
-            "deal SLI run target pieces changed before run insertion"
+            "deal SLI target active manifest snapshot changed before run insertion"
         ));
     }
 
-    for (expected, current) in expected_pieces.iter().zip(current_pieces) {
-        if expected.piece_index != current.piece_index
-            || expected.piece_cid != current.piece_cid
+    for expected in expected_pieces {
+        let current = sqlx::query_as!(
+            DealSliPiece,
+            r#"SELECT
+                    deal_id,
+                    piece_index,
+                    piece_cid,
+                    piece_size_bytes,
+                    manifest_snapshot_id,
+                    file_size_bytes,
+                    root_cid,
+                    storage_path,
+                    piece_type,
+                    allocation_id,
+                    claim_id
+               FROM
+                    deal_sli_pieces
+               WHERE
+                    deal_id = $1
+                    AND piece_index = $2
+                    AND manifest_snapshot_id = $3
+            "#,
+            deal_id,
+            expected.piece_index,
+            expected.manifest_snapshot_id
+        )
+        .fetch_optional(&mut **tx)
+        .await?;
+
+        let Some(current) = current else {
+            return Err(eyre!(
+                "deal SLI run target piece {} changed before run insertion",
+                expected.piece_index
+            ));
+        };
+
+        if expected.piece_cid != current.piece_cid
             || expected.piece_size_bytes != current.piece_size_bytes
-            || expected.manifest_snapshot_id != current.manifest_snapshot_id
             || expected.file_size_bytes != current.file_size_bytes
+            || expected.manifest_snapshot_id != current.manifest_snapshot_id
         {
             return Err(eyre!(
                 "deal SLI run target piece {} changed before run insertion",

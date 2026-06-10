@@ -8,12 +8,9 @@ fn deal_request() -> Value {
         "deal_version": "v2",
         "provider_id": "1234",
         "client": "5678",
-        "pieces": [{
-            "piece_cid": "baga6ea4seaq",
-            "piece_size_bytes": "1024",
-            "allocation_id": "44",
-            "claim_id": "44"
-        }]
+        "deal_size_bytes": "1024",
+        "manifest_hash": "43ff1a93b66d742e9f9efc3305acaa51c9297b7000145f35e968e2b42e7bf328",
+        "manifest_location": "https://example.com/manifest.json"
     })
 }
 

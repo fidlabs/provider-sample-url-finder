@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                    SUM(piece_size_bytes) AS \"manifest_size_bytes\"\n               FROM\n                    deal_sli_pieces\n               WHERE\n                    deal_id = $1\n                    AND manifest_snapshot_id = $2\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "manifest_size_bytes",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "58e7ed5e8c50ae72e4846cf06b8e3422b2694509b6c9d8e5eba7e4d1d7601b8e"
+}

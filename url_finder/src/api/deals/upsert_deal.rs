@@ -6,15 +6,11 @@ use axum::{
 };
 use axum_extra::extract::WithRejection;
 
-use super::{DealPath, DealTargetResponse, DealTargetUpsertRequest};
+use super::{DealPath, DealTargetResponse, DealTargetUpsertRequest, deal_sli_response};
 use crate::{
     AppState,
-    api_response::{
-        ApiResponse, ErrorCode, ErrorResponse, bad_request_with_code,
-        internal_server_error_with_code, not_found_with_code, ok_response,
-    },
+    api_response::{ApiResponse, ErrorResponse},
     auth::OracleAuth,
-    services::deal_sli_service::DealSliServiceError,
 };
 
 #[utoipa::path(
@@ -43,21 +39,10 @@ pub async fn handle_upsert_deal(
         ApiResponse<ErrorResponse>,
     >,
 ) -> Result<ApiResponse<DealTargetResponse>, ApiResponse<()>> {
-    let response = state
-        .deal_sli_service
-        .upsert_target(&path.deal_id, request)
-        .await;
-    match response {
-        Ok(data) => Ok(ok_response(data)),
-        Err(DealSliServiceError::InvalidRequest(message)) => {
-            Err(bad_request_with_code(ErrorCode::InvalidRequest, message))
-        }
-        Err(DealSliServiceError::NotFound(message)) => {
-            Err(not_found_with_code(ErrorCode::NotFound, message))
-        }
-        Err(DealSliServiceError::Internal(error)) => Err(internal_server_error_with_code(
-            ErrorCode::InternalError,
-            error.to_string(),
-        )),
-    }
+    deal_sli_response(
+        state
+            .deal_sli_service
+            .upsert_target(&path.deal_id, request)
+            .await,
+    )
 }

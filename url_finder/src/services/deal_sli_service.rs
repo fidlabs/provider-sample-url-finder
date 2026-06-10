@@ -1,26 +1,21 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    str::FromStr,
-    sync::Arc,
-};
+use std::{collections::BTreeMap, str::FromStr, sync::Arc};
 
-use rand::Rng;
 use sqlx::types::BigDecimal;
 use uuid::Uuid;
 
 use crate::{
     api::deals::{
-        DealLatestMeasurementResponse, DealManifestSnapshotResponse, DealPerformanceResponse,
-        DealPieceTarget, DealSliRequirements, DealTargetResponse, DealTargetUpsertRequest,
-        DealVersion, MeasurementState,
+        DealLatestMeasurementResponse, DealManifestSnapshotResponse, DealPieceTarget,
+        DealSliRequirements, DealTargetResponse, DealTargetUpsertRequest, DealVersion,
+        MeasurementState,
     },
     config::Config,
     http_client::build_client,
     repository::{
         DealSliLatestRun, DealSliManifestSnapshot, DealSliPiece, DealSliRepository,
-        DealSliRequirementValues, DealSliRunPieceSnapshot, DealSliTargetWithPieces,
-        NewCompletedDealSliRun, NewDealSliManifestSnapshot, NewDealSliPiece, NewDealSliPieceResult,
-        NewDealSliTarget, StorageProviderRepository,
+        DealSliRequirementValues, DealSliRunPieceSnapshot, DealSliRunTarget,
+        DealSliTargetWithPieces, NewCompletedDealSliRun, NewDealSliManifestSnapshot,
+        NewDealSliPiece, NewDealSliPieceResult, NewDealSliTarget, StorageProviderRepository,
     },
     services::deal_manifest::{FetchedManifestSnapshot, fetch_manifest_snapshot},
     types::{ErrorCode, ProviderAddress, ProviderId, ResultCode},
@@ -134,13 +129,14 @@ impl DealSliService {
     ) -> std::result::Result<DealLatestMeasurementResponse, DealSliServiceError> {
         validate_deal_id(deal_id)?;
 
-        let stored = self.repo.get_target(deal_id).await?.ok_or_else(|| {
+        let run_target = self.repo.get_run_target(deal_id).await?.ok_or_else(|| {
             DealSliServiceError::NotFound(format!("Deal target {deal_id} not found"))
         })?;
 
-        let provider_id = ProviderId::new(stored.target.provider_id.clone()).map_err(|error| {
-            DealSliServiceError::InvalidRequest(format!("Invalid provider_id: {error}"))
-        })?;
+        let provider_id =
+            ProviderId::new(run_target.target.provider_id.clone()).map_err(|error| {
+                DealSliServiceError::InvalidRequest(format!("Invalid provider_id: {error}"))
+            })?;
 
         let cached_endpoints = self
             .storage_provider_repo
@@ -151,42 +147,13 @@ impl DealSliService {
 
         let latest = match cached_endpoints {
             Some(endpoints) => {
-                self.run_cached_endpoint_measurement(deal_id, &stored, endpoints)
+                self.run_cached_endpoint_measurement(deal_id, &run_target, endpoints)
                     .await?
             }
             None => {
-                let manifest_size_bytes = manifest_size_bytes(&stored.pieces);
-                let content_matches_deal = content_matches_deal(
-                    stored.target.deal_size_bytes.as_ref(),
-                    manifest_size_bytes.as_ref(),
-                );
+                let run = build_no_endpoint_run(deal_id, &run_target)?;
                 self.repo
-                    .insert_completed_run_with_piece_results(&NewCompletedDealSliRun {
-                        deal_id: deal_id.to_string(),
-                        target_pieces: target_piece_snapshots(&stored.pieces),
-                        measurement_state: MeasurementState::Failed.as_str().to_string(),
-                        provider_id: stored.target.provider_id.clone(),
-                        client_id: stored.target.client_id.clone(),
-                        working_url: None,
-                        retrievability_percent: None,
-                        large_files_percent: None,
-                        car_files_percent: None,
-                        sector_utilization_percent: None,
-                        manifest_snapshot_id: stored.target.active_manifest_snapshot_id,
-                        deal_size_bytes: stored.target.deal_size_bytes.clone(),
-                        manifest_size_bytes,
-                        content_matches_deal: Some(content_matches_deal),
-                        sampled_piece_count: Some(0),
-                        size_matched_percent: None,
-                        avg_response_time_ms: None,
-                        is_consistent: None,
-                        is_reliable: None,
-                        result_code: ResultCode::MissingHttpAddrFromCidContact,
-                        piece_count: stored.pieces.len() as i32,
-                        success_count: 0,
-                        failed_count: 0,
-                        piece_results: Vec::new(),
-                    })
+                    .insert_completed_run_with_piece_results(&run)
                     .await
                     .map_err(map_run_insert_error)?
             }
@@ -198,22 +165,28 @@ impl DealSliService {
     async fn run_cached_endpoint_measurement(
         &self,
         deal_id: &str,
-        stored: &DealSliTargetWithPieces,
+        run_target: &DealSliRunTarget,
         endpoints: Vec<String>,
     ) -> std::result::Result<DealSliLatestRun, DealSliServiceError> {
         let client = build_client(&self.config)
             .map_err(|error| DealSliServiceError::Internal(color_eyre::Report::from(error)))?;
-        let manifest_snapshot_id = stored.target.active_manifest_snapshot_id.ok_or_else(|| {
-            DealSliServiceError::InvalidRequest("missing manifest snapshot".to_string())
+        let manifest_snapshot_id =
+            run_target
+                .target
+                .active_manifest_snapshot_id
+                .ok_or_else(|| {
+                    DealSliServiceError::InvalidRequest("missing manifest snapshot".to_string())
+                })?;
+        let total_piece_count = usize::try_from(run_target.manifest_piece_count).map_err(|_| {
+            DealSliServiceError::InvalidRequest(
+                "manifest piece count exceeds usize::MAX".to_string(),
+            )
         })?;
-        let total_piece_count = stored
-            .pieces
-            .iter()
-            .filter(|piece| piece.manifest_snapshot_id == Some(manifest_snapshot_id))
-            .count();
         let sample_size = total_piece_count.min(MANIFEST_SAMPLE_SIZE as usize);
-        let sampled_pieces =
-            sample_manifest_pieces(&stored.pieces, manifest_snapshot_id, sample_size);
+        let sampled_pieces = self
+            .repo
+            .sample_manifest_pieces(deal_id, manifest_snapshot_id, sample_size as i64)
+            .await?;
         let planned_url_tests = endpoints
             .len()
             .checked_mul(sampled_pieces.len())
@@ -241,62 +214,17 @@ impl DealSliService {
         let url_results = test_manifest_urls_double_tap(&client, tests).await;
         let aggregate = aggregate_manifest_results(&test_contexts, &url_results);
 
-        let piece_count = i32::try_from(total_piece_count).map_err(|_| {
-            DealSliServiceError::InvalidRequest("manifest piece count exceeds i32::MAX".to_string())
-        })?;
-        let sampled_piece_count = i32::try_from(sampled_pieces.len()).map_err(|_| {
-            DealSliServiceError::InvalidRequest("sampled piece count exceeds i32::MAX".to_string())
-        })?;
-        let success_count = aggregate.size_matched_count;
-        let failed_count = sampled_piece_count - success_count;
-        let piece_results = test_contexts
-            .iter()
-            .zip(url_results.iter())
-            .map(|(context, result)| map_manifest_piece_result(deal_id, context, result))
-            .collect::<Vec<_>>();
-        let working_url = url_results
-            .iter()
-            .filter(|result| result.size_matched)
-            .max_by_key(|result| result.observed_size_bytes)
-            .map(|result| result.url.clone());
-        let result_code = if working_url.is_some() {
-            ResultCode::Success
-        } else {
-            ResultCode::FailedToGetWorkingUrl
-        };
-        let manifest_size_bytes = manifest_size_bytes(&stored.pieces);
-        let content_matches_deal = content_matches_deal(
-            stored.target.deal_size_bytes.as_ref(),
-            manifest_size_bytes.as_ref(),
-        );
+        let run = build_manifest_measurement_run(
+            deal_id,
+            run_target,
+            &sampled_pieces,
+            &test_contexts,
+            &url_results,
+            &aggregate,
+        )?;
 
         self.repo
-            .insert_completed_run_with_piece_results(&NewCompletedDealSliRun {
-                deal_id: deal_id.to_string(),
-                target_pieces: target_piece_snapshots(&stored.pieces),
-                measurement_state: MeasurementState::Fresh.as_str().to_string(),
-                provider_id: stored.target.provider_id.clone(),
-                client_id: stored.target.client_id.clone(),
-                working_url,
-                retrievability_percent: percent(aggregate.retrievable_count, sampled_piece_count),
-                large_files_percent: None,
-                car_files_percent: None,
-                sector_utilization_percent: None,
-                manifest_snapshot_id: Some(manifest_snapshot_id),
-                deal_size_bytes: stored.target.deal_size_bytes.clone(),
-                manifest_size_bytes,
-                content_matches_deal: Some(content_matches_deal),
-                sampled_piece_count: Some(sampled_piece_count),
-                size_matched_percent: percent(aggregate.size_matched_count, sampled_piece_count),
-                avg_response_time_ms: average_response_time_ms(&url_results),
-                is_consistent: None,
-                is_reliable: Some(success_count == sampled_piece_count),
-                result_code,
-                piece_count,
-                success_count,
-                failed_count,
-                piece_results,
-            })
+            .insert_completed_run_with_piece_results(&run)
             .await
             .map_err(map_run_insert_error)
     }
@@ -335,30 +263,114 @@ fn build_piece_test_contexts(
         .collect()
 }
 
-fn sample_manifest_pieces(
-    pieces: &[DealSliPiece],
-    manifest_snapshot_id: Uuid,
-    sample_size: usize,
-) -> Vec<DealSliPiece> {
-    let candidates = pieces
+fn build_no_endpoint_run(
+    deal_id: &str,
+    run_target: &DealSliRunTarget,
+) -> std::result::Result<NewCompletedDealSliRun, DealSliServiceError> {
+    let piece_count = i32::try_from(run_target.manifest_piece_count).map_err(|_| {
+        DealSliServiceError::InvalidRequest("manifest piece count exceeds i32::MAX".to_string())
+    })?;
+    let content_matches_deal = content_matches_deal(
+        run_target.target.deal_size_bytes.as_ref(),
+        run_target.manifest_size_bytes.as_ref(),
+    );
+
+    Ok(NewCompletedDealSliRun {
+        deal_id: deal_id.to_string(),
+        target_pieces: Vec::new(),
+        measurement_state: MeasurementState::Failed.as_str().to_string(),
+        provider_id: run_target.target.provider_id.clone(),
+        client_id: run_target.target.client_id.clone(),
+        working_url: None,
+        retrievability_percent: None,
+        large_files_percent: None,
+        car_files_percent: None,
+        sector_utilization_percent: None,
+        manifest_snapshot_id: run_target.target.active_manifest_snapshot_id,
+        deal_size_bytes: run_target.target.deal_size_bytes.clone(),
+        manifest_size_bytes: run_target.manifest_size_bytes.clone(),
+        content_matches_deal: Some(content_matches_deal),
+        sampled_piece_count: Some(0),
+        size_matched_percent: None,
+        avg_response_time_ms: None,
+        is_consistent: None,
+        is_reliable: None,
+        result_code: ResultCode::MissingHttpAddrFromCidContact,
+        piece_count,
+        success_count: 0,
+        failed_count: 0,
+        piece_results: Vec::new(),
+    })
+}
+
+fn build_manifest_measurement_run(
+    deal_id: &str,
+    run_target: &DealSliRunTarget,
+    sampled_pieces: &[DealSliPiece],
+    test_contexts: &[DealSliPieceTestContext],
+    url_results: &[ManifestUrlTestResult],
+    aggregate: &ManifestResultAggregate,
+) -> std::result::Result<NewCompletedDealSliRun, DealSliServiceError> {
+    let manifest_snapshot_id = run_target
+        .target
+        .active_manifest_snapshot_id
+        .ok_or_else(|| {
+            DealSliServiceError::InvalidRequest("missing manifest snapshot".to_string())
+        })?;
+    let piece_count = i32::try_from(run_target.manifest_piece_count).map_err(|_| {
+        DealSliServiceError::InvalidRequest("manifest piece count exceeds i32::MAX".to_string())
+    })?;
+    let sampled_piece_count = i32::try_from(sampled_pieces.len()).map_err(|_| {
+        DealSliServiceError::InvalidRequest("sampled piece count exceeds i32::MAX".to_string())
+    })?;
+    let success_count = aggregate.size_matched_count;
+    let failed_count = sampled_piece_count - success_count;
+    let piece_results = test_contexts
         .iter()
-        .filter(|piece| piece.manifest_snapshot_id == Some(manifest_snapshot_id))
+        .zip(url_results.iter())
+        .map(|(context, result)| map_manifest_piece_result(deal_id, context, result))
         .collect::<Vec<_>>();
+    let working_url = url_results
+        .iter()
+        .filter(|result| result.size_matched)
+        .max_by_key(|result| result.observed_size_bytes)
+        .map(|result| result.url.clone());
+    let result_code = if working_url.is_some() {
+        ResultCode::Success
+    } else {
+        ResultCode::FailedToGetWorkingUrl
+    };
+    let content_matches_deal = content_matches_deal(
+        run_target.target.deal_size_bytes.as_ref(),
+        run_target.manifest_size_bytes.as_ref(),
+    );
 
-    if candidates.len() <= sample_size {
-        return candidates.into_iter().cloned().collect();
-    }
-
-    let mut rng = rand::rng();
-    let mut indexes = BTreeSet::new();
-    while indexes.len() < sample_size {
-        indexes.insert(rng.random_range(0..candidates.len()));
-    }
-
-    indexes
-        .into_iter()
-        .map(|index| candidates[index].clone())
-        .collect()
+    Ok(NewCompletedDealSliRun {
+        deal_id: deal_id.to_string(),
+        target_pieces: target_piece_snapshots(sampled_pieces),
+        measurement_state: MeasurementState::Fresh.as_str().to_string(),
+        provider_id: run_target.target.provider_id.clone(),
+        client_id: run_target.target.client_id.clone(),
+        working_url,
+        retrievability_percent: percent(aggregate.retrievable_count, sampled_piece_count),
+        large_files_percent: None,
+        car_files_percent: None,
+        sector_utilization_percent: None,
+        manifest_snapshot_id: Some(manifest_snapshot_id),
+        deal_size_bytes: run_target.target.deal_size_bytes.clone(),
+        manifest_size_bytes: run_target.manifest_size_bytes.clone(),
+        content_matches_deal: Some(content_matches_deal),
+        sampled_piece_count: Some(sampled_piece_count),
+        size_matched_percent: percent(aggregate.size_matched_count, sampled_piece_count),
+        avg_response_time_ms: average_response_time_ms(url_results),
+        is_consistent: None,
+        is_reliable: Some(success_count == sampled_piece_count),
+        result_code,
+        piece_count,
+        success_count,
+        failed_count,
+        piece_results,
+    })
 }
 
 fn target_piece_snapshots(pieces: &[DealSliPiece]) -> Vec<DealSliRunPieceSnapshot> {
@@ -457,15 +469,6 @@ fn average_response_time_ms(results: &[ManifestUrlTestResult]) -> Option<BigDeci
         response_times.iter().sum::<i64>() as f64 / response_times.len() as f64
     ))
     .ok()
-}
-
-fn manifest_size_bytes(pieces: &[DealSliPiece]) -> Option<BigDecimal> {
-    pieces.iter().try_fold(BigDecimal::from(0), |acc, piece| {
-        piece
-            .piece_size_bytes
-            .as_ref()
-            .map(|piece_size| acc + piece_size.clone())
-    })
 }
 
 fn content_matches_deal(
@@ -571,12 +574,6 @@ fn map_upsert_request(
     deal_id: &str,
     request: DealTargetUpsertRequest,
 ) -> std::result::Result<NewDealSliTarget, DealSliServiceError> {
-    if !request.pieces.is_empty() {
-        return Err(DealSliServiceError::InvalidRequest(
-            "pieces must not be sent for manifest-backed Deal SLI registration".to_string(),
-        ));
-    }
-
     if request.manifest_hash.trim().is_empty() {
         return Err(DealSliServiceError::InvalidRequest(
             "manifest_hash must not be empty".to_string(),
@@ -615,7 +612,6 @@ fn map_upsert_request(
         manifest_hash: Some(request.manifest_hash),
         manifest_location: Some(request.manifest_location),
         requirements,
-        pieces: Vec::new(),
     })
 }
 
@@ -730,12 +726,6 @@ fn map_latest_response(run: DealSliLatestRun) -> DealLatestMeasurementResponse {
             .retrievability_percent
             .as_ref()
             .and_then(bigdecimal_to_f64),
-        large_files_percent: run.large_files_percent.as_ref().and_then(bigdecimal_to_f64),
-        car_files_percent: run.car_files_percent.as_ref().and_then(bigdecimal_to_f64),
-        sector_utilization_percent: run
-            .sector_utilization_percent
-            .as_ref()
-            .and_then(bigdecimal_to_f64),
         manifest_snapshot_id: run.manifest_snapshot_id.map(|id| id.to_string()),
         deal_size_bytes: run.deal_size_bytes.map(|value| value.to_string()),
         manifest_size_bytes: run.manifest_size_bytes.map(|value| value.to_string()),
@@ -749,14 +739,12 @@ fn map_latest_response(run: DealSliLatestRun) -> DealLatestMeasurementResponse {
             .avg_response_time_ms
             .as_ref()
             .and_then(bigdecimal_to_f64),
-        is_consistent: run.is_consistent,
         is_reliable: run.is_reliable,
         result_code: run.result_code,
         error_code: run.error_code,
         piece_count: run.piece_count as u32,
         success_count: run.success_count as u32,
         failed_count: run.failed_count as u32,
-        performance: DealPerformanceResponse::default(),
     }
 }
 

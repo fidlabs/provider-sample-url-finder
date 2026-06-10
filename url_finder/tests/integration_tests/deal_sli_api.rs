@@ -112,6 +112,21 @@ async fn setup_piece_retrieval_with_total_size(
         .await;
 }
 
+fn assert_deal_latest_has_no_legacy_url_metrics(body: &Value) {
+    for field in [
+        "large_files_percent",
+        "car_files_percent",
+        "sector_utilization_percent",
+        "is_consistent",
+        "performance",
+    ] {
+        assert!(
+            body.get(field).is_none(),
+            "{field} should not be part of Deal SLI latest response"
+        );
+    }
+}
+
 #[tokio::test]
 async fn test_put_deal_persists_and_get_deal_returns_stored_target() {
     let ctx = TestContext::new().await;
@@ -278,7 +293,7 @@ async fn test_put_deal_with_unicode_numeric_provider_id_returns_bad_request() {
 }
 
 #[tokio::test]
-async fn test_put_deal_with_empty_pieces_returns_bad_request() {
+async fn test_put_deal_rejects_unknown_pieces_field() {
     let ctx = TestContext::new().await;
     let mut request = deal_request(&ctx).await;
     request["pieces"] = json!([{ "piece_cid": "caller-owned-piece" }]);
@@ -297,6 +312,41 @@ async fn test_put_deal_with_empty_pieces_returns_bad_request() {
         expected: json!({
             "error_code": "INVALID_REQUEST"
         })
+    );
+    assert!(
+        body["error"]
+            .as_str()
+            .is_some_and(|message| message.contains("unknown field") && message.contains("pieces")),
+        "expected unknown pieces field error, got {body}"
+    );
+}
+
+#[tokio::test]
+async fn test_put_deal_rejects_unknown_requirement_field() {
+    let ctx = TestContext::new().await;
+    let mut request = deal_request(&ctx).await;
+    request["requirements"]["minimum_magic"] = json!(42);
+
+    let response = ctx
+        .app
+        .put("/deals/123")
+        .authorization_bearer("test-token")
+        .json(&request)
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
+    let body: Value = response.json();
+    assert_json_include!(
+        actual: body,
+        expected: json!({
+            "error_code": "INVALID_REQUEST"
+        })
+    );
+    assert!(
+        body["error"].as_str().is_some_and(
+            |message| message.contains("unknown field") && message.contains("minimum_magic")
+        ),
+        "expected unknown requirement field error, got {body}"
     );
 }
 
@@ -492,6 +542,7 @@ async fn test_get_latest_returns_missing_state_with_target_piece_count_when_no_r
             "result_code": null
         })
     );
+    assert_deal_latest_has_no_legacy_url_metrics(&body);
 }
 
 #[tokio::test]
@@ -645,6 +696,7 @@ async fn test_post_run_without_cached_endpoints_persists_failed_run_and_latest_u
             "result_code": "MissingHttpAddrFromCidContact"
         })
     );
+    assert_deal_latest_has_no_legacy_url_metrics(&latest_body);
 }
 
 #[tokio::test]
@@ -682,7 +734,6 @@ async fn test_post_run_with_cached_endpoint_tests_target_pieces_and_stores_piece
             "deal_id": "123",
             "measurement_state": "fresh",
             "retrievability_percent": 50.0,
-            "large_files_percent": null,
             "piece_count": 2,
             "sampled_piece_count": 2,
             "size_matched_percent": 50.0,
@@ -694,6 +745,7 @@ async fn test_post_run_with_cached_endpoint_tests_target_pieces_and_stores_piece
             "result_code": "Success"
         })
     );
+    assert_deal_latest_has_no_legacy_url_metrics(&run_body);
     assert!(
         run_body
             .get("working_url")
@@ -786,6 +838,7 @@ async fn test_post_run_measures_when_manifest_size_differs_from_deal_size() {
             "size_matched_percent": 50.0
         })
     );
+    assert_deal_latest_has_no_legacy_url_metrics(&run_body);
 }
 
 #[tokio::test]
@@ -822,6 +875,99 @@ async fn test_post_run_wrong_size_responses_are_retrievable_but_not_successful()
             "success_count": 0,
             "failed_count": 2,
             "result_code": "FailedToGetWorkingUrl"
+        })
+    );
+    assert_deal_latest_has_no_legacy_url_metrics(&run_body);
+}
+
+#[tokio::test]
+async fn test_post_run_uses_active_manifest_snapshot_at_run_start() {
+    let ctx = TestContext::new().await;
+    let request = deal_request(&ctx).await;
+
+    ctx.app
+        .put("/deals/123")
+        .authorization_bearer("test-token")
+        .json(&request)
+        .await
+        .assert_status_ok();
+
+    let original_snapshot_id: uuid::Uuid = sqlx::query_scalar(
+        r#"SELECT
+                active_manifest_snapshot_id
+           FROM
+                deal_sli_targets
+           WHERE
+                deal_id = $1
+        "#,
+    )
+    .bind("123")
+    .fetch_one(&ctx.dbs.app_pool)
+    .await
+    .expect("target should have active manifest snapshot");
+
+    let new_snapshot_id: uuid::Uuid = sqlx::query_scalar(
+        r#"INSERT INTO
+                deal_sli_manifest_snapshots (
+                    deal_id,
+                    manifest_hash,
+                    manifest_location,
+                    raw_content,
+                    parsed_content,
+                    content_byte_length,
+                    computed_hash
+                )
+           SELECT
+                deal_id,
+                manifest_hash,
+                manifest_location,
+                raw_content,
+                parsed_content,
+                content_byte_length,
+                computed_hash
+           FROM
+                deal_sli_manifest_snapshots
+           WHERE
+                id = $1
+           RETURNING
+                id
+        "#,
+    )
+    .bind(original_snapshot_id)
+    .fetch_one(&ctx.dbs.app_pool)
+    .await
+    .expect("duplicate snapshot should insert");
+
+    sqlx::query(
+        r#"UPDATE
+                deal_sli_targets
+           SET
+                active_manifest_snapshot_id = $2
+           WHERE
+                deal_id = $1
+        "#,
+    )
+    .bind("123")
+    .bind(new_snapshot_id)
+    .execute(&ctx.dbs.app_pool)
+    .await
+    .expect("target snapshot should update");
+
+    seed_provider_with_cached_endpoints(&ctx.dbs.app_pool, "1234", &[ctx.mocks.piece_server_url()])
+        .await;
+
+    let response = ctx
+        .app
+        .post("/deals/123/runs")
+        .authorization_bearer("test-token")
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    assert_json_include!(
+        actual: body,
+        expected: json!({
+            "manifest_snapshot_id": new_snapshot_id.to_string()
         })
     );
 }

@@ -1,0 +1,84 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                    deal_id,\n                    piece_index,\n                    piece_cid,\n                    piece_size_bytes,\n                    manifest_snapshot_id,\n                    file_size_bytes,\n                    root_cid,\n                    storage_path,\n                    piece_type,\n                    allocation_id,\n                    claim_id\n               FROM\n                    deal_sli_pieces\n               WHERE\n                    deal_id = $1\n                    AND piece_index = $2\n                    AND manifest_snapshot_id = $3\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "deal_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "piece_index",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "piece_cid",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "piece_size_bytes",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 4,
+        "name": "manifest_snapshot_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 5,
+        "name": "file_size_bytes",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 6,
+        "name": "root_cid",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "storage_path",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "piece_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "allocation_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 10,
+        "name": "claim_id",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int4",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "0b9e363e1e7b5f64bbf02de8cbf36e85b787a7ea7ca8bae696db2e6eb7b641ba"
+}

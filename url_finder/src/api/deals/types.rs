@@ -2,10 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 
-use crate::{
-    api::providers::{BandwidthTestResponse, GeolocationTestResponse},
-    types::{ErrorCode as UrlErrorCode, ResultCode},
-};
+use crate::types::{ErrorCode as UrlErrorCode, ResultCode};
 
 #[derive(Debug, Clone, Deserialize, ToSchema, IntoParams)]
 pub struct DealPath {
@@ -31,6 +28,7 @@ pub enum MeasurementState {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct DealSliRequirements {
     pub retrievability_bps: u16,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -59,6 +57,7 @@ pub struct DealPieceTarget {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct DealTargetUpsertRequest {
     #[serde(default)]
     pub deal_version: DealVersion,
@@ -70,8 +69,6 @@ pub struct DealTargetUpsertRequest {
     pub manifest_location: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub requirements: Option<DealSliRequirements>,
-    #[serde(default, skip_serializing)]
-    pub pieces: Vec<DealPieceTarget>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -101,12 +98,6 @@ pub struct DealTargetResponse {
     pub updated_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, Default)]
-pub struct DealPerformanceResponse {
-    pub bandwidth: Option<BandwidthTestResponse>,
-    pub geolocation: Option<GeolocationTestResponse>,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct DealLatestMeasurementResponse {
     pub deal_id: String,
@@ -114,9 +105,6 @@ pub struct DealLatestMeasurementResponse {
     pub tested_at: Option<DateTime<Utc>>,
     pub working_url: Option<String>,
     pub retrievability_percent: Option<f64>,
-    pub large_files_percent: Option<f64>,
-    pub car_files_percent: Option<f64>,
-    pub sector_utilization_percent: Option<f64>,
     pub manifest_snapshot_id: Option<String>,
     pub deal_size_bytes: Option<String>,
     pub manifest_size_bytes: Option<String>,
@@ -124,51 +112,12 @@ pub struct DealLatestMeasurementResponse {
     pub sampled_piece_count: Option<u32>,
     pub size_matched_percent: Option<f64>,
     pub avg_response_time_ms: Option<f64>,
-    pub is_consistent: Option<bool>,
     pub is_reliable: Option<bool>,
     pub result_code: Option<ResultCode>,
     pub error_code: Option<UrlErrorCode>,
     pub piece_count: u32,
     pub success_count: u32,
     pub failed_count: u32,
-    #[serde(default)]
-    pub performance: DealPerformanceResponse,
-}
-
-impl DealTargetResponse {
-    pub fn placeholder(deal_id: String) -> Self {
-        Self {
-            deal_id,
-            deal_version: DealVersion::V2,
-            provider_id: None,
-            client: None,
-            deal_size_bytes: None,
-            manifest_hash: None,
-            manifest_location: None,
-            manifest_snapshot: None,
-            requirements: None,
-            pieces: Vec::new(),
-            created_at: None,
-            updated_at: None,
-        }
-    }
-
-    pub fn from_upsert_request(deal_id: String, request: DealTargetUpsertRequest) -> Self {
-        Self {
-            deal_id,
-            deal_version: request.deal_version,
-            provider_id: Some(request.provider_id),
-            client: request.client,
-            deal_size_bytes: Some(request.deal_size_bytes),
-            manifest_hash: Some(request.manifest_hash),
-            manifest_location: Some(request.manifest_location),
-            manifest_snapshot: None,
-            requirements: request.requirements,
-            pieces: request.pieces,
-            created_at: None,
-            updated_at: None,
-        }
-    }
 }
 
 impl DealLatestMeasurementResponse {
@@ -183,9 +132,6 @@ impl DealLatestMeasurementResponse {
             tested_at: None,
             working_url: None,
             retrievability_percent: None,
-            large_files_percent: None,
-            car_files_percent: None,
-            sector_utilization_percent: None,
             manifest_snapshot_id: None,
             deal_size_bytes: None,
             manifest_size_bytes: None,
@@ -193,14 +139,12 @@ impl DealLatestMeasurementResponse {
             sampled_piece_count: None,
             size_matched_percent: None,
             avg_response_time_ms: None,
-            is_consistent: None,
             is_reliable: None,
             result_code: None,
             error_code: None,
             piece_count,
             success_count: 0,
             failed_count: 0,
-            performance: DealPerformanceResponse::default(),
         }
     }
 }
@@ -226,16 +170,6 @@ mod tests {
                 bandwidth_mbps: Some(200),
                 latency_ms: Some(150),
             }),
-            pieces: vec![DealPieceTarget {
-                piece_cid: "baga6ea4seaq".to_string(),
-                piece_size_bytes: Some("1024".to_string()),
-                file_size_bytes: Some("512".to_string()),
-                root_cid: Some("bafyroot".to_string()),
-                storage_path: Some("baga6ea4seaq.car".to_string()),
-                piece_type: Some("dag".to_string()),
-                allocation_id: Some("44".to_string()),
-                claim_id: Some("55".to_string()),
-            }],
         };
 
         let value = serde_json::to_value(request).expect("request should serialize");
@@ -273,9 +207,6 @@ mod tests {
                 "tested_at": null,
                 "working_url": null,
                 "retrievability_percent": null,
-                "large_files_percent": null,
-                "car_files_percent": null,
-                "sector_utilization_percent": null,
                 "manifest_snapshot_id": null,
                 "deal_size_bytes": null,
                 "manifest_size_bytes": null,
@@ -283,17 +214,12 @@ mod tests {
                 "sampled_piece_count": null,
                 "size_matched_percent": null,
                 "avg_response_time_ms": null,
-                "is_consistent": null,
                 "is_reliable": null,
                 "result_code": null,
                 "error_code": null,
                 "piece_count": 0,
                 "success_count": 0,
-                "failed_count": 0,
-                "performance": {
-                    "bandwidth": null,
-                    "geolocation": null
-                }
+                "failed_count": 0
             })
         );
     }
