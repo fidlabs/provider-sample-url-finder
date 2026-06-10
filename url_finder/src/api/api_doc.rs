@@ -124,6 +124,8 @@ The `/url/*` endpoints remain fully backward compatible.
             DealPieceTarget,
             DealTargetUpsertRequest,
             DealTargetResponse,
+            DealPorepSliResponse,
+            DealBmsResultResponse,
             DealLatestMeasurementResponse,
 
             // Misc

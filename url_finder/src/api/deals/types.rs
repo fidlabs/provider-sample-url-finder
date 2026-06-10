@@ -115,9 +115,48 @@ pub struct DealLatestMeasurementResponse {
     pub is_reliable: Option<bool>,
     pub result_code: Option<ResultCode>,
     pub error_code: Option<UrlErrorCode>,
+    pub porep_slis: DealPorepSliResponse,
+    #[serde(default)]
+    pub bms_results: Vec<DealBmsResultResponse>,
     pub piece_count: u32,
     pub success_count: u32,
     pub failed_count: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct DealPorepSliResponse {
+    pub retrievability_bps: Option<u16>,
+    pub bandwidth_mbps: Option<u32>,
+    pub latency_ms: Option<u32>,
+    pub indexing_pct: Option<u8>,
+}
+
+impl DealPorepSliResponse {
+    pub fn empty() -> Self {
+        Self {
+            retrievability_bps: None,
+            bandwidth_mbps: None,
+            latency_ms: None,
+            indexing_pct: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct DealBmsResultResponse {
+    pub piece_index: u32,
+    pub piece_cid: String,
+    pub bms_job_id: String,
+    pub url_tested: String,
+    pub routing_key: String,
+    pub worker_count: u32,
+    pub status: String,
+    pub ping_avg_ms: Option<f64>,
+    pub head_avg_ms: Option<f64>,
+    pub ttfb_ms: Option<f64>,
+    pub download_speed_mbps: Option<f64>,
+    pub error_message: Option<String>,
+    pub completed_at: Option<DateTime<Utc>>,
 }
 
 impl DealLatestMeasurementResponse {
@@ -142,6 +181,8 @@ impl DealLatestMeasurementResponse {
             is_reliable: None,
             result_code: None,
             error_code: None,
+            porep_slis: DealPorepSliResponse::empty(),
+            bms_results: vec![],
             piece_count,
             success_count: 0,
             failed_count: 0,
@@ -217,6 +258,13 @@ mod tests {
                 "is_reliable": null,
                 "result_code": null,
                 "error_code": null,
+                "porep_slis": {
+                    "retrievability_bps": null,
+                    "bandwidth_mbps": null,
+                    "latency_ms": null,
+                    "indexing_pct": null
+                },
+                "bms_results": [],
                 "piece_count": 0,
                 "success_count": 0,
                 "failed_count": 0

@@ -5,14 +5,14 @@ use uuid::Uuid;
 
 use crate::{
     api::deals::{
-        DealLatestMeasurementResponse, DealManifestSnapshotResponse, DealPieceTarget,
-        DealSliRequirements, DealTargetResponse, DealTargetUpsertRequest, DealVersion,
-        MeasurementState,
+        DealBmsResultResponse, DealLatestMeasurementResponse, DealManifestSnapshotResponse,
+        DealPieceTarget, DealPorepSliResponse, DealSliRequirements, DealTargetResponse,
+        DealTargetUpsertRequest, DealVersion, MeasurementState,
     },
     config::Config,
     http_client::build_client,
     repository::{
-        DealSliLatestRun, DealSliManifestSnapshot, DealSliPiece, DealSliRepository,
+        DealSliBmsJob, DealSliLatestRun, DealSliManifestSnapshot, DealSliPiece, DealSliRepository,
         DealSliRequirementValues, DealSliRunPieceSnapshot, DealSliRunTarget,
         DealSliTargetWithPieces, NewCompletedDealSliRun, NewDealSliManifestSnapshot,
         NewDealSliPiece, NewDealSliPieceResult, NewDealSliTarget, StorageProviderRepository,
@@ -115,7 +115,10 @@ impl DealSliService {
 
         let latest = self.repo.get_latest_completed_run(deal_id).await?;
         Ok(match latest {
-            Some(run) => map_latest_response(run),
+            Some(run) => {
+                let bms_results = self.repo.get_deal_sli_bms_jobs_for_run(run.id).await?;
+                map_latest_response(run, bms_results)
+            }
             None => DealLatestMeasurementResponse::missing_with_piece_count(
                 deal_id.to_string(),
                 stored.pieces.len() as u32,
@@ -159,7 +162,7 @@ impl DealSliService {
             }
         };
 
-        Ok(map_latest_response(latest))
+        Ok(map_latest_response(latest, vec![]))
     }
 
     async fn run_cached_endpoint_measurement(
@@ -716,7 +719,13 @@ fn map_requirements(
     })
 }
 
-fn map_latest_response(run: DealSliLatestRun) -> DealLatestMeasurementResponse {
+fn map_latest_response(
+    run: DealSliLatestRun,
+    bms_results: Vec<DealSliBmsJob>,
+) -> DealLatestMeasurementResponse {
+    let porep_slis = map_porep_slis(&run, &bms_results);
+    let bms_results = bms_results.into_iter().map(map_bms_result).collect();
+
     DealLatestMeasurementResponse {
         deal_id: run.deal_id,
         measurement_state: MeasurementState::from_db_value(&run.measurement_state),
@@ -742,9 +751,108 @@ fn map_latest_response(run: DealSliLatestRun) -> DealLatestMeasurementResponse {
         is_reliable: run.is_reliable,
         result_code: run.result_code,
         error_code: run.error_code,
+        porep_slis,
+        bms_results,
         piece_count: run.piece_count as u32,
         success_count: run.success_count as u32,
         failed_count: run.failed_count as u32,
+    }
+}
+
+fn map_bms_result(result: DealSliBmsJob) -> DealBmsResultResponse {
+    DealBmsResultResponse {
+        piece_index: result.piece_index as u32,
+        piece_cid: result.piece_cid,
+        bms_job_id: result.bms_job_id.to_string(),
+        url_tested: result.url_tested,
+        routing_key: result.routing_key,
+        worker_count: result.worker_count as u32,
+        status: result.status,
+        ping_avg_ms: result.ping_avg_ms.as_ref().and_then(bigdecimal_to_f64),
+        head_avg_ms: result.head_avg_ms.as_ref().and_then(bigdecimal_to_f64),
+        ttfb_ms: result.ttfb_ms.as_ref().and_then(bigdecimal_to_f64),
+        download_speed_mbps: result
+            .download_speed_mbps
+            .as_ref()
+            .and_then(bigdecimal_to_f64),
+        error_message: result.error_message,
+        completed_at: result.completed_at,
+    }
+}
+
+fn map_porep_slis(run: &DealSliLatestRun, bms_results: &[DealSliBmsJob]) -> DealPorepSliResponse {
+    let retrievability_bps = run
+        .retrievability_percent
+        .as_ref()
+        .and_then(bigdecimal_to_f64)
+        .and_then(percent_to_bps);
+    let bandwidth_mbps =
+        min_completed_bms_metric(bms_results, |result| result.download_speed_mbps.as_ref())
+            .and_then(f64_floor_to_u32);
+    let latency_ms = max_completed_bms_metric(bms_results, |result| result.ttfb_ms.as_ref())
+        .and_then(f64_ceil_to_u32);
+
+    DealPorepSliResponse {
+        retrievability_bps,
+        bandwidth_mbps,
+        latency_ms,
+        indexing_pct: None,
+    }
+}
+
+fn min_completed_bms_metric<F>(results: &[DealSliBmsJob], metric: F) -> Option<f64>
+where
+    F: Fn(&DealSliBmsJob) -> Option<&BigDecimal> + 'static,
+{
+    completed_bms_values(results, metric).fold(None, |current, value| match current {
+        Some(existing) => Some(existing.min(value)),
+        None => Some(value),
+    })
+}
+
+fn max_completed_bms_metric<F>(results: &[DealSliBmsJob], metric: F) -> Option<f64>
+where
+    F: Fn(&DealSliBmsJob) -> Option<&BigDecimal> + 'static,
+{
+    completed_bms_values(results, metric).fold(None, |current, value| match current {
+        Some(existing) => Some(existing.max(value)),
+        None => Some(value),
+    })
+}
+
+fn completed_bms_values<F>(results: &[DealSliBmsJob], metric: F) -> impl Iterator<Item = f64> + '_
+where
+    F: Fn(&DealSliBmsJob) -> Option<&BigDecimal> + 'static,
+{
+    results
+        .iter()
+        .filter(|result| result.status == "Completed")
+        .filter_map(metric)
+        .filter_map(bigdecimal_to_f64)
+}
+
+fn percent_to_bps(value: f64) -> Option<u16> {
+    if !value.is_finite() || value < 0.0 {
+        return None;
+    }
+
+    let bps = (value * 100.0).round().clamp(0.0, 10_000.0);
+    Some(bps as u16)
+}
+
+fn f64_floor_to_u32(value: f64) -> Option<u32> {
+    if value.is_finite() && value >= 0.0 && value <= u32::MAX as f64 {
+        Some(value.floor() as u32)
+    } else {
+        None
+    }
+}
+
+fn f64_ceil_to_u32(value: f64) -> Option<u32> {
+    if value.is_finite() && value >= 0.0 && value <= u32::MAX as f64 {
+        Some(value.ceil() as u32)
+    } else {
+        None
     }
 }
 

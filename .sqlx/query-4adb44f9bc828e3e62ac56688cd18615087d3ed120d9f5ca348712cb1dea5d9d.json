@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH due AS (\n                    SELECT\n                        deal_id\n                    FROM\n                        deal_sli_target_schedules\n                    WHERE\n                        next_run_at <= NOW()\n                    ORDER BY\n                        next_run_at ASC,\n                        deal_id ASC\n                    LIMIT $1\n                    FOR UPDATE SKIP LOCKED\n                )\n                UPDATE\n                    deal_sli_target_schedules schedules\n                SET\n                    next_run_at = NOW() + make_interval(days => $2::int),\n                    updated_at = NOW()\n                FROM\n                    due\n                WHERE\n                    schedules.deal_id = due.deal_id\n                RETURNING\n                    schedules.deal_id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "deal_id",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "4adb44f9bc828e3e62ac56688cd18615087d3ed120d9f5ca348712cb1dea5d9d"
+}

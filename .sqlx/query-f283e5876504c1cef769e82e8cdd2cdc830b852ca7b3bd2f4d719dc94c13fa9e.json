@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                    result.run_id,\n                    result.deal_id,\n                    result.piece_index,\n                    result.piece_cid,\n                    result.url_tested\n               FROM\n                    deal_sli_piece_results result\n               WHERE\n                    result.run_id = $1\n                    AND result.success\n                    AND NOT EXISTS (\n                        SELECT\n                            1\n                        FROM\n                            deal_sli_bms_jobs job\n                        WHERE\n                            job.run_id = result.run_id\n                            AND job.piece_index = result.piece_index\n                            AND job.url_tested = result.url_tested\n                    )\n               ORDER BY\n                    result.piece_index ASC,\n                    result.url_tested ASC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "run_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "deal_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "piece_index",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "piece_cid",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "url_tested",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f283e5876504c1cef769e82e8cdd2cdc830b852ca7b3bd2f4d719dc94c13fa9e"
+}

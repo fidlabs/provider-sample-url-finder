@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, str::FromStr};
 
 use chrono::{DateTime, Utc};
 use color_eyre::{Result, eyre::eyre};
@@ -118,6 +118,7 @@ pub struct DealSliRunTarget {
 
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct DealSliLatestRun {
+    pub id: Uuid,
     pub deal_id: String,
     pub measurement_state: String,
     pub tested_at: Option<DateTime<Utc>>,
@@ -194,6 +195,60 @@ pub struct DealSliRunPieceSnapshot {
     pub piece_size_bytes: Option<BigDecimal>,
     pub manifest_snapshot_id: Option<Uuid>,
     pub file_size_bytes: Option<BigDecimal>,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct DealSliSuccessfulPieceResult {
+    pub run_id: Uuid,
+    pub deal_id: String,
+    pub piece_index: i32,
+    pub piece_cid: String,
+    pub url_tested: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct NewDealSliBmsJob {
+    pub deal_id: String,
+    pub run_id: Uuid,
+    pub piece_index: i32,
+    pub piece_cid: String,
+    pub bms_job_id: Uuid,
+    pub url_tested: String,
+    pub routing_key: String,
+    pub worker_count: i32,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct DealSliBmsJob {
+    pub id: Uuid,
+    pub deal_id: String,
+    pub run_id: Uuid,
+    pub piece_index: i32,
+    pub piece_cid: String,
+    pub bms_job_id: Uuid,
+    pub url_tested: String,
+    pub routing_key: String,
+    pub worker_count: i32,
+    pub status: String,
+    pub ping_avg_ms: Option<BigDecimal>,
+    pub head_avg_ms: Option<BigDecimal>,
+    pub ttfb_ms: Option<BigDecimal>,
+    pub download_speed_mbps: Option<BigDecimal>,
+    pub error_message: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub completed_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DealSliBmsJobCompletion<'a> {
+    pub job_id: Uuid,
+    pub status: &'a str,
+    pub ping_avg_ms: Option<f64>,
+    pub head_avg_ms: Option<f64>,
+    pub ttfb_ms: Option<f64>,
+    pub download_speed_mbps: Option<f64>,
+    pub error_message: Option<&'a str>,
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -314,6 +369,8 @@ impl DealSliRepository {
             })?;
             validate_measured_target_is_unchanged(target, &existing_target)?;
             validate_measured_pieces_are_unchanged(pieces, &existing_pieces)?;
+            self.ensure_target_schedule(&mut tx, &target.deal_id)
+                .await?;
             tx.commit().await?;
             return Ok(());
         }
@@ -448,7 +505,30 @@ impl DealSliRepository {
             .await?;
         }
 
+        self.ensure_target_schedule(&mut tx, &target.deal_id)
+            .await?;
+
         tx.commit().await?;
+        Ok(())
+    }
+
+    async fn ensure_target_schedule(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        deal_id: &str,
+    ) -> Result<()> {
+        sqlx::query!(
+            r#"INSERT INTO
+                    deal_sli_target_schedules (deal_id)
+               VALUES
+                    ($1)
+               ON CONFLICT (deal_id) DO NOTHING
+            "#,
+            deal_id
+        )
+        .execute(&mut **tx)
+        .await?;
+
         Ok(())
     }
 
@@ -550,6 +630,7 @@ impl DealSliRepository {
         Ok(sqlx::query_as!(
             DealSliLatestRun,
             r#"SELECT
+                    id,
                     deal_id,
                     measurement_state,
                     tested_at,
@@ -866,6 +947,7 @@ impl DealSliRepository {
         tx.commit().await?;
 
         Ok(DealSliLatestRun {
+            id: inserted.id,
             deal_id: inserted.deal_id,
             measurement_state: inserted.measurement_state,
             tested_at: inserted.tested_at,
@@ -890,6 +972,248 @@ impl DealSliRepository {
             failed_count: inserted.failed_count,
         })
     }
+
+    pub async fn claim_due_scheduled_targets(
+        &self,
+        limit: i64,
+        interval_days: i32,
+    ) -> Result<Vec<String>> {
+        Ok(sqlx::query_scalar!(
+            r#"WITH due AS (
+                    SELECT
+                        deal_id
+                    FROM
+                        deal_sli_target_schedules
+                    WHERE
+                        next_run_at <= NOW()
+                    ORDER BY
+                        next_run_at ASC,
+                        deal_id ASC
+                    LIMIT $1
+                    FOR UPDATE SKIP LOCKED
+                )
+                UPDATE
+                    deal_sli_target_schedules schedules
+                SET
+                    next_run_at = NOW() + make_interval(days => $2::int),
+                    updated_at = NOW()
+                FROM
+                    due
+                WHERE
+                    schedules.deal_id = due.deal_id
+                RETURNING
+                    schedules.deal_id
+            "#,
+            limit,
+            interval_days
+        )
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
+    pub async fn get_successful_piece_results_without_bms_jobs(
+        &self,
+        run_id: Uuid,
+    ) -> Result<Vec<DealSliSuccessfulPieceResult>> {
+        Ok(sqlx::query_as!(
+            DealSliSuccessfulPieceResult,
+            r#"SELECT
+                    result.run_id,
+                    result.deal_id,
+                    result.piece_index,
+                    result.piece_cid,
+                    result.url_tested
+               FROM
+                    deal_sli_piece_results result
+               WHERE
+                    result.run_id = $1
+                    AND result.success
+                    AND NOT EXISTS (
+                        SELECT
+                            1
+                        FROM
+                            deal_sli_bms_jobs job
+                        WHERE
+                            job.run_id = result.run_id
+                            AND job.piece_index = result.piece_index
+                            AND job.url_tested = result.url_tested
+                    )
+               ORDER BY
+                    result.piece_index ASC,
+                    result.url_tested ASC
+            "#,
+            run_id
+        )
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
+    pub async fn insert_deal_sli_bms_job(&self, job: &NewDealSliBmsJob) -> Result<DealSliBmsJob> {
+        Ok(sqlx::query_as!(
+            DealSliBmsJob,
+            r#"INSERT INTO
+                    deal_sli_bms_jobs (
+                        deal_id,
+                        run_id,
+                        piece_index,
+                        piece_cid,
+                        bms_job_id,
+                        url_tested,
+                        routing_key,
+                        worker_count,
+                        status
+                    )
+               VALUES
+                    ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+               ON CONFLICT (bms_job_id) DO UPDATE SET
+                    status = EXCLUDED.status
+               RETURNING
+                    id,
+                    deal_id,
+                    run_id,
+                    piece_index,
+                    piece_cid,
+                    bms_job_id,
+                    url_tested,
+                    routing_key,
+                    worker_count,
+                    status,
+                    ping_avg_ms,
+                    head_avg_ms,
+                    ttfb_ms,
+                    download_speed_mbps,
+                    error_message,
+                    created_at,
+                    completed_at
+            "#,
+            &job.deal_id,
+            job.run_id,
+            job.piece_index,
+            &job.piece_cid,
+            job.bms_job_id,
+            &job.url_tested,
+            &job.routing_key,
+            job.worker_count,
+            &job.status
+        )
+        .fetch_one(&self.pool)
+        .await?)
+    }
+
+    pub async fn get_pending_deal_sli_bms_jobs(&self) -> Result<Vec<DealSliBmsJob>> {
+        Ok(sqlx::query_as!(
+            DealSliBmsJob,
+            r#"SELECT
+                    id,
+                    deal_id,
+                    run_id,
+                    piece_index,
+                    piece_cid,
+                    bms_job_id,
+                    url_tested,
+                    routing_key,
+                    worker_count,
+                    status,
+                    ping_avg_ms,
+                    head_avg_ms,
+                    ttfb_ms,
+                    download_speed_mbps,
+                    error_message,
+                    created_at,
+                    completed_at
+               FROM
+                    deal_sli_bms_jobs
+               WHERE
+                    status = 'Pending'
+               ORDER BY
+                    created_at ASC,
+                    id ASC
+            "#
+        )
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
+    pub async fn get_deal_sli_bms_jobs_for_run(&self, run_id: Uuid) -> Result<Vec<DealSliBmsJob>> {
+        Ok(sqlx::query_as!(
+            DealSliBmsJob,
+            r#"SELECT
+                    id,
+                    deal_id,
+                    run_id,
+                    piece_index,
+                    piece_cid,
+                    bms_job_id,
+                    url_tested,
+                    routing_key,
+                    worker_count,
+                    status,
+                    ping_avg_ms,
+                    head_avg_ms,
+                    ttfb_ms,
+                    download_speed_mbps,
+                    error_message,
+                    created_at,
+                    completed_at
+               FROM
+                    deal_sli_bms_jobs
+               WHERE
+                    run_id = $1
+               ORDER BY
+                    piece_index ASC,
+                    created_at ASC,
+                    id ASC
+            "#,
+            run_id
+        )
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
+    pub async fn update_deal_sli_bms_job_completed(
+        &self,
+        update: &DealSliBmsJobCompletion<'_>,
+    ) -> Result<()> {
+        let ping = f64_to_bigdecimal(update.ping_avg_ms);
+        let head = f64_to_bigdecimal(update.head_avg_ms);
+        let ttfb = f64_to_bigdecimal(update.ttfb_ms);
+        let speed = f64_to_bigdecimal(update.download_speed_mbps);
+
+        let result = sqlx::query!(
+            r#"UPDATE
+                    deal_sli_bms_jobs
+               SET
+                    status = $2,
+                    ping_avg_ms = $3,
+                    head_avg_ms = $4,
+                    ttfb_ms = $5,
+                    download_speed_mbps = $6,
+                    error_message = $7,
+                    completed_at = NOW()
+               WHERE
+                    bms_job_id = $1
+            "#,
+            update.job_id,
+            update.status,
+            ping,
+            head,
+            ttfb,
+            speed,
+            update.error_message
+        )
+        .execute(&self.pool)
+        .await?;
+
+        if result.rows_affected() == 0 {
+            return Err(eyre!("Deal SLI BMS job not found: {}", update.job_id));
+        }
+
+        Ok(())
+    }
+}
+
+fn f64_to_bigdecimal(value: Option<f64>) -> Option<BigDecimal> {
+    value.and_then(|v| BigDecimal::from_str(&v.to_string()).ok())
 }
 
 fn validate_measured_pieces_are_unchanged(
