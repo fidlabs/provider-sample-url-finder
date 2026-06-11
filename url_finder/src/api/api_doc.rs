@@ -24,9 +24,18 @@ impl Modify for SecurityAddon {
     info(
         title = "Url Finder",
         description = r#"
-This is the API documentation for the Url Finder micro-service.
+This is the API documentation for the Random Piece Availability service.
 
-The Url Finder service is responsible for finding the URL of a miner given its address.
+RPA discovers HTTP endpoints for Filecoin storage providers, measures piece
+retrievability, stores provider and BMS results, and exposes deal-level SLI
+state for PoRep Market integrations.
+
+## Deal SLI API
+
+The `/deals/*` endpoints are the PoRep Market contract surface. Register a
+deal target with a verified manifest, fetch the stored target and derived
+pieces, read the latest measurement state, or trigger a manual run. Deal SLI
+write endpoints require `Authorization: Bearer <AUTH_TOKEN>`.
 
 ## New Providers API
 

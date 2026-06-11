@@ -16,7 +16,7 @@ use crate::{
 #[utoipa::path(
     put,
     path = "/deals/{deal_id}",
-    description = "Create or update a persisted Deal SLI target and its measurable pieces.",
+    description = "Create or update a PoRep Deal SLI target. The service fetches manifest_location, verifies manifest_hash, derives pieces from the manifest, and stores the active manifest snapshot. Callers must not submit pieces directly.",
     request_body = DealTargetUpsertRequest,
     params(DealPath),
     responses(

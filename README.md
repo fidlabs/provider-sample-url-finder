@@ -1,94 +1,92 @@
 # Random Piece Availability measurement
 
-## Introduction
+Random Piece Availability (RPA) measures whether Filecoin storage provider data
+is retrievable over HTTP. It discovers provider endpoints, tests piece URLs, and
+stores retrievability and bandwidth results for consumers that need current
+provider or deal-level availability data.
 
-The Random Piece Availability (or RPA) is a microservice designed to test the retrievability of files claimed by Storage Providers (SPs) on the Filecoin network. Its primary goal is to verify whether files associated with deals are accessible via HTTP endpoints advertised by SPs. This service focuses exclusively on HTTP retrievability.
+The service also exposes the Deal SLI API used by PoRep Market. PoRep Market can
+register a deal target with a manifest location and manifest hash. RPA fetches
+and verifies that manifest, derives the deal pieces from it, measures sampled
+piece retrievability against cached provider endpoints, and stores the latest
+deal SLI state for oracle or market integrations.
 
-## Table of Contents
+## Running Locally
 
-- [Development](#development)
-  - [Environment Variables](#environment-variables)
-  - [Result Codes](#result-codes)
-  - [Error Codes](#error-codes)
-- [How the Service Works](#how-the-service-works)
-  - [Two types of Requests](#two-types-of-requests)
-  - [High-Level Workflow](#high-level-workflow)
-  - [Design Choices](#design-choices)
-- [Potential Issues](#potential-issues)
-- [Possible Improvements](#possible-improvements)
+Create a local environment file from the example:
+
+```bash
+cp .env.example .env
+```
+
+Start Postgres, run migrations, and seed local development data:
+
+```bash
+make init-dev
+```
+
+Run the service in Docker:
+
+```bash
+make run
+```
+
+For SSH-tunneled DMOB testing, start only Postgres with `make run-db` and run
+the Rust binary on the host so `DMOB_DATABASE_URL` can point at the tunnel.
+Configuration fields and local defaults are documented in `.env.example`.
+
+The application listens on port `3010`:
+
+- Swagger UI: `http://localhost:3010/`
+- OpenAPI JSON: `http://localhost:3010/api-doc/openapi.json`
+- Healthcheck: `http://localhost:3010/healthcheck`
+
+## How The Service Works
+
+RPA keeps two related measurement flows.
+
+The provider flow discovers HTTP endpoints for storage providers and measures
+retrievability for pieces selected from the deal database. It gets provider peer
+IDs from Lotus RPC, fetches advertised endpoints from `cid.contact` and filspark,
+tests piece URLs, and stores provider-level retrievability, URL, and BMS metrics.
+
+The Deal SLI flow is deal-first. A caller registers a PoRep deal target through
+the Deal SLI API. The target includes the provider, optional client, deal size,
+manifest hash, manifest URL, and optional SLI requirements. RPA verifies the
+manifest hash, stores a manifest snapshot, derives the measurable pieces, and
+then records scheduled or manually triggered measurements for that deal.
+
+Deal SLI measurements use ranged GET checks against cached provider endpoints.
+The latest response reports deal state, retrievability, manifest size matching,
+piece counts, a working URL when one was found, and BMS-derived PoRep SLI values
+when bandwidth jobs have completed.
+
+## API Overview
+
+Swagger is the source of truth for request and response fields. The main API
+groups are:
+
+- `/deals/*` - Deal SLI API for PoRep Market and oracle integrations.
+- `/providers/*` and `/clients/*` - provider and client views over stored
+  retrievability, URL, and BMS data.
+- `/url/*` - legacy URL Finder endpoints.
+
+Write endpoints in the Deal SLI API require bearer authentication. Set
+`AUTH_TOKEN` in `.env`; Swagger labels those endpoints with `bearer_auth`.
 
 ## Development
 
-### Environment Variables
+Common commands:
 
-- `DATABASE_URL` - writable RPA application database. Migrations, provider cache,
-  URL results, BMS results, and `deal_sli_*` tables use this database.
-- `DMOB_DATABASE_URL` - read-only DMOB deal source database used for deal lookup.
-  For local fake-DMOB development it may point at the same local Postgres as
-  `DATABASE_URL`. For testing against a host SSH tunnel, run Postgres in Docker
-  and run `cargo run --bin url_finder` on the host so
-  `DMOB_DATABASE_URL=postgres://...@localhost:<tunnel-port>/...` resolves
-  through the tunnel.
+```bash
+make init-dev
+make run
+make test
+make prepare
+```
 
-The Docker app service is for local fake-DMOB development and points both
-database URLs at the Compose Postgres service. For SSH-tunneled DMOB testing,
-start only Postgres with `make run-db` and run the Rust binary on the host.
+`make prepare` runs SQLx prepare, formatting, and clippy. Run it before pushing
+or opening a PR.
 
-### Result Codes
-
-- `NoCidContactData` - There is not data in `cid.contact` given `peer_id`
-- `MissingAddrFromCidContact` - There are no addresses in `ExtendedProviders` in `cid.contact` response
-- `MissingHttpAddrFromCidContact` - There are no http addresses in `ExtendedProviders` in `cid.contact` response
-- `NoDealsFound` - No deals found for the given SP address
-- `FailedToGetWorkingUrl` - No working URLs found
-- `Success` - The URL was found successfully and is returned with the response
-
-### Error Codes
-
-- `FailedToGetPeerId` - Failed to get the peer ID from the lotus rpc
-- `FailedToRetrieveCidContactData` - Failed to retrieve the miner info from the database
-
-## How the Service Works
-
-### Two types of Requests
-
-1. **Async Job**: User requests a job, which is processed in the background. The user receives a `job_id` that is used to check the status and results later. The jobs are processed one by one, allowing for multiple jobs to be created without blocking the service.
-2. **Direct Call**: User requests measurement in synchronous mode, which is processed immediately. The result is not stored or cached and its returned as a response to the request. Response might take up to several minutes and might time out if the request takes too long.
-
-### High-Level Workflow 
-
-1. **Input**: The service accepts requests for a Storage Provider address, a Client address, or both.
-1. **SP Endpoint Discovery**: For each SP, the service:
-   - Retrieves the peer ID using Lotus RPC (`Filecoin.StateMinerInfo`)
-   - Calls [cid.contact](https://cid.contact) for HTTP endpoints associated with the peer ID (from `ExtendedProviders` section)
-   - Parses multiaddresses to extract usable HTTP endpoints
-1. **Deal and PieceCID Selection**:
-   - Calls the database for deals matching the SP (and optionally the client)
-   - Selects up to `100` **random** pieceCIDs per SP/client pair to ensure a representative sample
-1. **URL Construction**:
-   - Constructs URLs by combining each HTTP endpoint with each pieceCID (`http://{HTTP_ENPOINT}/piece/{pieceCID}`)
-1. **Retrievability Testing**:
-   - Concurrently tests up to `20` URLs at a time using HTTP HEAD requests
-   - Records which URLs are reachable (return a successful HTTP response)
-   - Saves one working URL and calculates the retrievability percentage (working URLs / total tested)
-1. **Result**:
-   - Returns/Saves the working URL and retrievability percentage
-   - Provides detailed result codes and error codes when applicable
-
-### Design Choices
-
-- **Random Sampling**: Testing a random subset of pieceCIDs ensures that retrievability metrics are not biased by deal ordering or selection
-- **Async Job**: Using async jobs allows the process to run in the background, mitigating timeouts and allowing to create multiple jobs at once that will be processed one by one
-- **External Data Sources**: Lotus RPC and cid.contact are authoritative sources for miner info and endpoints
-
-## Potential Issues
-
-- **HTTP Endpoint Reliability**: Not all SPs maintain reliable or up-to-date HTTP endpoints.
-- **HEAD Requests Only**: HEAD requests check for basic reachability, but do not guarantee that the file can be fully downloaded or is valid
-
-## Possible Improvements
-
-1. **Scheduled Checks**: Implement a scheduler to periodically re-check URLs for retrievability, ensuring that the data remains current
-1. **Database Integration**: Store results in a database to allow for faster response times
-1. **File Header Analysis**: Extend the service to analyze file headers for additional metadata e.g. size, diff between deal size and actual file size
-1. **Historical Metrics**: Track retrievability metrics over time for trend analysis
+Integration tests use testcontainers for Postgres and wiremock for external HTTP
+services.

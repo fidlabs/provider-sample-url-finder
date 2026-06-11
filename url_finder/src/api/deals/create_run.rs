@@ -16,7 +16,7 @@ use crate::{
 #[utoipa::path(
     post,
     path = "/deals/{deal_id}/runs",
-    description = "Persist a manual synchronous Deal SLI run result and return the stored latest run data.",
+    description = "Run a synchronous Deal SLI measurement for a stored target using cached provider endpoints, persist the result, and return the latest deal state.",
     params(DealPath),
     responses(
         (status = 200, description = "Stored latest deal run", body = DealLatestMeasurementResponse),
