@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                    COUNT(*) AS \"count!\"\n               FROM\n                    deal_sli_pieces\n               WHERE\n                    deal_id = $1\n                    AND manifest_snapshot_id = $2\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "c993ebac3cb80a3df26c149db6db5012b1c4e7da7e10866de08713f1fdb722e1"
+}

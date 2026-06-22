@@ -340,7 +340,7 @@ async fn process_completed_job(
     Ok(())
 }
 
-fn extract_results_from_job(
+pub(super) fn extract_results_from_job(
     job_response: &BmsJobResponse,
 ) -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>) {
     // Find the last completed subjob with worker data (typically the 100% test)

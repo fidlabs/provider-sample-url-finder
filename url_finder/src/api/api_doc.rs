@@ -1,17 +1,41 @@
 use crate::api_response::ErrorResponse;
-use utoipa::OpenApi;
+use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
+use utoipa::{Modify, OpenApi};
 
+use crate::api::deals::*;
 use crate::api::providers::*;
 use crate::api::*;
+
+#[allow(dead_code)]
+struct SecurityAddon;
+
+impl Modify for SecurityAddon {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        if let Some(components) = openapi.components.as_mut() {
+            let scheme =
+                SecurityScheme::Http(HttpBuilder::new().scheme(HttpAuthScheme::Bearer).build());
+            components.add_security_scheme("bearer_auth", scheme);
+        }
+    }
+}
 
 #[derive(OpenApi)]
 #[openapi(
     info(
         title = "Url Finder",
         description = r#"
-This is the API documentation for the Url Finder micro-service.
+This is the API documentation for the Random Piece Availability service.
 
-The Url Finder service is responsible for finding the URL of a miner given its address.
+RPA discovers HTTP endpoints for Filecoin storage providers, measures piece
+retrievability, stores provider and BMS results, and exposes deal-level SLI
+state for PoRep Market integrations.
+
+## Deal SLI API
+
+The `/deals/*` endpoints are the PoRep Market contract surface. Register a
+deal target with a verified manifest, fetch the stored target and derived
+pieces, read the latest measurement state, or trigger a manual run. Deal SLI
+write endpoints require `Authorization: Bearer <AUTH_TOKEN>`.
 
 ## New Providers API
 
@@ -51,6 +75,11 @@ The `/url/*` endpoints remain fully backward compatible.
         handle_reset_provider,
         handle_history_retrievability,
         handle_history_retrievability_client,
+        // Deal SLI API
+        handle_upsert_deal,
+        handle_get_deal,
+        handle_get_latest,
+        handle_create_run,
     ),
     components(
         schemas(
@@ -96,6 +125,17 @@ The `/url/*` endpoints remain fully backward compatible.
             DiagnosticsResponse,
             ScheduleStateResponse,
             SchedulingResponse,
+            // Deal SLI API
+            DealPath,
+            DealVersion,
+            MeasurementState,
+            DealSliRequirements,
+            DealPieceTarget,
+            DealTargetUpsertRequest,
+            DealTargetResponse,
+            DealPorepSliResponse,
+            DealBmsResultResponse,
+            DealLatestMeasurementResponse,
 
             // Misc
             HealthcheckResponse,
@@ -108,8 +148,10 @@ The `/url/*` endpoints remain fully backward compatible.
     tags(
         (name = "Providers", description = "New Providers API - pre-computed data with performance metrics"),
         (name = "Clients", description = "Client endpoints - providers for a specific client"),
+        (name = "Deals", description = "PoRep V2 deal measurement API contract"),
         (name = "URL", description = "Legacy URL Finder APIs"),
         (name = "Healthcheck", description = "Health check endpoints"),
-    )
+    ),
+    modifiers(&SecurityAddon),
 )]
 pub struct ApiDoc;

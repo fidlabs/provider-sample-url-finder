@@ -5,7 +5,7 @@ use axum::{
     body::Body,
     http::Response,
     response::IntoResponse,
-    routing::{get, post},
+    routing::{get, post, put},
 };
 use tower_governor::{
     GovernorError, GovernorLayer, governor::GovernorConfigBuilder,
@@ -106,6 +106,16 @@ pub fn create_routes() -> Router<Arc<AppState>> {
                 .error_handler(too_many_requests_error_handler),
         );
 
+    let deals_api_routes = Router::new()
+        .route("/deals/{deal_id}", put(deals::handle_upsert_deal))
+        .route("/deals/{deal_id}", get(deals::handle_get_deal))
+        .route("/deals/{deal_id}/latest", get(deals::handle_get_latest))
+        .route("/deals/{deal_id}/runs", post(deals::handle_create_run))
+        .layer(
+            GovernorLayer::new(governor_config.clone())
+                .error_handler(too_many_requests_error_handler),
+        );
+
     let healthcheck_route = Router::new()
         .route("/healthcheck", get(handle_healthcheck))
         .layer(
@@ -117,5 +127,6 @@ pub fn create_routes() -> Router<Arc<AppState>> {
         .merge(swagger_routes)
         .merge(legacy_api_routes)
         .merge(providers_api_routes)
+        .merge(deals_api_routes)
         .merge(healthcheck_route)
 }

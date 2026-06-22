@@ -1,6 +1,9 @@
 pub mod bms_client;
 pub mod bms_result_repo;
 pub mod clients_providers;
+pub mod deal_sli_api;
+pub mod deal_sli_scheduler;
+pub mod deals_auth;
 pub mod extended_response;
 pub mod find_client;
 pub mod find_retri_sp;

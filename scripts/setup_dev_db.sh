@@ -15,10 +15,18 @@ if [ -z "$DATABASE_URL" ]; then
     exit 1
 fi
 
+run_psql() {
+    if command -v psql > /dev/null 2>&1; then
+        psql "$DATABASE_URL" "$@"
+    else
+        docker compose exec -T postgres psql -U postgres -d uf "$@"
+    fi
+}
+
 echo "Setting up development database..."
 
 # Create unified_verified_deal table (matches DMOB schema)
-psql "$DATABASE_URL" <<EOF
+run_psql <<EOF
 -- Drop if exists (for clean resets)
 DROP TABLE IF EXISTS unified_verified_deal CASCADE;
 
@@ -59,7 +67,7 @@ EOF
 echo "Table created. Seeding sample data..."
 
 # Seed with sample data
-psql "$DATABASE_URL" < scripts/sql/$FILE_NAME
+run_psql < scripts/sql/$FILE_NAME
 
 echo "✓ Development database setup complete!"
 echo "✓ unified_verified_deal table created and seeded"

@@ -11,10 +11,10 @@ use url_finder::{
     AppState,
     config::Config,
     repository::{
-        BmsBandwidthResultRepository, DealRepository, StorageProviderRepository,
+        BmsBandwidthResultRepository, DealRepository, DealSliRepository, StorageProviderRepository,
         UrlResultRepository,
     },
-    services::provider_service::ProviderService,
+    services::{deal_sli_service::DealSliService, provider_service::ProviderService},
 };
 
 use super::{TestDatabases, mock_servers::MockExternalServices};
@@ -35,18 +35,26 @@ pub async fn create_test_app(dbs: &TestDatabases, mocks: &MockExternalServices) 
 
     let url_repo = Arc::new(UrlResultRepository::new(dbs.app_pool.clone()));
     let bms_repo = Arc::new(BmsBandwidthResultRepository::new(dbs.app_pool.clone()));
+    let deal_sli_repo = Arc::new(DealSliRepository::new(dbs.app_pool.clone()));
     let storage_provider_repo = Arc::new(StorageProviderRepository::new(dbs.app_pool.clone()));
     let provider_service = Arc::new(ProviderService::new(
         url_repo.clone(),
         bms_repo.clone(),
         storage_provider_repo.clone(),
     ));
+    let deal_sli_service = Arc::new(DealSliService::new(
+        deal_sli_repo.clone(),
+        storage_provider_repo.clone(),
+        config.clone(),
+    ));
 
     let app_state = Arc::new(AppState {
         deal_repo: Arc::new(DealRepository::new(dbs.app_pool.clone())),
+        deal_sli_repo,
         storage_provider_repo,
         url_repo,
         bms_repo,
+        deal_sli_service,
         provider_service,
         config,
     });

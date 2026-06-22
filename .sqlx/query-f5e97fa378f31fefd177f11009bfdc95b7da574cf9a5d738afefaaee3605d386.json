@@ -1,0 +1,185 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                    id,\n                    deal_id,\n                    measurement_state,\n                    tested_at,\n                    working_url,\n                    retrievability_percent,\n                    large_files_percent,\n                    car_files_percent,\n                    sector_utilization_percent,\n                    manifest_snapshot_id,\n                    deal_size_bytes,\n                    manifest_size_bytes,\n                    content_matches_deal,\n                    sampled_piece_count,\n                    size_matched_percent,\n                    avg_response_time_ms,\n                    is_consistent,\n                    is_reliable,\n                    result_code AS \"result_code: ResultCode\",\n                    error_code AS \"error_code: ErrorCode\",\n                    piece_count,\n                    success_count,\n                    failed_count\n               FROM\n                    deal_sli_runs\n               WHERE\n                    deal_id = $1\n                    AND state = 'completed'\n               ORDER BY\n                    completed_at DESC NULLS LAST,\n                    started_at DESC,\n                    id DESC\n               LIMIT\n                    1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "deal_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "measurement_state",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "tested_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 4,
+        "name": "working_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "retrievability_percent",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 6,
+        "name": "large_files_percent",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 7,
+        "name": "car_files_percent",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 8,
+        "name": "sector_utilization_percent",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 9,
+        "name": "manifest_snapshot_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 10,
+        "name": "deal_size_bytes",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 11,
+        "name": "manifest_size_bytes",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 12,
+        "name": "content_matches_deal",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 13,
+        "name": "sampled_piece_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 14,
+        "name": "size_matched_percent",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 15,
+        "name": "avg_response_time_ms",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 16,
+        "name": "is_consistent",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 17,
+        "name": "is_reliable",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 18,
+        "name": "result_code: ResultCode",
+        "type_info": {
+          "Custom": {
+            "name": "result_code",
+            "kind": {
+              "Enum": [
+                "NoPeerId",
+                "NoCidContactData",
+                "MissingAddrFromCidContact",
+                "MissingHttpAddrFromCidContact",
+                "FailedToGetWorkingUrl",
+                "NoDealsFound",
+                "TimedOut",
+                "Success",
+                "JobCreated",
+                "Error"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 19,
+        "name": "error_code: ErrorCode",
+        "type_info": {
+          "Custom": {
+            "name": "error_code",
+            "kind": {
+              "Enum": [
+                "NoProviderOrClient",
+                "NoProvidersFound",
+                "FailedToRetrieveCidContactData",
+                "FailedToGetPeerId",
+                "FailedToGetDeals"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 20,
+        "name": "piece_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 21,
+        "name": "success_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 22,
+        "name": "failed_count",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f5e97fa378f31fefd177f11009bfdc95b7da574cf9a5d738afefaaee3605d386"
+}

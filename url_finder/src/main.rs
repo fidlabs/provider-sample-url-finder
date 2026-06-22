@@ -45,6 +45,7 @@ async fn main() -> Result<()> {
 
     let sp_repo = Arc::new(StorageProviderRepository::new(pool.clone()));
     let deal_repo = Arc::new(DealRepository::new(dmob_pool.clone()));
+    let deal_sli_repo = Arc::new(DealSliRepository::new(pool.clone()));
     let url_repo = Arc::new(UrlResultRepository::new(pool.clone()));
     let bms_result_repo = Arc::new(BmsBandwidthResultRepository::new(pool.clone()));
     let bms_client = Arc::new(url_finder::bms_client::BmsClient::new(
@@ -58,12 +59,19 @@ async fn main() -> Result<()> {
             sp_repo.clone(),
         ),
     );
+    let deal_sli_service = Arc::new(url_finder::services::deal_sli_service::DealSliService::new(
+        deal_sli_repo.clone(),
+        sp_repo.clone(),
+        config.clone(),
+    ));
 
     let app_state = Arc::new(AppState {
         deal_repo: deal_repo.clone(),
+        deal_sli_repo: deal_sli_repo.clone(),
         storage_provider_repo: sp_repo.clone(),
         url_repo: url_repo.clone(),
         bms_repo: bms_result_repo.clone(),
+        deal_sli_service,
         provider_service,
         config: config.clone(),
     });
@@ -124,6 +132,44 @@ async fn main() -> Result<()> {
         }
     });
 
+    // Start the Deal SLI scheduler in the background
+    let deal_sli_scheduler_handle: JoinHandle<()> = tokio::spawn({
+        let config = config.clone();
+        let deal_sli_service = app_state.deal_sli_service.clone();
+        let deal_sli_repo = deal_sli_repo.clone();
+        let bms_client = bms_client.clone();
+        let bms_circuit_breaker = bms_circuit_breaker.clone();
+        let shutdown = shutdown_token.clone();
+        async move {
+            background::run_deal_sli_scheduler(
+                config,
+                deal_sli_service,
+                deal_sli_repo,
+                bms_client,
+                bms_circuit_breaker,
+                shutdown,
+            )
+            .await;
+        }
+    });
+
+    // Start the Deal SLI BMS result poller in the background
+    let deal_sli_bms_result_poller_handle: JoinHandle<()> = tokio::spawn({
+        let deal_sli_repo = deal_sli_repo.clone();
+        let bms_client = bms_client.clone();
+        let bms_circuit_breaker = bms_circuit_breaker.clone();
+        let shutdown = shutdown_token.clone();
+        async move {
+            background::run_deal_sli_bms_result_poller(
+                deal_sli_repo,
+                bms_client,
+                bms_circuit_breaker,
+                shutdown,
+            )
+            .await;
+        }
+    });
+
     let allowed_origins = ["https://sp-tool.allocator.tech".parse().unwrap()];
     let cors = CorsLayer::new()
         .allow_origin(allowed_origins)
@@ -150,6 +196,11 @@ async fn main() -> Result<()> {
         ("endpoint_scheduler", endpoint_scheduler_handle),
         ("url_discovery", url_discovery_handle),
         ("bms_scheduler", bms_scheduler_handle),
+        ("deal_sli_scheduler", deal_sli_scheduler_handle),
+        (
+            "deal_sli_bms_result_poller",
+            deal_sli_bms_result_poller_handle,
+        ),
     ];
 
     for (name, handle) in background_handles {

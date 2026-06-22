@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE\n                    deal_sli_bms_jobs\n               SET\n                    status = $2,\n                    ping_avg_ms = $3,\n                    head_avg_ms = $4,\n                    ttfb_ms = $5,\n                    download_speed_mbps = $6,\n                    error_message = $7,\n                    completed_at = NOW()\n               WHERE\n                    bms_job_id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Varchar",
+        "Numeric",
+        "Numeric",
+        "Numeric",
+        "Numeric",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "63ab164f21401d113f82b37a061af90b0dbbc8cee446e8cd0bc634596fb5b206"
+}

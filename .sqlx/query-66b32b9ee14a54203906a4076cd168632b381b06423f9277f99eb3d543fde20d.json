@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO\n                    deal_sli_target_schedules (deal_id)\n               VALUES\n                    ($1)\n               ON CONFLICT (deal_id) DO NOTHING\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "66b32b9ee14a54203906a4076cd168632b381b06423f9277f99eb3d543fde20d"
+}

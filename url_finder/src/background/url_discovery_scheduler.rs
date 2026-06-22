@@ -89,11 +89,7 @@ impl DiscoveryBatchStats {
     }
 
     fn success_percent(&self) -> usize {
-        if self.total > 0 {
-            (self.ok * 100) / self.total
-        } else {
-            0
-        }
+        (self.ok * 100).checked_div(self.total).unwrap_or(0)
     }
 }
 

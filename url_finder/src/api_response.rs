@@ -59,7 +59,7 @@ pub enum ApiResponse<T> {
 impl From<JsonRejection> for ApiResponse<ErrorResponse> {
     fn from(rejection: JsonRejection) -> ApiResponse<ErrorResponse> {
         ApiResponse::BadRequest(Json(ErrorResponse {
-            error_code: None,
+            error_code: Some(ErrorCode::InvalidRequest.into()),
             error: rejection.body_text(),
         }))
     }

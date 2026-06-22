@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                    deal_id\n               FROM\n                    deal_sli_targets\n               WHERE\n                    deal_id = $1\n               FOR UPDATE\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "deal_id",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "c72440229d486b0411f73c72d8b6981a8b9da278658caad8f1ca93b3ddbedbf2"
+}

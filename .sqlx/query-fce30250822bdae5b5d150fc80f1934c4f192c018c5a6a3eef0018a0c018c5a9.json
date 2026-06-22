@@ -1,0 +1,94 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                    deal_id,\n                    deal_version,\n                    provider_id,\n                    client_id,\n                    deal_size_bytes,\n                    manifest_hash,\n                    manifest_location,\n                    active_manifest_snapshot_id,\n                    retrievability_bps,\n                    bandwidth_mbps,\n                    latency_ms,\n                    created_at,\n                    updated_at\n               FROM\n                    deal_sli_targets\n               WHERE\n                    deal_id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "deal_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "deal_version",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "provider_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "client_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "deal_size_bytes",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 5,
+        "name": "manifest_hash",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "manifest_location",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "active_manifest_snapshot_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 8,
+        "name": "retrievability_bps",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 9,
+        "name": "bandwidth_mbps",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 10,
+        "name": "latency_ms",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 11,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 12,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "fce30250822bdae5b5d150fc80f1934c4f192c018c5a6a3eef0018a0c018c5a9"
+}

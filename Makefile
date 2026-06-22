@@ -54,7 +54,7 @@ migrate-status:
 
 # Init dev environment
 init-dev: run-db
-	@until pg_isready -h localhost -p 5434 -U pguser > /dev/null 2>&1; do sleep 1; done
+	@until docker compose exec -T postgres pg_isready -U postgres -d uf > /dev/null 2>&1; do sleep 1; done
 	@$(MAKE) migrate-up init-dev-db
 # Init dev db (creates DMOB table and seeds data)
 init-dev-db:
