@@ -111,7 +111,7 @@ pub struct DealTargetUpsertRequest {
     /// Deal size in bytes, serialized as a base-10 integer string.
     #[schema(example = "7112600059904")]
     pub deal_size_bytes: String,
-    /// Expected SHA-256 hash of the manifest body. A leading `0x` is accepted.
+    /// Expected Keccak-256 hash of the manifest body. A leading `0x` is accepted.
     #[schema(example = "43ff1a93b66d742e9f9efc3305acaa51c9297b7000145f35e968e2b42e7bf328")]
     pub manifest_hash: String,
     /// HTTP or HTTPS URL of the PoRep manifest to fetch and snapshot.

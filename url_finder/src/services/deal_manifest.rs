@@ -1,6 +1,7 @@
 use std::str::FromStr;
 use std::{net::IpAddr, str};
 
+use alloy::primitives::keccak256;
 use color_eyre::{
     Result,
     eyre::{Context, eyre},
@@ -8,7 +9,6 @@ use color_eyre::{
 use futures::StreamExt;
 use reqwest::Url;
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 use sqlx::types::BigDecimal;
 
 const MAX_MANIFEST_BYTES: usize = 10 * 1024 * 1024;
@@ -157,9 +157,7 @@ async fn read_manifest_body(
 }
 
 pub fn compute_manifest_hash(bytes: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    hex::encode(hasher.finalize())
+    hex::encode(keccak256(bytes))
 }
 
 pub fn manifest_hash_matches(expected_hash: &str, bytes: &[u8]) -> bool {
@@ -313,9 +311,9 @@ mod tests {
     }
 
     #[test]
-    fn verifies_sha256_manifest_hash_with_optional_0x_prefix() {
+    fn verifies_keccak256_manifest_hash_with_optional_0x_prefix() {
         let raw = br#"[{"pieces":[]}]"#;
-        let expected = compute_manifest_hash(raw);
+        let expected = "0f736d80eccc8276fe81992e0d2b64a1203d45b902fa3c9ea1956c19f1c0b876";
 
         assert!(manifest_hash_matches(&expected, raw));
         assert!(manifest_hash_matches(&format!("0x{expected}"), raw));

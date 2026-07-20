@@ -86,7 +86,7 @@ pub async fn handle_get_provider_client(
                 ErrorCode::NotFound,
                 format!(
                     "Provider {} with client {} not found",
-                    &path.id, &path.client_id
+                    path.id, path.client_id
                 ),
             )
         })?;
