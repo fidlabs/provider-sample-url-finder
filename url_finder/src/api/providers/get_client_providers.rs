@@ -77,7 +77,7 @@ pub async fn handle_get_client_providers(
     if providers_data.is_empty() {
         return Err(not_found_with_code(
             ErrorCode::NotFound,
-            format!("Client {} has no providers", &path.id),
+            format!("Client {} has no providers", path.id),
         ));
     }
 

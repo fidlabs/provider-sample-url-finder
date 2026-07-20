@@ -105,7 +105,7 @@ pub async fn handle_reset_provider(
         .ok_or_else(|| {
             not_found_with_code(
                 ErrorCode::NotFound,
-                format!("Provider {} not found", &path.id),
+                format!("Provider {} not found", path.id),
             )
         })?;
 
