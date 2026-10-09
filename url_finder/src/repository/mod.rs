@@ -1,5 +1,6 @@
 mod bms_result_repo;
 mod deal_repo;
+mod deal_sli_history_repo;
 mod deal_sli_repo;
 mod storage_provider_repo;
 mod url_result_repo;
@@ -42,6 +43,7 @@ impl HistoryCursorBoundary {
 
 pub use bms_result_repo::*;
 pub use deal_repo::*;
+pub use deal_sli_history_repo::*;
 pub use deal_sli_repo::*;
 pub use storage_provider_repo::*;
 pub use url_result_repo::*;

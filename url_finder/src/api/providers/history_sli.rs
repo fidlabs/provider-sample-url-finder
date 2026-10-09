@@ -32,11 +32,8 @@ pub struct SliHistoryQuery {
     /// Maximum combined URL and BMS events to return.
     #[param(default = 100, minimum = 1, maximum = 500, example = 100)]
     pub limit: Option<i64>,
-    /// Opaque cursor returned by the previous page. Keep the same resource and date filters.
-    #[param(
-        max_length = 2048,
-        example = "7b2270726f76696465725f6964223a22663031323334222c2266726f6d223a22323032362d30392d3031222c22746f223a22323032362d30392d3038222c22636c69656e745f6964223a6e756c6c2c226174223a22323032362d30392d30385431323a30303a30305a222c22736f75726365223a2275726c222c226964223a2230303030303030302d303030302d343030302d383030302d303030303030303030303031227d"
-    )]
+    /// Omit on the first page. Then copy `next_cursor` and keep the same resource and date filters.
+    #[param(max_length = 2048)]
     pub cursor: Option<String>,
 }
 

@@ -1,0 +1,120 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT jobs.*\n               FROM UNNEST($2::uuid[]) AS requested(run_id)\n               CROSS JOIN LATERAL (\n                    SELECT\n                        id,\n                        deal_id,\n                        run_id,\n                        piece_index,\n                        piece_cid,\n                        bms_job_id,\n                        url_tested,\n                        routing_key,\n                        worker_count,\n                        status,\n                        ping_avg_ms,\n                        head_avg_ms,\n                        ttfb_ms,\n                        download_speed_mbps,\n                        error_message,\n                        created_at,\n                        completed_at\n                    FROM deal_sli_bms_jobs\n                    WHERE deal_id = $1 AND run_id = requested.run_id\n                    ORDER BY created_at DESC, id DESC\n                    LIMIT $3\n               ) jobs\n               ORDER BY jobs.run_id, jobs.created_at DESC, jobs.id DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "deal_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "run_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "piece_index",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "piece_cid",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "bms_job_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 6,
+        "name": "url_tested",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "routing_key",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 8,
+        "name": "worker_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 9,
+        "name": "status",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 10,
+        "name": "ping_avg_ms",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 11,
+        "name": "head_avg_ms",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 12,
+        "name": "ttfb_ms",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 13,
+        "name": "download_speed_mbps",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 14,
+        "name": "error_message",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 15,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 16,
+        "name": "completed_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "UuidArray",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "6376072fc7bfce5fe2f07688b28d0eecd157c6bb034b07bdb0bd7d4b149e31a9"
+}

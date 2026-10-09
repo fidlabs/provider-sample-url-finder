@@ -1,6 +1,7 @@
 mod create_run;
 mod get_deal;
 mod get_latest;
+mod history_sli;
 mod types;
 mod upsert_deal;
 
@@ -17,6 +18,7 @@ use crate::{
 pub use create_run::*;
 pub use get_deal::*;
 pub use get_latest::*;
+pub use history_sli::*;
 pub use types::*;
 pub use upsert_deal::*;
 

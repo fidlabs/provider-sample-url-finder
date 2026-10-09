@@ -638,7 +638,9 @@ async fn provider_history_openapi_documents_query_contract_and_server_errors() {
                 .find(|parameter| parameter["name"] == name)
                 .unwrap_or_else(|| panic!("missing {name} on {path}"));
             assert!(parameter["description"].is_string(), "{name} on {path}");
-            assert!(!parameter["example"].is_null(), "{name} on {path}");
+            if name != "cursor" {
+                assert!(!parameter["example"].is_null(), "{name} on {path}");
+            }
         }
         let limit = parameters
             .iter()
