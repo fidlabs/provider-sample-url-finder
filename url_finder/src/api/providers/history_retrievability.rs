@@ -23,12 +23,18 @@ use crate::{
 
 #[derive(Deserialize, ToSchema, IntoParams)]
 pub struct HistoryProviderPath {
+    /// Filecoin storage provider ID in canonical f0 address form.
+    #[param(example = "f01234")]
     pub id: String,
 }
 
 #[derive(Deserialize, ToSchema, IntoParams)]
 pub struct HistoryProviderClientPath {
+    /// Filecoin storage provider ID in canonical f0 address form.
+    #[param(example = "f01234")]
     pub id: String,
+    /// Filecoin client ID in canonical f0 address form.
+    #[param(example = "f05678")]
     pub client_id: String,
 }
 

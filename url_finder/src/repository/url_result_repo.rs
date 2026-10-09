@@ -5,6 +5,7 @@ use sqlx::PgPool;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+use crate::repository::HistoryCursorBoundary;
 use crate::services::url_discovery_service::UrlDiscoveryResult;
 use crate::types::{ClientId, DiscoveryType, ErrorCode, ProviderId, ResultCode};
 
@@ -70,6 +71,26 @@ pub struct HistoryRow {
     pub error_code: Option<ErrorCode>,
     pub tested_at: DateTime<Utc>,
     pub url_metadata: Option<serde_json::Value>,
+    pub car_files_percent: Option<f64>,
+    pub large_files_percent: Option<f64>,
+}
+
+/// A stored URL discovery event used by the non-aggregating history API.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct UrlHistoryEvent {
+    pub id: Uuid,
+    pub provider_id: ProviderId,
+    pub client_id: Option<ClientId>,
+    pub result_type: DiscoveryType,
+    pub working_url: Option<String>,
+    pub retrievability_percent: Option<f64>,
+    pub result_code: ResultCode,
+    pub error_code: Option<ErrorCode>,
+    pub tested_at: DateTime<Utc>,
+    pub is_consistent: Option<bool>,
+    pub is_reliable: Option<bool>,
+    pub url_metadata: Option<serde_json::Value>,
+    pub sector_utilization_percent: Option<f64>,
     pub car_files_percent: Option<f64>,
     pub large_files_percent: Option<f64>,
 }
@@ -498,5 +519,68 @@ impl UrlResultRepository {
         .await?;
 
         Ok(results)
+    }
+
+    pub async fn get_sli_history_events(
+        &self,
+        provider_id: &ProviderId,
+        client_id: Option<&ClientId>,
+        start: DateTime<Utc>,
+        end: DateTime<Utc>,
+        boundary: Option<HistoryCursorBoundary>,
+        limit: i64,
+    ) -> Result<Vec<UrlHistoryEvent>> {
+        let boundary_at = boundary.map(|value| value.at);
+        let boundary_id = boundary.and_then(|value| value.id);
+        let include_equal_at = boundary.is_some_and(|value| value.include_equal_at);
+        Ok(sqlx::query_as!(
+            UrlHistoryEvent,
+            r#"SELECT
+                    id,
+                    provider_id AS "provider_id: ProviderId",
+                    client_id AS "client_id: ClientId",
+                    result_type AS "result_type: DiscoveryType",
+                    working_url,
+                    retrievability_percent::float8 AS "retrievability_percent",
+                    result_code AS "result_code: ResultCode",
+                    error_code AS "error_code: ErrorCode",
+                    tested_at,
+                    is_consistent,
+                    is_reliable,
+                    url_metadata,
+                    sector_utilization_percent::float8 AS "sector_utilization_percent",
+                    car_files_percent::float8 AS "car_files_percent",
+                    large_files_percent::float8 AS "large_files_percent"
+               FROM
+                    url_results
+               WHERE
+                    provider_id = $1
+                    AND (($2::text IS NULL AND result_type = 'Provider')
+                         OR ($2::text IS NOT NULL
+                             AND client_id = $2
+                             AND result_type = 'ProviderClient'))
+                    AND tested_at >= $3
+                    AND tested_at < $4
+                    AND ($5::timestamptz IS NULL
+                         OR tested_at < $5
+                         OR (tested_at = $5
+                             AND ($7
+                                  OR ($6::uuid IS NOT NULL AND id < $6))))
+               ORDER BY
+                    tested_at DESC,
+                    id DESC
+               LIMIT $8
+            "#,
+            provider_id.as_str(),
+            client_id.map(ClientId::as_str),
+            start,
+            end,
+            boundary_at,
+            boundary_id,
+            include_equal_at,
+            limit
+        )
+        .fetch_all(&self.pool)
+        .await?)
     }
 }

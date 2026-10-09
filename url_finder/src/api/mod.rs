@@ -10,6 +10,9 @@ pub use healthcheck::*;
 mod api_doc;
 pub use api_doc::*;
 
+mod history;
+pub(crate) use history::*;
+
 mod find_client;
 pub use find_client::*;
 
