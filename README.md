@@ -85,8 +85,8 @@ the last measurement of the day.
 | --- | --- |
 | `GET /providers/{id}/history/sli` | Provider URL measurements and provider BMS jobs |
 | `GET /providers/{id}/clients/{client_id}/history/sli` | URL measurements for that provider/client pair and separately identified provider-scoped BMS jobs |
-| `GET /deals/{deal_id}/history/sli` | Deal runs with a first page of their own BMS jobs and derived PoRep SLI values |
-| `GET /deals/{deal_id}/runs/{run_id}` | One stored run, its first BMS page, and paginated piece/URL results |
+| `GET /deals/{deal_id}/history/sli` | Completed deal runs with a first page of their own BMS jobs and derived PoRep SLI values |
+| `GET /deals/{deal_id}/runs/{run_id}` | One stored run in any state, its first BMS page, and paginated piece/URL results |
 | `GET /deals/{deal_id}/runs/{run_id}/bms` | All BMS jobs for that run, through cursor pagination |
 
 These GET endpoints use the same public read access as the existing provider and

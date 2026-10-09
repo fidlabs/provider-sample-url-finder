@@ -69,11 +69,16 @@ pub struct DealSliBmsAggregate {
 impl DealSliRepository {
     pub async fn target_exists(&self, deal_id: &str) -> Result<bool> {
         Ok(sqlx::query_scalar!(
-            r#"SELECT EXISTS (
-                    SELECT 1
-                    FROM deal_sli_targets
-                    WHERE deal_id = $1
-                ) AS "exists!""#,
+            r#"SELECT
+                    EXISTS (
+                        SELECT
+                            1
+                        FROM
+                            deal_sli_targets
+                        WHERE
+                            deal_id = $1
+                    ) AS "exists!"
+            "#,
             deal_id
         )
         .fetch_one(&self.pool)
@@ -123,14 +128,19 @@ impl DealSliRepository {
                     sampled_piece_count,
                     size_matched_percent,
                     avg_response_time_ms
-               FROM deal_sli_runs
-               WHERE deal_id = $1
-                 AND state = 'completed'
-                 AND started_at >= $2
-                 AND started_at < $3
-                 AND ($4::timestamptz IS NULL OR (started_at, id) < ($4, $5))
-               ORDER BY started_at DESC, id DESC
-               LIMIT $6"#,
+               FROM
+                    deal_sli_runs
+               WHERE
+                    deal_id = $1
+                    AND state = 'completed'
+                    AND started_at >= $2
+                    AND started_at < $3
+                    AND ($4::timestamptz IS NULL OR (started_at, id) < ($4, $5))
+               ORDER BY
+                    started_at DESC,
+                    id DESC
+               LIMIT $6
+            "#,
             deal_id,
             start,
             end,
@@ -179,8 +189,12 @@ impl DealSliRepository {
                     sampled_piece_count,
                     size_matched_percent,
                     avg_response_time_ms
-               FROM deal_sli_runs
-               WHERE deal_id = $1 AND id = $2"#,
+               FROM
+                    deal_sli_runs
+               WHERE
+                    deal_id = $1
+                    AND id = $2
+            "#,
             deal_id,
             run_id
         )
@@ -199,8 +213,26 @@ impl DealSliRepository {
         }
         Ok(sqlx::query_as!(
             DealSliBmsJob,
-            r#"SELECT jobs.*
-               FROM UNNEST($2::uuid[]) AS requested(run_id)
+            r#"SELECT
+                    jobs.id,
+                    jobs.deal_id,
+                    jobs.run_id,
+                    jobs.piece_index,
+                    jobs.piece_cid,
+                    jobs.bms_job_id,
+                    jobs.url_tested,
+                    jobs.routing_key,
+                    jobs.worker_count,
+                    jobs.status,
+                    jobs.ping_avg_ms,
+                    jobs.head_avg_ms,
+                    jobs.ttfb_ms,
+                    jobs.download_speed_mbps,
+                    jobs.error_message,
+                    jobs.created_at,
+                    jobs.completed_at
+               FROM
+                    UNNEST($2::uuid[]) AS requested(run_id)
                CROSS JOIN LATERAL (
                     SELECT
                         id,
@@ -220,12 +252,21 @@ impl DealSliRepository {
                         error_message,
                         created_at,
                         completed_at
-                    FROM deal_sli_bms_jobs
-                    WHERE deal_id = $1 AND run_id = requested.run_id
-                    ORDER BY created_at DESC, id DESC
+                    FROM
+                        deal_sli_bms_jobs
+                    WHERE
+                        deal_id = $1
+                        AND run_id = requested.run_id
+                    ORDER BY
+                        created_at DESC,
+                        id DESC
                     LIMIT $3
                ) jobs
-               ORDER BY jobs.run_id, jobs.created_at DESC, jobs.id DESC"#,
+               ORDER BY
+                    jobs.run_id,
+                    jobs.created_at DESC,
+                    jobs.id DESC
+            "#,
             deal_id,
             run_ids,
             limit_per_run
@@ -252,10 +293,14 @@ impl DealSliRepository {
                     MAX(jobs.ttfb_ms) FILTER (
                         WHERE jobs.status = 'Completed'
                     ) AS max_ttfb_ms
-               FROM UNNEST($2::uuid[]) AS requested(run_id)
+               FROM
+                    UNNEST($2::uuid[]) AS requested(run_id)
                LEFT JOIN deal_sli_bms_jobs jobs
-                 ON jobs.deal_id = $1 AND jobs.run_id = requested.run_id
-               GROUP BY requested.run_id"#,
+                    ON jobs.deal_id = $1
+                    AND jobs.run_id = requested.run_id
+               GROUP BY
+                    requested.run_id
+            "#,
             deal_id,
             run_ids
         )
@@ -293,12 +338,17 @@ impl DealSliRepository {
                     error_message,
                     created_at,
                     completed_at
-               FROM deal_sli_bms_jobs
-               WHERE deal_id = $1
-                 AND run_id = $2
-                 AND ($3::timestamptz IS NULL OR (created_at, id) < ($3, $4))
-               ORDER BY created_at DESC, id DESC
-               LIMIT $5"#,
+               FROM
+                    deal_sli_bms_jobs
+               WHERE
+                    deal_id = $1
+                    AND run_id = $2
+                    AND ($3::timestamptz IS NULL OR (created_at, id) < ($3, $4))
+               ORDER BY
+                    created_at DESC,
+                    id DESC
+               LIMIT $5
+            "#,
             deal_id,
             run_id,
             boundary_at,
@@ -344,8 +394,11 @@ impl DealSliRepository {
                             PARTITION BY piece_index
                             ORDER BY url_tested ASC
                         ) AS url_ordinal
-                    FROM deal_sli_piece_results
-                    WHERE deal_id = $1 AND run_id = $2
+                    FROM
+                        deal_sli_piece_results
+                    WHERE
+                        deal_id = $1
+                        AND run_id = $2
                 )
                 SELECT
                     run_id,
@@ -364,10 +417,16 @@ impl DealSliRepository {
                     size_matched,
                     manifest_response_time_ms,
                     url_ordinal AS "url_ordinal!"
-               FROM ordered
-               WHERE $3::integer IS NULL OR (piece_index, url_ordinal) > ($3, $4)
-               ORDER BY piece_index ASC, url_ordinal ASC
-               LIMIT $5"#,
+               FROM
+                    ordered
+               WHERE
+                    $3::integer IS NULL
+                    OR (piece_index, url_ordinal) > ($3, $4)
+               ORDER BY
+                    piece_index ASC,
+                    url_ordinal ASC
+               LIMIT $5
+            "#,
             deal_id,
             run_id,
             boundary_index,

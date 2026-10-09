@@ -224,7 +224,8 @@ fn deal_cursor_key(deal_id: &str) -> String {
     hex::encode(keccak256(deal_id.as_bytes()))
 }
 
-fn internal_history_error() -> ApiResponse<()> {
+fn internal_history_error(e: color_eyre::Report) -> ApiResponse<()> {
+    tracing::warn!("Failed to query Deal SLI history: {e:?}");
     internal_server_error_with_code(ErrorCode::InternalError, "Failed to query Deal SLI history")
 }
 
@@ -331,7 +332,7 @@ async fn load_run_bms_data(
             .deal_sli_repo
             .get_bms_aggregates_for_runs(deal_id, run_ids),
     )
-    .map_err(|_| internal_history_error())?;
+    .map_err(internal_history_error)?;
 
     let mut by_run: HashMap<Uuid, RunBmsData> = HashMap::new();
     for result in previews {
@@ -509,7 +510,7 @@ pub async fn handle_deal_history_sli(
         .deal_sli_repo
         .target_exists(&path.deal_id)
         .await
-        .map_err(|_| internal_history_error())?
+        .map_err(internal_history_error)?
     {
         return Err(not_found(&path.deal_id, None));
     }
@@ -518,7 +519,7 @@ pub async fn handle_deal_history_sli(
         .deal_sli_repo
         .get_completed_run_history(&path.deal_id, window.start, window.end, boundary, limit + 1)
         .await
-        .map_err(|_| internal_history_error())?;
+        .map_err(internal_history_error)?;
     let next_cursor = if runs.len() > limit as usize {
         let run = &runs[limit as usize - 1];
         Some(encode_history_cursor(&RunHistoryCursor {
@@ -584,7 +585,7 @@ pub async fn handle_get_deal_run(
         .deal_sli_repo
         .get_run_for_deal(&path.deal_id, run_id)
         .await
-        .map_err(|_| internal_history_error())?
+        .map_err(internal_history_error)?
         .ok_or_else(|| not_found(&path.deal_id, Some(run_id)))?;
     let mut bms_by_run = load_run_bms_data(&state, &path.deal_id, &[run_id]).await?;
     let boundary = cursor
@@ -594,7 +595,7 @@ pub async fn handle_get_deal_run(
         .deal_sli_repo
         .get_piece_results_for_run(&path.deal_id, run_id, boundary, limit + 1)
         .await
-        .map_err(|_| internal_history_error())?;
+        .map_err(internal_history_error)?;
     let next_cursor = if piece_results.len() > limit as usize {
         let result = &piece_results[limit as usize - 1];
         Some(encode_history_cursor(&PieceCursor {
@@ -646,7 +647,7 @@ pub async fn handle_get_deal_run_bms(
         .deal_sli_repo
         .get_run_for_deal(&path.deal_id, run_id)
         .await
-        .map_err(|_| internal_history_error())?
+        .map_err(internal_history_error)?
         .is_none()
     {
         return Err(not_found(&path.deal_id, Some(run_id)));
@@ -656,7 +657,7 @@ pub async fn handle_get_deal_run_bms(
         .deal_sli_repo
         .get_bms_jobs_for_run_page(&path.deal_id, run_id, boundary, limit + 1)
         .await
-        .map_err(|_| internal_history_error())?;
+        .map_err(internal_history_error)?;
     let next_cursor = if jobs.len() > limit as usize {
         Some(encode_bms_cursor(
             &path.deal_id,

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT\n                    id,\n                    deal_id,\n                    run_id,\n                    piece_index,\n                    piece_cid,\n                    bms_job_id,\n                    url_tested,\n                    routing_key,\n                    worker_count,\n                    status,\n                    ping_avg_ms,\n                    head_avg_ms,\n                    ttfb_ms,\n                    download_speed_mbps,\n                    error_message,\n                    created_at,\n                    completed_at\n               FROM deal_sli_bms_jobs\n               WHERE deal_id = $1\n                 AND run_id = $2\n                 AND ($3::timestamptz IS NULL OR (created_at, id) < ($3, $4))\n               ORDER BY created_at DESC, id DESC\n               LIMIT $5",
+  "query": "SELECT\n                    jobs.id,\n                    jobs.deal_id,\n                    jobs.run_id,\n                    jobs.piece_index,\n                    jobs.piece_cid,\n                    jobs.bms_job_id,\n                    jobs.url_tested,\n                    jobs.routing_key,\n                    jobs.worker_count,\n                    jobs.status,\n                    jobs.ping_avg_ms,\n                    jobs.head_avg_ms,\n                    jobs.ttfb_ms,\n                    jobs.download_speed_mbps,\n                    jobs.error_message,\n                    jobs.created_at,\n                    jobs.completed_at\n               FROM\n                    UNNEST($2::uuid[]) AS requested(run_id)\n               CROSS JOIN LATERAL (\n                    SELECT\n                        id,\n                        deal_id,\n                        run_id,\n                        piece_index,\n                        piece_cid,\n                        bms_job_id,\n                        url_tested,\n                        routing_key,\n                        worker_count,\n                        status,\n                        ping_avg_ms,\n                        head_avg_ms,\n                        ttfb_ms,\n                        download_speed_mbps,\n                        error_message,\n                        created_at,\n                        completed_at\n                    FROM\n                        deal_sli_bms_jobs\n                    WHERE\n                        deal_id = $1\n                        AND run_id = requested.run_id\n                    ORDER BY\n                        created_at DESC,\n                        id DESC\n                    LIMIT $3\n               ) jobs\n               ORDER BY\n                    jobs.run_id,\n                    jobs.created_at DESC,\n                    jobs.id DESC\n            ",
   "describe": {
     "columns": [
       {
@@ -92,9 +92,7 @@
     "parameters": {
       "Left": [
         "Text",
-        "Uuid",
-        "Timestamptz",
-        "Uuid",
+        "UuidArray",
         "Int8"
       ]
     },
@@ -118,5 +116,5 @@
       true
     ]
   },
-  "hash": "54aad01fb31b6b94c33c570fb6873048994d50de00797ebe62ff56655ffb8776"
+  "hash": "49fcb63cff5cfb6f581ba38df663ab26f17c5e69efd65b9a08b7bdb73a74ef34"
 }

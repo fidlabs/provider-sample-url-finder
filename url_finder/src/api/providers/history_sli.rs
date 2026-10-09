@@ -18,6 +18,7 @@ use crate::{
         internal_server_error_with_code, ok_response,
     },
     repository::{BmsHistoryEvent, HistoryCursorBoundary, UrlHistoryEvent},
+    services::deal_sli_service::bigdecimal_to_f64,
     types::{ClientAddress, ProviderAddress, ProviderId},
 };
 
@@ -165,19 +166,15 @@ impl Event {
                 routing_key: v.routing_key,
                 worker_count: v.worker_count,
                 status: v.status,
-                ping_avg_ms: decimal_to_f64(v.ping_avg_ms),
-                head_avg_ms: decimal_to_f64(v.head_avg_ms),
-                ttfb_ms: decimal_to_f64(v.ttfb_ms),
-                download_speed_mbps: decimal_to_f64(v.download_speed_mbps),
+                ping_avg_ms: v.ping_avg_ms.as_ref().and_then(bigdecimal_to_f64),
+                head_avg_ms: v.head_avg_ms.as_ref().and_then(bigdecimal_to_f64),
+                ttfb_ms: v.ttfb_ms.as_ref().and_then(bigdecimal_to_f64),
+                download_speed_mbps: v.download_speed_mbps.as_ref().and_then(bigdecimal_to_f64),
                 created_at: v.created_at,
                 completed_at: v.completed_at,
             },
         }
     }
-}
-
-fn decimal_to_f64(value: Option<sqlx::types::BigDecimal>) -> Option<f64> {
-    value.and_then(|v| v.to_string().parse().ok())
 }
 
 fn decode_cursor(
@@ -263,7 +260,8 @@ async fn history(
             fetch_limit
         ),
     )
-    .map_err(|_| {
+    .map_err(|e| {
+        tracing::warn!("Failed to query SLI history: {e:?}");
         internal_server_error_with_code(ErrorCode::InternalError, "Failed to query SLI history")
     })?;
     let mut events: Vec<Event> = urls

@@ -118,6 +118,7 @@ async fn seed_full_run(
     .expect("run seed should succeed");
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn seed_bms(
     pool: &PgPool,
     deal_id: &str,
