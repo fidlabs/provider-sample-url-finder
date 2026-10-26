@@ -5,12 +5,29 @@ use sqlx::types::BigDecimal;
 use std::str::FromStr;
 use uuid::Uuid;
 
-use crate::types::ProviderId;
+use crate::{repository::HistoryCursorBoundary, types::ProviderId};
 
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct BmsBandwidthResult {
     pub id: Uuid,
     pub provider_id: String,
+    pub bms_job_id: Uuid,
+    pub url_tested: String,
+    pub routing_key: String,
+    pub worker_count: i32,
+    pub status: String,
+    pub ping_avg_ms: Option<BigDecimal>,
+    pub head_avg_ms: Option<BigDecimal>,
+    pub ttfb_ms: Option<BigDecimal>,
+    pub download_speed_mbps: Option<BigDecimal>,
+    pub created_at: DateTime<Utc>,
+    pub completed_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct BmsHistoryEvent {
+    pub id: Uuid,
+    pub provider_id: ProviderId,
     pub bms_job_id: Uuid,
     pub url_tested: String,
     pub routing_key: String,
@@ -364,6 +381,61 @@ impl BmsBandwidthResultRepository {
                LIMIT $2
             "#,
             provider_id.as_str(),
+            limit
+        )
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
+    pub async fn get_sli_history_events(
+        &self,
+        provider_id: &ProviderId,
+        start: DateTime<Utc>,
+        end: DateTime<Utc>,
+        boundary: Option<HistoryCursorBoundary>,
+        limit: i64,
+    ) -> Result<Vec<BmsHistoryEvent>> {
+        let boundary_at = boundary.map(|value| value.at);
+        let boundary_id = boundary.and_then(|value| value.id);
+        let include_equal_at = boundary.is_some_and(|value| value.include_equal_at);
+        Ok(sqlx::query_as!(
+            BmsHistoryEvent,
+            r#"SELECT
+                    id,
+                    provider_id AS "provider_id: ProviderId",
+                    bms_job_id,
+                    url_tested,
+                    routing_key,
+                    worker_count,
+                    status,
+                    ping_avg_ms,
+                    head_avg_ms,
+                    ttfb_ms,
+                    download_speed_mbps,
+                    created_at,
+                    completed_at
+               FROM
+                    bms_bandwidth_results
+               WHERE
+                    provider_id = $1
+                    AND created_at >= $2
+                    AND created_at < $3
+                    AND ($4::timestamptz IS NULL
+                         OR created_at < $4
+                         OR (created_at = $4
+                             AND ($6
+                                  OR ($5::uuid IS NOT NULL AND id < $5))))
+               ORDER BY
+                    created_at DESC,
+                    id DESC
+               LIMIT $7
+            "#,
+            provider_id.as_str(),
+            start,
+            end,
+            boundary_at,
+            boundary_id,
+            include_equal_at,
             limit
         )
         .fetch_all(&self.pool)

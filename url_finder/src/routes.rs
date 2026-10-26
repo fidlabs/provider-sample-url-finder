@@ -98,6 +98,14 @@ pub fn create_routes() -> Router<Arc<AppState>> {
             get(providers::handle_history_retrievability_client),
         )
         .route(
+            "/providers/{id}/history/sli",
+            get(providers::handle_history_sli),
+        )
+        .route(
+            "/providers/{id}/clients/{client_id}/history/sli",
+            get(providers::handle_history_sli_client),
+        )
+        .route(
             "/clients/{id}/providers",
             get(providers::handle_get_client_providers),
         )
@@ -110,7 +118,19 @@ pub fn create_routes() -> Router<Arc<AppState>> {
         .route("/deals/{deal_id}", put(deals::handle_upsert_deal))
         .route("/deals/{deal_id}", get(deals::handle_get_deal))
         .route("/deals/{deal_id}/latest", get(deals::handle_get_latest))
+        .route(
+            "/deals/{deal_id}/history/sli",
+            get(deals::handle_deal_history_sli),
+        )
         .route("/deals/{deal_id}/runs", post(deals::handle_create_run))
+        .route(
+            "/deals/{deal_id}/runs/{run_id}",
+            get(deals::handle_get_deal_run),
+        )
+        .route(
+            "/deals/{deal_id}/runs/{run_id}/bms",
+            get(deals::handle_get_deal_run_bms),
+        )
         .layer(
             GovernorLayer::new(governor_config.clone())
                 .error_handler(too_many_requests_error_handler),

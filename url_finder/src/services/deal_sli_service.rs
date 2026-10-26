@@ -780,17 +780,27 @@ fn map_bms_result(result: DealSliBmsJob) -> DealBmsResultResponse {
     }
 }
 
-fn map_porep_slis(run: &DealSliLatestRun, bms_results: &[DealSliBmsJob]) -> DealPorepSliResponse {
-    let retrievability_bps = run
-        .retrievability_percent
-        .as_ref()
+pub(crate) fn map_porep_sli_values(
+    retrievability_percent: Option<&BigDecimal>,
+    bms_results: &[DealSliBmsJob],
+) -> DealPorepSliResponse {
+    let min_download_speed_mbps =
+        min_completed_bms_metric(bms_results, |result| result.download_speed_mbps.as_ref());
+    let max_ttfb_ms = max_completed_bms_metric(bms_results, |result| result.ttfb_ms.as_ref());
+
+    map_porep_sli_aggregates(retrievability_percent, min_download_speed_mbps, max_ttfb_ms)
+}
+
+pub(crate) fn map_porep_sli_aggregates(
+    retrievability_percent: Option<&BigDecimal>,
+    min_download_speed_mbps: Option<f64>,
+    max_ttfb_ms: Option<f64>,
+) -> DealPorepSliResponse {
+    let retrievability_bps = retrievability_percent
         .and_then(bigdecimal_to_f64)
         .and_then(percent_to_bps);
-    let bandwidth_mbps =
-        min_completed_bms_metric(bms_results, |result| result.download_speed_mbps.as_ref())
-            .and_then(f64_floor_to_u32);
-    let latency_ms = max_completed_bms_metric(bms_results, |result| result.ttfb_ms.as_ref())
-        .and_then(f64_ceil_to_u32);
+    let bandwidth_mbps = min_download_speed_mbps.and_then(f64_floor_to_u32);
+    let latency_ms = max_ttfb_ms.and_then(f64_ceil_to_u32);
 
     DealPorepSliResponse {
         retrievability_bps,
@@ -798,6 +808,10 @@ fn map_porep_slis(run: &DealSliLatestRun, bms_results: &[DealSliBmsJob]) -> Deal
         latency_ms,
         indexing_pct: None,
     }
+}
+
+fn map_porep_slis(run: &DealSliLatestRun, bms_results: &[DealSliBmsJob]) -> DealPorepSliResponse {
+    map_porep_sli_values(run.retrievability_percent.as_ref(), bms_results)
 }
 
 fn min_completed_bms_metric<F>(results: &[DealSliBmsJob], metric: F) -> Option<f64>
@@ -856,7 +870,7 @@ fn f64_ceil_to_u32(value: f64) -> Option<u32> {
     }
 }
 
-fn bigdecimal_to_f64(value: &BigDecimal) -> Option<f64> {
+pub(crate) fn bigdecimal_to_f64(value: &BigDecimal) -> Option<f64> {
     value.to_string().parse().ok()
 }
 

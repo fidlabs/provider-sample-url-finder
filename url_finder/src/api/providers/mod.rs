@@ -21,3 +21,6 @@ pub use reset_provider::*;
 
 mod history_retrievability;
 pub use history_retrievability::*;
+
+mod history_sli;
+pub use history_sli::*;

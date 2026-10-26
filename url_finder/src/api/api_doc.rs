@@ -75,11 +75,16 @@ The `/url/*` endpoints remain fully backward compatible.
         handle_reset_provider,
         handle_history_retrievability,
         handle_history_retrievability_client,
+        handle_history_sli,
+        handle_history_sli_client,
         // Deal SLI API
         handle_upsert_deal,
         handle_get_deal,
         handle_get_latest,
         handle_create_run,
+        handle_deal_history_sli,
+        handle_get_deal_run,
+        handle_get_deal_run_bms,
     ),
     components(
         schemas(
@@ -119,6 +124,9 @@ The `/url/*` endpoints remain fully backward compatible.
             HistoryQuery,
             RetrievabilityHistoryResponse,
             RetrievabilityDataPoint,
+            SliHistoryQuery,
+            SliHistoryResponse,
+            SliHistoryEventResponse,
             // Extended response types
             ExtendedQuery,
             AnalysisResponse,
@@ -136,6 +144,16 @@ The `/url/*` endpoints remain fully backward compatible.
             DealPorepSliResponse,
             DealBmsResultResponse,
             DealLatestMeasurementResponse,
+            DealRunPath,
+            DealSliHistoryQuery,
+            DealRunDetailQuery,
+            DealBmsHistoryQuery,
+            DealSliHistoryResponse,
+            DealSliRunDetailResponse,
+            DealBmsHistoryResponse,
+            DealSliRunResponse,
+            DealSliBmsHistoryResponse,
+            DealSliPieceResultResponse,
 
             // Misc
             HealthcheckResponse,

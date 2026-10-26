@@ -1,0 +1,154 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                    id,\n                    provider_id AS \"provider_id: ProviderId\",\n                    client_id AS \"client_id: ClientId\",\n                    result_type AS \"result_type: DiscoveryType\",\n                    working_url,\n                    retrievability_percent::float8 AS \"retrievability_percent\",\n                    result_code AS \"result_code: ResultCode\",\n                    error_code AS \"error_code: ErrorCode\",\n                    tested_at,\n                    is_consistent,\n                    is_reliable,\n                    url_metadata,\n                    sector_utilization_percent::float8 AS \"sector_utilization_percent\",\n                    car_files_percent::float8 AS \"car_files_percent\",\n                    large_files_percent::float8 AS \"large_files_percent\"\n               FROM\n                    url_results\n               WHERE\n                    provider_id = $1\n                    AND (($2::text IS NULL AND result_type = 'Provider')\n                         OR ($2::text IS NOT NULL\n                             AND client_id = $2\n                             AND result_type = 'ProviderClient'))\n                    AND tested_at >= $3\n                    AND tested_at < $4\n                    AND ($5::timestamptz IS NULL\n                         OR tested_at < $5\n                         OR (tested_at = $5\n                             AND ($7\n                                  OR ($6::uuid IS NOT NULL AND id < $6))))\n               ORDER BY\n                    tested_at DESC,\n                    id DESC\n               LIMIT $8\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "provider_id: ProviderId",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "client_id: ClientId",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "result_type: DiscoveryType",
+        "type_info": {
+          "Custom": {
+            "name": "discovery_type",
+            "kind": {
+              "Enum": [
+                "Provider",
+                "ProviderClient"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "working_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "retrievability_percent",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 6,
+        "name": "result_code: ResultCode",
+        "type_info": {
+          "Custom": {
+            "name": "result_code",
+            "kind": {
+              "Enum": [
+                "NoPeerId",
+                "NoCidContactData",
+                "MissingAddrFromCidContact",
+                "MissingHttpAddrFromCidContact",
+                "FailedToGetWorkingUrl",
+                "NoDealsFound",
+                "TimedOut",
+                "Success",
+                "JobCreated",
+                "Error"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "error_code: ErrorCode",
+        "type_info": {
+          "Custom": {
+            "name": "error_code",
+            "kind": {
+              "Enum": [
+                "NoProviderOrClient",
+                "NoProvidersFound",
+                "FailedToRetrieveCidContactData",
+                "FailedToGetPeerId",
+                "FailedToGetDeals"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "tested_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 9,
+        "name": "is_consistent",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 10,
+        "name": "is_reliable",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 11,
+        "name": "url_metadata",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 12,
+        "name": "sector_utilization_percent",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 13,
+        "name": "car_files_percent",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 14,
+        "name": "large_files_percent",
+        "type_info": "Float8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Timestamptz",
+        "Timestamptz",
+        "Timestamptz",
+        "Uuid",
+        "Bool",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      true,
+      null,
+      false,
+      true,
+      false,
+      true,
+      true,
+      true,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "9bb504567733e5f1583435038a7dcbc837275cdea5ad76de8330499d65d58292"
+}

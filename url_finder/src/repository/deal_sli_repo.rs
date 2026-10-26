@@ -10,7 +10,7 @@ use crate::{ErrorCode, ResultCode};
 
 #[derive(Clone)]
 pub struct DealSliRepository {
-    pool: PgPool,
+    pub(super) pool: PgPool,
 }
 
 #[derive(Debug, Clone, Default)]
