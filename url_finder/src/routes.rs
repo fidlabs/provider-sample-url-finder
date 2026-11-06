@@ -29,32 +29,48 @@ fn too_many_requests_error_handler(error: GovernorError) -> Response<Body> {
     }
 }
 
-pub fn create_routes() -> Router<Arc<AppState>> {
-    // Rate limiting: 200 req/s sustained, burst of 100
+// Per-IP rate limits. Each route class has its own limiter, so one class cannot drain another's bucket.
+const READ_RATE_PERIOD: Duration = Duration::from_millis(5); // ~200 req/s
+const READ_RATE_BURST: u32 = 500;
+const DEAL_UPSERT_RATE_PERIOD: Duration = Duration::from_millis(5); // ~200 req/s
+const DEAL_UPSERT_RATE_BURST: u32 = 100;
+const DEAL_RUN_RATE_PERIOD: Duration = Duration::from_secs(12);
+const DEAL_RUN_RATE_BURST: u32 = 5;
+const RATE_LIMITER_CLEANUP_INTERVAL: Duration = Duration::from_secs(60);
+
+fn rate_limited(
+    routes: Router<Arc<AppState>>,
+    name: &'static str,
+    period: Duration,
+    burst_size: u32,
+) -> Router<Arc<AppState>> {
     let governor_config = Arc::new(
         GovernorConfigBuilder::default()
-            .per_millisecond(5) // ~200 req/s
-            .burst_size(100)
+            .period(period)
+            .burst_size(burst_size)
             .key_extractor(SmartIpKeyExtractor)
             .finish()
             .unwrap(),
     );
 
     let governor_limiter = governor_config.limiter().clone();
-    let interval = Duration::from_secs(60);
 
     // background task to clean up
     tokio::spawn(async move {
         loop {
-            tokio::time::sleep(interval).await;
+            tokio::time::sleep(RATE_LIMITER_CLEANUP_INTERVAL).await;
             tracing::debug!(
-                "rate governor_limiter storage size: {}",
+                "rate governor_limiter {name} storage size: {}",
                 governor_limiter.len()
             );
             governor_limiter.retain_recent();
         }
     });
 
+    routes.layer(GovernorLayer::new(governor_config).error_handler(too_many_requests_error_handler))
+}
+
+pub fn create_routes() -> Router<Arc<AppState>> {
     let swagger_routes = SwaggerUi::new("/").url("/api-doc/openapi.json", ApiDoc::openapi());
 
     let legacy_api_routes = Router::new()
@@ -71,11 +87,7 @@ pub fn create_routes() -> Router<Arc<AppState>> {
             "/url/retrievability/{provider}",
             get(handle_find_retri_by_sp),
         )
-        .route("/url/client/{client}", get(handle_find_client))
-        .layer(
-            GovernorLayer::new(governor_config.clone())
-                .error_handler(too_many_requests_error_handler),
-        );
+        .route("/url/client/{client}", get(handle_find_client));
 
     let providers_api_routes = Router::new()
         .route("/providers", get(providers::handle_list_providers))
@@ -108,21 +120,15 @@ pub fn create_routes() -> Router<Arc<AppState>> {
         .route(
             "/clients/{id}/providers",
             get(providers::handle_get_client_providers),
-        )
-        .layer(
-            GovernorLayer::new(governor_config.clone())
-                .error_handler(too_many_requests_error_handler),
         );
 
-    let deals_api_routes = Router::new()
-        .route("/deals/{deal_id}", put(deals::handle_upsert_deal))
+    let deals_read_routes = Router::new()
         .route("/deals/{deal_id}", get(deals::handle_get_deal))
         .route("/deals/{deal_id}/latest", get(deals::handle_get_latest))
         .route(
             "/deals/{deal_id}/history/sli",
             get(deals::handle_deal_history_sli),
         )
-        .route("/deals/{deal_id}/runs", post(deals::handle_create_run))
         .route(
             "/deals/{deal_id}/runs/{run_id}",
             get(deals::handle_get_deal_run),
@@ -130,23 +136,39 @@ pub fn create_routes() -> Router<Arc<AppState>> {
         .route(
             "/deals/{deal_id}/runs/{run_id}/bms",
             get(deals::handle_get_deal_run_bms),
-        )
-        .layer(
-            GovernorLayer::new(governor_config.clone())
-                .error_handler(too_many_requests_error_handler),
         );
 
-    let healthcheck_route = Router::new()
-        .route("/healthcheck", get(handle_healthcheck))
-        .layer(
-            GovernorLayer::new(governor_config.clone())
-                .error_handler(too_many_requests_error_handler),
-        );
+    let healthcheck_route = Router::new().route("/healthcheck", get(handle_healthcheck));
+
+    let deal_upsert_route = Router::new().route("/deals/{deal_id}", put(deals::handle_upsert_deal));
+
+    let deal_run_route =
+        Router::new().route("/deals/{deal_id}/runs", post(deals::handle_create_run));
+
+    let read_routes = Router::new()
+        .merge(legacy_api_routes)
+        .merge(providers_api_routes)
+        .merge(deals_read_routes)
+        .merge(healthcheck_route);
 
     Router::new()
         .merge(swagger_routes)
-        .merge(legacy_api_routes)
-        .merge(providers_api_routes)
-        .merge(deals_api_routes)
-        .merge(healthcheck_route)
+        .merge(rate_limited(
+            read_routes,
+            "read",
+            READ_RATE_PERIOD,
+            READ_RATE_BURST,
+        ))
+        .merge(rate_limited(
+            deal_upsert_route,
+            "deal_upsert",
+            DEAL_UPSERT_RATE_PERIOD,
+            DEAL_UPSERT_RATE_BURST,
+        ))
+        .merge(rate_limited(
+            deal_run_route,
+            "deal_run",
+            DEAL_RUN_RATE_PERIOD,
+            DEAL_RUN_RATE_BURST,
+        ))
 }
