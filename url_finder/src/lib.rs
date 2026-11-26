@@ -34,4 +34,6 @@ pub struct AppState {
     pub deal_sli_service: Arc<services::deal_sli_service::DealSliService>,
     pub provider_service: Arc<services::provider_service::ProviderService>,
     pub config: Arc<config::Config>,
+    /// When each (provider, schedule) was last reset through the API.
+    pub reset_cooldowns: api::providers::ResetCooldowns,
 }

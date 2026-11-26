@@ -74,6 +74,7 @@ async fn main() -> Result<()> {
         deal_sli_service,
         provider_service,
         config: config.clone(),
+        reset_cooldowns: Default::default(),
     });
 
     // Start the provider discovery in the background
