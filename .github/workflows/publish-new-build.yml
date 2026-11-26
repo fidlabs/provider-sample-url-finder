@@ -65,6 +65,7 @@ jobs:
       - bump-version
     if: |
       always() &&
+      github.event_name != 'pull_request' &&
       !contains(needs.*.result, 'failure') &&
       !contains(needs.*.result, 'cancelled')
     uses: ./.github/workflows/build-docker-image.yml
