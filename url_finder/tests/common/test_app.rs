@@ -57,6 +57,7 @@ pub async fn create_test_app(dbs: &TestDatabases, mocks: &MockExternalServices) 
         deal_sli_service,
         provider_service,
         config,
+        reset_cooldowns: Default::default(),
     });
 
     let app = url_finder::routes::create_routes()

@@ -186,3 +186,45 @@ async fn test_reset_invalid_provider_address() {
 
     assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
 }
+
+#[tokio::test]
+async fn test_reset_is_limited_per_provider_and_schedule() {
+    let ctx = TestContext::new().await;
+
+    seed_provider(&ctx.dbs.app_pool, TEST_PROVIDER_1_DB).await;
+
+    let reset = |schedule: &'static str| {
+        ctx.app.post(&format!(
+            "/providers/{TEST_PROVIDER_1_API}/reset?schedule={schedule}"
+        ))
+    };
+
+    assert_eq!(reset("url_discovery").await.status_code(), StatusCode::OK);
+
+    // The same schedule cannot be reset again straight away, directly or through `all`.
+    assert_eq!(
+        reset("url_discovery").await.status_code(),
+        StatusCode::TOO_MANY_REQUESTS
+    );
+    assert_eq!(
+        reset("all").await.status_code(),
+        StatusCode::TOO_MANY_REQUESTS
+    );
+
+    // A different schedule for the same provider is unaffected.
+    assert_eq!(reset("bms_test").await.status_code(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn test_reset_of_unknown_provider_does_not_start_a_cooldown() {
+    let ctx = TestContext::new().await;
+
+    let reset = || {
+        ctx.app.post(&format!(
+            "/providers/{TEST_PROVIDER_1_API}/reset?schedule=all"
+        ))
+    };
+
+    assert_eq!(reset().await.status_code(), StatusCode::NOT_FOUND);
+    assert_eq!(reset().await.status_code(), StatusCode::NOT_FOUND);
+}
