@@ -9,10 +9,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Cache Cargo registry
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             ~/.cargo/registry
@@ -22,7 +22,7 @@ jobs:
             ${{ runner.os }}-cargo-registry-
 
       - name: Cache Cargo build
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: target
           key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
@@ -30,12 +30,12 @@ jobs:
             ${{ runner.os }}-cargo-build-
 
       - name: Install Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
         with:
           components: rustfmt, clippy
 
       - name: Rustfmt Check
-        uses: actions-rust-lang/rustfmt@v1
+        uses: actions-rust-lang/rustfmt@4066006ec54a31931b9b1fddfd38f2fdf2d27143 # v1
 
       - name: Run Clippy
         run: SQLX_OFFLINE=true cargo clippy --workspace

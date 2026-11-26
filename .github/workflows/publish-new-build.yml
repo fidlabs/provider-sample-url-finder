@@ -36,7 +36,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Install cargo-edit
         run: cargo install cargo-edit
@@ -85,7 +85,7 @@ jobs:
       !contains(needs.*.result, 'cancelled')
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ needs.bump-version.outputs.commit_sha }}
 
@@ -105,7 +105,7 @@ jobs:
     environment: production-fidl # only one environment available, using for both: staging and production
     steps:
       - name: Trigger staging deploy
-        uses: neti-filplus-infra/filplus-deploy-action@main
+        uses: neti-filplus-infra/filplus-deploy-action@8214e7d3a00d64e547024da40e044c04c6dcd13c # main
         with:
           version: ${{ inputs.version }}
           environment: staging
