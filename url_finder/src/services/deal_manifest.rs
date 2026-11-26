@@ -11,6 +11,8 @@ use reqwest::Url;
 use serde_json::Value;
 use sqlx::types::BigDecimal;
 
+use crate::http_client::is_public_ip;
+
 const MAX_MANIFEST_BYTES: usize = 10 * 1024 * 1024;
 const MAX_NUMERIC_DIGITS: usize = 78;
 const MAX_MANIFEST_PIECES: usize = 100_000;
@@ -107,25 +109,6 @@ fn validate_manifest_location(manifest_location: &str) -> Result<Url> {
         return Err(eyre!("manifest_location host must be public"));
     }
     Ok(url)
-}
-
-fn is_public_ip(ip: IpAddr) -> bool {
-    match ip {
-        IpAddr::V4(ip) => {
-            !(ip.is_private()
-                || ip.is_loopback()
-                || ip.is_link_local()
-                || ip.is_broadcast()
-                || ip.is_documentation()
-                || ip.is_unspecified())
-        }
-        IpAddr::V6(ip) => {
-            !(ip.is_loopback()
-                || ip.is_unspecified()
-                || ip.is_unique_local()
-                || ip.is_unicast_link_local())
-        }
-    }
 }
 
 async fn read_manifest_body(

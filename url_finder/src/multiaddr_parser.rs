@@ -2,6 +2,8 @@ use color_eyre::{Result, eyre::eyre};
 use multiaddr::{Multiaddr, Protocol};
 use tracing::{debug, info, warn};
 
+use crate::http_client::is_allowed_target;
+
 pub struct UrlParts {
     protocol: Option<String>,
     host: Option<String>,
@@ -75,10 +77,11 @@ fn parse_multiaddr(multiaddr: Multiaddr) -> UrlParts {
                 Protocol::Dns(dns) | Protocol::Dns4(dns) | Protocol::Dns6(dns) => {
                     url_parts.host = Some(dns.to_string());
                 }
-                Protocol::Ip4(ip) => {
+                // Non-public addresses are dropped, which leaves the multiaddr without a host.
+                Protocol::Ip4(ip) if is_allowed_target(ip.into()) => {
                     url_parts.host = Some(ip.to_string());
                 }
-                Protocol::Ip6(ip) => {
+                Protocol::Ip6(ip) if is_allowed_target(ip.into()) => {
                     url_parts.host = Some(ip.to_string());
                 }
                 Protocol::Tcp(port) => {
