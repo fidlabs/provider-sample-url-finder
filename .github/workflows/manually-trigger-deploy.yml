@@ -28,7 +28,7 @@ jobs:
     if: ${{ inputs.version != '' && inputs.environment == 'staging' }}
     steps:
       - name: Trigger staging deploy
-        uses: neti-filplus-infra/filplus-deploy-action@main
+        uses: neti-filplus-infra/filplus-deploy-action@8214e7d3a00d64e547024da40e044c04c6dcd13c # main
         with:
           version: ${{ inputs.version }}
           environment: staging
@@ -43,7 +43,7 @@ jobs:
     if: ${{ github.ref_name == 'main' && inputs.version != '' && inputs.environment == 'production' }}
     steps:
       - name: Trigger production deploy
-        uses: neti-filplus-infra/filplus-deploy-action@main
+        uses: neti-filplus-infra/filplus-deploy-action@8214e7d3a00d64e547024da40e044c04c6dcd13c # main
         with:
           version: ${{ inputs.version }}
           environment: production
