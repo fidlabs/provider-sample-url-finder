@@ -17,8 +17,6 @@ pub const MIN_VALID_CONTENT_LENGTH: u64 = 8 * 1024 * 1024 * 1024; // 8GB
 // History endpoint settings
 pub const MAX_HISTORY_DAYS: i64 = 30;
 
-const DEFAULT_AUTH_TOKEN: &str = "mysecrettokenthatdefinatelyisnotongithubpublicrepo";
-
 fn parse_positive_i64_or_default(env_var: &str, default: i64) -> i64 {
     assert!(default > 0, "default must be positive");
     match env::var(env_var) {
@@ -42,15 +40,11 @@ fn require_non_empty_env_value(env_var: &str, value: String) -> String {
     value
 }
 
-fn auth_token_or_default(value: Option<String>) -> String {
-    match value {
-        Some(value) => require_non_empty_env_value("AUTH_TOKEN", value),
-        None => DEFAULT_AUTH_TOKEN.to_string(),
-    }
-}
-
 fn read_auth_token() -> String {
-    auth_token_or_default(env::var("AUTH_TOKEN").ok())
+    require_non_empty_env_value(
+        "AUTH_TOKEN",
+        env::var("AUTH_TOKEN").expect("AUTH_TOKEN must be set"),
+    )
 }
 
 #[derive(Debug, Clone)]
@@ -134,7 +128,7 @@ impl Config {
 
 #[cfg(test)]
 mod tests {
-    use super::{DEFAULT_AUTH_TOKEN, auth_token_or_default, require_non_empty_env_value};
+    use super::require_non_empty_env_value;
 
     #[test]
     fn accepts_non_empty_env_value() {
@@ -145,27 +139,14 @@ mod tests {
     }
 
     #[test]
-    fn auth_token_uses_default_when_env_is_missing() {
-        assert_eq!(auth_token_or_default(None), DEFAULT_AUTH_TOKEN);
-    }
-
-    #[test]
-    fn auth_token_uses_non_empty_env_value() {
-        assert_eq!(
-            auth_token_or_default(Some("configured-token".to_string())),
-            "configured-token"
-        );
-    }
-
-    #[test]
     #[should_panic(expected = "AUTH_TOKEN must not be empty")]
     fn rejects_empty_env_value() {
-        auth_token_or_default(Some("".to_string()));
+        require_non_empty_env_value("AUTH_TOKEN", "".to_string());
     }
 
     #[test]
     #[should_panic(expected = "AUTH_TOKEN must not be empty")]
     fn rejects_whitespace_env_value() {
-        auth_token_or_default(Some("   ".to_string()));
+        require_non_empty_env_value("AUTH_TOKEN", "   ".to_string());
     }
 }
